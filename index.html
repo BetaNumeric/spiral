@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Spiral Calendar v0.12</title>
+
+  <style>
+    /* Basic reset and layout */
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body { font-family: sans-serif; display: flex; padding-top: env(safe-area-inset-top); }
+    #app { flex: 1; position: relative; }
+    canvas { display: block; width: 100%; height: 100%; }
+
+    /* Controls panel styling */
+    #controls {
+      position: absolute;
+      top: 1em;
+      right: 1em;
+      background: rgba(255,255,255,0.85);
+      padding: .5em;
+      border-radius: .3em;
+      font-size: .9em;
+      z-index: 20;
+    }
+    #controls label { display: flex; align-items: center; margin-bottom: .3em; }
+    #controls input[type=range] { margin: 0 .5em; flex: 1; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Canvas for drawing spiral -->
+    <canvas id="spiral"></canvas>
+
+    <!-- UI sliders for interactive controls -->
+    <div id="controls">
+      <label>Days:   <input type="range" id="daysSlider"   min="1" max="30" step="1"   value="7"><span id="daysVal">7</span></label>
+      <label>Scale:  <input type="range" id="scaleSlider" min="0.1" max="1" step="0.01" value="0.3"><span id="scaleVal">0.3</span></label>
+      <label>Ramp:   <input type="range" id="pSlider"     min="1" max="10" step="0.05" value="3"><span id="pVal">3</span></label>
+      <label>Blanks: <input type="range" id="blankSlider"min="0" max="1" step="0.01" value="0.6"><span id="blankVal">0.60</span></label>
+      <label>Shift:  <input type="range" id="shiftSlider"min="0" max="720" step="1"   value="0"><span id="shiftVal">0</span></label>
+      <label>Rotate: <input type="range" id="rotateSlider"min="0" max="360" step="1"   value="0"><span id="rotateVal">0°</span></label>
+    </div>
+  </div>
+
+  <script>
+    // Get canvas context
+    const canvas = document.getElementById('spiral');
+    const ctx = canvas.getContext('2d');
+
+    // Parameters and state variables
+    let days = 7;               // number of spiral turns (days)
+    let spiralScale = 0.4;      // overall size relative to canvas
+    let p = 3;                  // exponent for radial scaling (width ramp)
+    let blankProb = 0.6;        // probability of a blank segment
+    let shift = 0;              // index shift for color array
+    let rotation = 0;           // rotation angle in radians
+
+    // Constants for spiral resolution
+    const segments = 24;        // slices per turn (hours)
+    const startAng = Math.PI / 2;  // initial rotation offset (start at bottom)
+    const arcSteps = 40;        // resolution of each arc
+
+    // Prepare color palette array based on maximum days
+    const maxDays = +document.getElementById('daysSlider').max;
+    const totalSeg = maxDays * segments;
+    let colors = [];
+
+    // Generate colors and blank slots for the palette
+    function generateColors() {
+      colors = Array.from({ length: totalSeg }, () =>
+        Math.random() < blankProb
+          ? '#fff'
+          : `hsl(${Math.random()*360}, ${60+Math.random()*20}%, ${40+Math.random()*20}%)`
+      );
+      // update shift slider maximum
+      document.getElementById('shiftSlider').max = totalSeg - 1;
+    }
+    generateColors();
+
+    // Bind UI controls to state and redraw
+    const daysSlider = document.getElementById('daysSlider');
+    const scaleSlider = document.getElementById('scaleSlider');
+    const pSlider = document.getElementById('pSlider');
+    const blankSlider = document.getElementById('blankSlider');
+    const shiftSlider = document.getElementById('shiftSlider');
+    const rotateSlider = document.getElementById('rotateSlider');
+
+    daysSlider.addEventListener('input', e => {
+      days = +e.target.value;
+      document.getElementById('daysVal').textContent = days;
+      drawSpiral();
+    });
+    scaleSlider.addEventListener('input', e => {
+      spiralScale = +e.target.value;
+      document.getElementById('scaleVal').textContent = spiralScale;
+      drawSpiral();
+    });
+    pSlider.addEventListener('input', e => {
+      p = +e.target.value;
+      document.getElementById('pVal').textContent = p;
+      drawSpiral();
+    });
+    blankSlider.addEventListener('input', e => {
+      blankProb = +e.target.value;
+      document.getElementById('blankVal').textContent = blankProb.toFixed(2);
+      generateColors();
+      drawSpiral();
+    });
+    shiftSlider.addEventListener('input', e => {
+      shift = +e.target.value;
+      document.getElementById('shiftVal').textContent = shift;
+      drawSpiral();
+    });
+    rotateSlider.addEventListener('input', e => {
+      const deg = +e.target.value;
+      rotation = deg * Math.PI / 180;  // convert to radians
+      document.getElementById('rotateVal').textContent = deg + '°';
+      drawSpiral();
+    });
+
+    // Handle canvas resize and initial draw
+    window.addEventListener('resize', resize);
+    function resize() {
+      canvas.width = canvas.clientWidth * devicePixelRatio;
+      canvas.height = canvas.clientHeight * devicePixelRatio;
+      ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+      drawSpiral();
+    }
+
+    // Main draw function
+    function drawSpiral() {
+      const W = canvas.clientWidth;
+      const H = canvas.clientHeight;
+      ctx.clearRect(0, 0, W, H);
+      ctx.save();
+
+      // Center & transform
+      ctx.translate(W/2, H/2);
+      ctx.scale(-1, 1);           // flip spiral direction
+      ctx.rotate(rotation);       // apply user rotation
+
+      // Calculate growth/shrink based on rotation
+      const thetaMax = days * 2 * Math.PI;
+      const coilRatio = 1 - Math.pow((thetaMax - 2*Math.PI) / thetaMax, p);
+      const growScale = 1 + (rotation / (2 * Math.PI)) * coilRatio;
+      ctx.scale(growScale, growScale);
+
+      // Determine which segments to hide
+      const hideAngle = rotation;
+      const visibleMin = -hideAngle;
+      const visibleMax = thetaMax - hideAngle;
+
+      const maxRadius = Math.min(W, H) * spiralScale;
+      const segAng = 2 * Math.PI / segments;
+
+      // Radius mapping function along the spiral
+      function radiusFn(theta) {
+        const t = theta / thetaMax;
+        return maxRadius * Math.pow(t, p);
+      }
+
+      // Loop through each 'day' turn and each 'hour' slice
+      for (let d = 0; d < days; d++) {
+        for (let s = 0; s < segments; s++) {
+          // Base angles for this wedge
+          const raw0 = d * 2 * Math.PI + s * segAng;
+          const raw1 = raw0 + segAng;
+
+          // Clamp wedge to visible range for smooth disappearance
+          const startTheta = Math.max(raw0, visibleMin);
+          const endTheta = Math.min(raw1, visibleMax);
+          if (endTheta <= startTheta) continue; // fully hidden
+
+          // Color index with shift wrap
+          const idx0 = d * segments + s;
+          const idx = (idx0 + shift + totalSeg) % totalSeg;
+
+          // Draw the wedge path
+          let ang = startTheta + startAng;
+          let rad = radiusFn(startTheta);
+          let x = rad * Math.cos(ang);
+          let y = rad * Math.sin(ang);
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+
+          // Inner arc from start to end
+          const innerSteps = Math.ceil(arcSteps * (endTheta - startTheta) / segAng);
+          for (let i = 1; i <= innerSteps; i++) {
+            const t = i / innerSteps;
+            const raw = startTheta + t * (endTheta - startTheta);
+            ang = raw + startAng;
+            rad = radiusFn(raw);
+            x = rad * Math.cos(ang);
+            y = rad * Math.sin(ang);
+            ctx.lineTo(x, y);
+          }
+
+          // Radial line outwards
+          const outEnd = endTheta + 2 * Math.PI;
+          ang = outEnd + startAng;
+          rad = radiusFn(outEnd);
+          ctx.lineTo(rad * Math.cos(ang), rad * Math.sin(ang));
+
+          // Outer arc back to start edge
+          for (let i = 1; i <= innerSteps; i++) {
+            const t = i / innerSteps;
+            const raw = outEnd - t * (endTheta - startTheta);
+            ang = raw + startAng;
+            rad = radiusFn(raw);
+            x = rad * Math.cos(ang);
+            y = rad * Math.sin(ang);
+            ctx.lineTo(x, y);
+          }
+
+          ctx.closePath();
+
+          // Fill and stroke the wedge
+          ctx.fillStyle = colors[idx];
+          ctx.fill();
+          ctx.strokeStyle = '#444';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      }
+
+      ctx.restore();
+    }
+
+    // Initial canvas setup
+    resize();
+  </script>
+</body>
+</html>
