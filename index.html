@@ -3,233 +3,978 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>Spiral Calendar v0.12</title>
+  <title>v1.3 Spiral Calendar</title>
+  <link rel="icon" type="image/png" href="icons/icon_32.png">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#ffffff">
+
+  <!-- SunCalc library for sunrise/sunset calculations -->
+  <script src="https://cdn.jsdelivr.net/npm/suncalc@1.9.0/suncalc.min.js"></script>
 
   <style>
     /* Basic reset and layout */
     *, *::before, *::after { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; overflow: hidden; }
-    body { font-family: sans-serif; display: flex; padding-top: env(safe-area-inset-top); }
-    #app { flex: 1; position: relative; }
-    canvas { display: block; width: 100%; height: 100%; }
-
-    /* Controls panel styling */
-    #controls {
-      position: absolute;
-      top: 1em;
-      right: 1em;
-      background: rgba(255,255,255,0.85);
-      padding: .5em;
-      border-radius: .3em;
-      font-size: .9em;
-      z-index: 20;
+    html, body { margin: 0; padding: 0; overflow: hidden; }
+    /* Use viewport units for consistent full-screen behavior */
+    /* 100dvh is dynamic viewport height (accounts for mobile browser UI) */
+    html { height: 100vh; height: 100dvh; background: #fff; }
+    body { height: 100vh; height: 100dvh; font-family: sans-serif; display: flex; padding-top: env(safe-area-inset-top); padding-bottom: 0; background: #fff; }
+    #app { flex: 1; position: relative; min-height: 0; }
+    /* In standalone mode, don't add padding-bottom to #app - canvas should fill full viewport */
+    /* In browser mode, add padding to account for browser UI (if needed) */
+    @media (display-mode: standalone) {
+      #app { padding-bottom: 0; }
     }
-    #controls label { display: flex; align-items: center; margin-bottom: .3em; }
-    #controls input[type=range] { margin: 0 .5em; flex: 1; }
+    @media (display-mode: browser) {
+      /* In browser, we might not need padding-bottom since browser UI is separate */
+      #app { padding-bottom: 0; }
+    }
+    /* iOS Safari doesn't support display-mode query well, so handle via JavaScript */
+    /* Default: no padding-bottom, let safe area be handled by body padding */
+    canvas { 
+      display: block; 
+      width: 100%; 
+      height: 100%; 
+      touch-action: none; /* Disable pinch-zoom and other default touch behaviors */
+    }
+
+    /* Dark mode: invert canvas and adjust UI base colors */
+    :root {
+      --dark-bg-primary: #000;
+      --dark-bg-secondary: #111;
+      --dark-bg-panel: rgba(30,30,30,0.9);
+      --dark-bg-banner: rgba(20,20,20,0.92);
+      --dark-text-primary: #eee;
+      --dark-text-secondary: #fff;
+      --dark-border: #444;
+    }
+    
+    html.dark-mode, body.dark-mode {
+      background: var(--dark-bg-primary);
+    }
+    body.dark-mode {
+      color: var(--dark-text-primary);
+    }
+    body.dark-mode #a2hs-banner { background: var(--dark-bg-banner) !important; }
+    body.dark-mode #settingsPanel { background: var(--dark-bg-panel) !important; color: var(--dark-text-primary) !important; }
+    body.dark-mode #eventInputPanel { background: var(--dark-bg-panel) !important; color: var(--dark-text-primary) !important; }
+    body.dark-mode input, body.dark-mode textarea { background: var(--dark-bg-secondary); color: var(--dark-text-primary); border-color: var(--dark-border) !important; }
+    body.dark-mode input[type="datetime-local"] { background: var(--dark-bg-secondary) !important; color: var(--dark-text-primary) !important; border-color: var(--dark-border) !important; }
+    
+    /* Attempt to style the native date picker popup */
+    body.dark-mode input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+      background: var(--dark-text-primary);
+      border-radius: 2px;
+    }
+    
+    /* Try to style date picker components */
+    body.dark-mode input[type="datetime-local"]::-webkit-datetime-edit {
+      background: var(--dark-bg-secondary) !important;
+      color: var(--dark-text-primary) !important;
+    }
+    
+    body.dark-mode input[type="datetime-local"]::-webkit-datetime-edit-fields-wrapper {
+      background: var(--dark-bg-secondary) !important;
+      color: var(--dark-text-primary) !important;
+    }
+    
+    body.dark-mode input[type="datetime-local"]::-webkit-datetime-edit-text {
+      color: var(--dark-text-primary) !important;
+    }
+    
+    body.dark-mode input[type="datetime-local"]::-webkit-datetime-edit-month-field,
+    body.dark-mode input[type="datetime-local"]::-webkit-datetime-edit-day-field,
+    body.dark-mode input[type="datetime-local"]::-webkit-datetime-edit-year-field,
+    body.dark-mode input[type="datetime-local"]::-webkit-datetime-edit-hour-field,
+    body.dark-mode input[type="datetime-local"]::-webkit-datetime-edit-minute-field {
+      background: var(--dark-bg-secondary) !important;
+      color: var(--dark-text-primary) !important;
+    }
+    body.dark-mode .dt-box { background: var(--dark-bg-secondary) !important; color: var(--dark-text-primary) !important; border-color: var(--dark-border) !important; }
+    body.dark-mode button { color: var(--dark-text-secondary) !important; }
+    
+    /* Dark mode button styling */
+    body.dark-mode #addEventBtn { background: #4CAF50 !important; color: white !important; }
+    body.dark-mode #exportEventsBtn { background: #2196F3 !important; color: white !important; }
+    body.dark-mode #importEventsBtn { background: #4CAF50 !important; color: white !important; }
+    body.dark-mode #randGenerate { background: #666 !important; color: white !important; }
+    body.dark-mode #randDeleteRandom { background: #d32f2f !important; color: white !important; }
+    body.dark-mode #resetSettingsBtn { background: #d32f2f !important; color: white !important; }
+    body.dark-mode #a2hs-install-btn { background: #4CAF50 !important; color: white !important; }
+    body.dark-mode #a2hs-close-btn { background: #777 !important; color: white !important; }
+    body.dark-mode #ios-close-btn { background: #007aff !important; color: white !important; }
+    body.dark-mode #ios-install-overlay .ios-install-content { background: var(--dark-bg-panel) !important; color: var(--dark-text-primary) !important; }
+    body.dark-mode #ios-install-overlay .ios-install-content img[src*="share.png"] { content: url('icons/share_white.png'); }
+    
+    /* Dark mode close buttons */
+    body.dark-mode #closeEventPanelBtn { color: var(--dark-text-primary) !important; }
+    body.dark-mode #closeSettingsPanelBtn { color: var(--dark-text-primary) !important; }
+    
+    /* Dark mode location buttons */
+    body.dark-mode #setLocationBtn { 
+      background: var(--dark-bg-secondary) !important; 
+      color: var(--dark-text-primary) !important; 
+      border: 1px solid var(--dark-border) !important; 
+    }
+    body.dark-mode #geoLocationBtn { 
+      background: var(--dark-bg-secondary) !important; 
+      color: var(--dark-text-primary) !important; 
+      border: 1px solid var(--dark-border) !important; 
+    }
+    body.dark-mode #locationSearchBtn { 
+      background: var(--dark-bg-secondary) !important; 
+      color: var(--dark-text-primary) !important; 
+      border: 1px solid var(--dark-border) !important; 
+    }
+    
+    /* Dark mode panel opening buttons */
+    body.dark-mode #addEventPanelBtn { 
+      background: var(--dark-bg-panel) !important; 
+      color: var(--dark-text-primary) !important; 
+    }
+    body.dark-mode #settingsPanelBtn { 
+      background: var(--dark-bg-panel) !important; 
+      color: var(--dark-text-primary) !important; 
+      
+    }
+    body.dark-mode #eventCalendarDisplay { background: var(--dark-bg-secondary) !important; color: var(--dark-text-primary) !important; border-color: var(--dark-border) !important; }
+    
+    /* Bottom event list default styles */
+    #bottomEventList {
+      background: rgba(255, 255, 255, 0.95);
+      border-top: 1px solid #ccc;
+    }
+    
+    /* Dark mode for bottom event list */
+    body.dark-mode #bottomEventList { 
+      background: var(--dark-bg-panel) !important; 
+      border-top-color: var(--dark-border) !important; 
+    }
+    body.dark-mode #bottomEventListItems { 
+      background: transparent !important;
+      color: var(--dark-text-primary) !important; 
+    }
+    body.dark-mode #bottomEventListItems li { 
+      border-bottom-color: var(--dark-border) !important; 
+    }
+    /* Allow inline background colors to show through in row color mode */
+    body.dark-mode #bottomEventListItems li[style*="background-color"] {
+      color: inherit !important;
+    }
+    body.dark-mode #bottomEventListItems input {
+      background: var(--dark-bg-secondary) !important;
+      color: var(--dark-text-primary) !important;
+      border-color: var(--dark-border) !important;
+    }
+    body.dark-mode #bottomEventListItems button {
+      color: var(--dark-text-primary) !important;
+    }
+    /* Calendar dropdown button styling */
+    #calendarDropdownBtn:hover {
+      background: #f5f5f5 !important;
+      border-color: #999 !important;
+    }
+    body.dark-mode #calendarDropdownBtn { 
+      background: var(--dark-bg-secondary) !important; 
+      color: var(--dark-text-primary) !important; 
+      border-color: var(--dark-border) !important; 
+    }
+    body.dark-mode #calendarDropdownBtn:hover {
+      background: var(--dark-bg-primary) !important;
+      border-color: var(--dark-text-primary) !important;
+    }
+    body.dark-mode #calendarDropdownMenu { background: var(--dark-bg-secondary) !important; color: var(--dark-text-primary) !important; border-color: var(--dark-border) !important; }
+    body.dark-mode #addNewCalendar { color: var(--dark-text-primary) !important; border-top-color: var(--dark-border) !important; }
+    body.dark-mode .calendar-option { background: var(--dark-bg-secondary) !important; color: var(--dark-text-primary) !important; }
+    body.dark-mode .calendar-header { background: var(--dark-bg-secondary) !important; color: var(--dark-text-primary) !important; }
+    body.dark-mode #eventCalendarDropdown { background: var(--dark-bg-secondary) !important; border-color: var(--dark-border) !important; }
+    body.dark-mode #eventCalendarDropdown > div { background: var(--dark-bg-secondary) !important; color: var(--dark-text-primary) !important; border-color: var(--dark-border) !important; }
+    
+    /* Dark mode styling for date picker connecting line */
+    body.dark-mode .date-picker-separator { background: var(--dark-border) !important; }
+    
+    /* Toggle switch styling */
+    input[type="checkbox"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 44px;
+      height: 24px;
+      background: #ccc;
+      border-radius: 12px;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.3s ease;
+      border: none;
+      outline: none;
+      margin-right: 0.8em;
+    }
+    input[type="checkbox"]:checked {
+      background: #4CAF50;
+    }
+    input[type="checkbox"]::before {
+      content: '';
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: white;
+      top: 2px;
+      left: 2px;
+      transition: transform 0.3s ease;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    input[type="checkbox"]:checked::before {
+      transform: translateX(20px);
+    }
+    
+    /* Dark mode toggle switch styling */
+        body.dark-mode input[type="checkbox"] {
+      background: var(--dark-border);
+    }
+    body.dark-mode input[type="checkbox"]:checked {
+      background: #4CAF50;
+    }
+    body.dark-mode input[type="checkbox"]::before {
+      background: var(--dark-text-primary);
+    }
+
+    /* Modern slider styling */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      background: #ddd;
+      border-radius: 3px;
+      outline: none;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      background: #fff;
+      border: 2px solid #ccc;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      transition: all 0.2s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.1);
+      box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+    }
+    /* Firefox slider styling */
+    input[type="range"]::-moz-range-track {
+      height: 6px;
+      background: #ddd;
+      border-radius: 3px;
+      border: none;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      background: #fff;
+      border: 2px solid #ccc;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    /* Minimalistic scrollbar styling */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #999; }
+    
+    /* Dark mode slider styling */
+    body.dark-mode input[type="range"] {
+      background: var(--dark-border);
+    }
+    body.dark-mode input[type="range"]::-webkit-slider-thumb {
+      background: var(--dark-text-primary);
+      border-color: var(--dark-border);
+    }
+    body.dark-mode input[type="range"]::-moz-range-track {
+      background: var(--dark-border);
+    }
+    body.dark-mode input[type="range"]::-moz-range-thumb {
+      background: var(--dark-text-primary);
+      border-color: var(--dark-border);
+    }
+    
+    /* Dark mode scrollbar styling */
+    body.dark-mode ::-webkit-scrollbar-track { background: var(--dark-bg-primary); }
+    body.dark-mode ::-webkit-scrollbar-thumb { background: var(--dark-border); }
+    body.dark-mode ::-webkit-scrollbar-thumb:hover { background: #666; }
+    
+    /* Invert just the canvas to flip drawn colors without touching logic */
+    body.dark-mode #spiral { filter: invert(1) hue-rotate(180deg); }
+    
+    /* Disable text selection and long-press behavior on mobile */
+    * {
+      -webkit-touch-callout: none; /* iOS Safari */
+      -webkit-user-select: none; /* Safari */
+      -khtml-user-select: none; /* Konqueror HTML */
+      -moz-user-select: none; /* Firefox */
+      -ms-user-select: none; /* Internet Explorer/Edge */
+      user-select: none; /* Non-prefixed version */
+      -webkit-tap-highlight-color: transparent; /* Remove tap highlight on iOS */
+    }
+    
+    /* Allow text selection only in input fields and textareas */
+    input, textarea {
+      -webkit-user-select: text;
+      -moz-user-select: text;
+      -ms-user-select: text;
+      user-select: text;
+    }
+
+    /* Settings panel styling */
+    #settingsPanel label { display: flex; align-items: center; margin-bottom: .3em; margin-top: 1em; }
+    #settingsPanel input[type=range] { margin: 0 0.5em; flex: 1; }
+    
+    /* Event input styling */
+    #controls input[type="datetime-local"] {
+      font-size: 0.8em;
+      padding: 0.2em;
+      border: 1px solid #ccc;
+      border-radius: 0.2em;
+    }
+    
+    #controls input[type="color"] {
+      border: 1px solid #ccc;
+      border-radius: 0.2em;
+      cursor: pointer;
+    }
+    
+    #controls input[type="text"] {
+      font-size: 0.8em;
+      padding: 0.2em;
+      border: 1px solid #ccc;
+      border-radius: 0.2em;
+    }
+    
+    #controls textarea {
+      font-size: 0.8em;
+      padding: 0.2em;
+      border: 1px solid #ccc;
+      border-radius: 0.2em;
+      resize: vertical;
+      min-height: 2em;
+      font-family: inherit;
+    }
+    
+    #addEventBtn:hover {
+      background: #45a049 !important;
+    }
+
+    /* Reusable custom date/time box style */
+    .dt-box {
+      display: block;
+      width: 100%;
+      height: 2.2em;
+      border-radius: 0.3em;
+      border: 1px solid #ccc;
+      background: #fff;
+      line-height: 2.2em;
+      padding: 0 0.6em;
+      font-size: 0.9em;
+      color: #000;
+      cursor: pointer;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* Visually hide inputs but keep them interactive for showPicker */
+    .visually-hidden-datetime {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 2.2em;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Responsive panel positioning */
+    @media (max-width: 768px) {
+      #eventInputPanel {
+        left: 50% !important;
+        top: 50% !important;
+        transform: translate(-50%, -50%) !important;
+        max-width: 90vw !important;
+        min-width: 320px !important;
+        max-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 2em) !important;
+      }
+      
+      #settingsPanel {
+        left: 50% !important;
+        top: 50% !important;
+        transform: translate(-50%, -50%) !important;
+        max-width: 90vw !important;
+        min-width: 320px !important;
+        max-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 2em) !important;
+      }
+    }
+
+    /* Prevent zooming when panels are open */
+    body.panel-open {
+      touch-action: manipulation;
+      -ms-touch-action: manipulation;
+    }
+    
+    body.panel-open * {
+      touch-action: manipulation;
+      -ms-touch-action: manipulation;
+    }
+
+    /* iOS Safari specific fixes */
+    @supports (-webkit-touch-callout: none) {
+      /* Ensure panels don't get cut off on iOS */
+      #eventInputPanel, #settingsPanel {
+        -webkit-overflow-scrolling: touch;
+      }
+      
+      /* Fix for iOS Safari viewport height issues */
+      @media (max-width: 768px) {
+        #eventInputPanel, #settingsPanel {
+          max-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 4em) !important;
+        }
+      }
+    }
+
   </style>
 </head>
 <body>
   <div id="app">
     <!-- Canvas for drawing spiral -->
     <canvas id="spiral"></canvas>
+    
+    <!-- Bottom event list (hidden by default, shown when dragging up time display) -->
+    <div id="bottomEventList" style="position: absolute; bottom: 0; left: 0; right: 0; max-height: 0; overflow: hidden; transition: max-height 0.2s ease-out; z-index: 10;">
+      <ul id="bottomEventListItems" style="list-style: none; padding: 0.5em; padding-bottom: 8.0em; margin: 0; max-height: 300px; overflow-y: auto; font-size: 0.95em;"></ul>
+    </div>
 
-    <!-- UI sliders for interactive controls -->
-    <div id="controls">
-      <label>Days:   <input type="range" id="daysSlider"   min="1" max="30" step="1"   value="7"><span id="daysVal">7</span></label>
-      <label>Scale:  <input type="range" id="scaleSlider" min="0.1" max="1" step="0.01" value="0.3"><span id="scaleVal">0.3</span></label>
-      <label>Ramp:   <input type="range" id="pSlider"     min="1" max="10" step="0.05" value="3"><span id="pVal">3</span></label>
-      <label>Blanks: <input type="range" id="blankSlider"min="0" max="1" step="0.01" value="0.6"><span id="blankVal">0.60</span></label>
-      <label>Shift:  <input type="range" id="shiftSlider"min="0" max="720" step="1"   value="0"><span id="shiftVal">0</span></label>
-      <label>Rotate: <input type="range" id="rotateSlider"min="0" max="360" step="1"   value="0"><span id="rotateVal">0°</span></label>
+    <!-- Add Event Button (top left) -->
+    <button id="addEventPanelBtn"
+      title="Add Event"
+      style="position: absolute; top: 1em; left: 1em; z-index: 30; background: #888888; color: white; border: none; border-radius: 50%; width: 44px; height: 44px; aspect-ratio: 1/1; display: grid; place-items: center; box-shadow: 0 2px 6px rgba(0,0,0,0.12); cursor: pointer; padding: 0; min-width: 0; min-height: 0; transition: all 0.2s ease;"
+      onmouseover="this.style.background='#666666'; this.style.transform='scale(1.1)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.2)'"
+      onmouseout="this.style.background='#888888'; this.style.transform='scale(1)'; this.style.boxShadow='0 2px 6px rgba(0,0,0,0.12)'">
+      <span style="font-size: 2em; line-height: 1; display: block;">+</span>
+    </button>
+
+    <!-- Event Input Panel (hidden by default) -->
+    <div id="eventInputPanel" style="display: none; position: absolute; top: 1.0em; left: 1.0em; background: rgba(222, 222, 222, 0.85); padding: .7em .9em .7em .9em; border-radius: .3em; font-size: .9em; z-index: 35; min-width: 360px; max-height: 96vh; overflow-y: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.10);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2em;">
+        <span style="font-weight: bold; font-size: 1.1em;">Add Event</span>
+        <button id="closeEventPanelBtn" title="Close" style="background: none; border: none; font-size: 1.3em; cursor: pointer; color: #888;">&times;</button>
+      </div>
+      <label><input type="text" id="eventTitle" placeholder="Event title" maxlength="20" style="flex: 1;   padding: 0.2em; border: 1px solid #ccc; border-radius: 0.2em; width: 100%;"></label>
+      <div style="text-align: right; font-size: 0.7em; color: #666; margin-top: 0.1em; "><span id="titleCharCount">0</span>/20</div>
+      <label><textarea id="eventDescription" placeholder="Event description" maxlength="115" style="flex: 1; padding: 0.2em; margin-top: 0.2em; border: 1px solid #ccc; border-radius: 0.2em; resize: vertical; min-height: 2em; width: 100%; font-family: inherit;"></textarea></label>
+      <div style="text-align: right; font-size: 0.7em; color: #666; margin-top: -0.2em; "><span id="descCharCount">0</span>/115</div>
+      <div style="display: flex; gap: 0.8em; margin-top: 0.5em; align-items: center;">
+        <div style="flex: 1;">
+          <div style="font-size: 0.8em; color: #666; margin-bottom: 0.2em;">Start:</div>
+          <div style="position: relative;">
+          <span id="eventStartBox" class="dt-box"></span>
+          <input type="datetime-local" id="eventStart" class="visually-hidden-datetime">
+        </div>
+      </div>
+        <div style="flex: 1;">
+          <div style="font-size: 0.8em; color: #666; margin-bottom: 0.2em;">End:</div>
+          <div style="position: relative;">
+          <span id="eventEndBox" class="dt-box"></span>
+          <input type="datetime-local" id="eventEnd" class="visually-hidden-datetime">
+          </div>
+        </div>
+      </div>
+      
+      <label style="display: block; margin-top: 1.0em; width: 100%;">
+        <span id="colorBox" style="display: inline-block; width: 100%; height: 2.2em; border-radius: 0.3em; border: 1px solid #ccc; background: #fff; vertical-align: middle; cursor: pointer;"></span>
+        <input type="color" id="eventColor" style="opacity: 0; position: absolute; left: 0; width: 100%; height: 2.2em; cursor: pointer;">
+      </label>
+
+      <!-- Calendar selection for new events -->
+      <div style="display: flex; gap: 0.6em; align-items: center; margin-top: 0.7em;">
+        <div style="font-size: 0.8em; color: #666;">Calendar:</div>
+        <div id="eventCalendarDisplay" style="flex: 1; padding: 0.3em; border: 1px solid #ccc; border-radius: 0.3em; background: #fff; cursor: pointer; text-align: center; min-height: 1.2em; line-height: 1.2em;">Home</div>
+      </div>
+
+
+            
+      <button id="addEventBtn" style="width: 100%; margin-top: 1.0em; padding: 0.3em; background: #4CAF50; color: white; border: none; border-radius: 0.3em; cursor: pointer;">Add Event</button>
+      <hr style="margin: 0.7em 0; border: none; border-top: 1px solid #ccc;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3em;">
+        <div style="font-weight: bold;">Events</div>
+        <!-- Calendars dropdown (filters which calendars are visible) -->
+        <div id="calendarDropdown" style="position: relative;">
+          <button id="calendarDropdownBtn" style="padding: 0.3em 0.6em; background: #fff; border: 1px solid #ccc; border-radius: 0.3em; cursor: pointer; font-size: 0.85em; transition: background-color 0.2s, border-color 0.2s;">Calendars ▾</button>
+          <div id="calendarDropdownMenu" style="display: none; position: fixed; background: #fff; border: 1px solid #ccc; border-radius: 0.3em; box-shadow: 0 2px 8px rgba(0,0,0,0.15); min-width: 200px; z-index: 1000; padding: 0.4em 0;">
+            <!-- Calendar options will be injected here -->
+            <div id="addNewCalendar" style="padding: 0.5em 0.6em; cursor: pointer; border-top: 1px solid #eee; color: #333;">+ Add New Calendar</div>
+          </div>
+        </div>
+      </div>
+      <ul id="eventList" style="list-style: none; padding: 0; padding-bottom: 1.5em; margin: 0; max-height: 180px; overflow-y: auto; overflow-x: hidden; font-size: 0.97em; width: 100%; box-sizing: border-box;"></ul>
+      <div style="margin-top: 0.7em; display: flex; gap: 0.5em;">
+        <button id="exportEventsBtn" style="flex:1; padding: 0.3em; background: #2196F3; color: white; border: none; border-radius: 0.3em; cursor: pointer;">Export All</button>
+        <button id="importEventsBtn" style="flex:1; padding: 0.3em; background: #4CAF50; color: white; border: none; border-radius: 0.3em; cursor: pointer;">Import Files</button>
+        <input type="file" id="importEventsFile" accept="application/json,.ics,text/calendar" style="display:none;" />
+      </div>
+
+      
+      <!-- Random Events Generator (DEV_MODE only) -->
+      <div id="randomEventsSection" style="margin-top: 0.8em; padding-top: 0.6em; border-top: 1px solid #ccc;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em; cursor: pointer;" onclick="toggleRandomEvents()">
+          <span style="font-weight: bold;">Generate Random Events</span>
+          <span id="randToggleIcon" style="font-size: 1.2em; transition: transform 0.2s;">▼</span>
+        </div>
+        
+        <div id="randomEventsContent" style="display: none; flex-direction: column; gap: 0.5em; max-width: 330px; overflow: hidden; transition: all 0.3s ease;">
+          <div style="display: flex; gap: 0.8em;">
+            <div style="flex: 1;">
+              <div style="font-size: 0.8em; color: #666; margin-bottom: 0.2em;">Start:</div>
+              <div style="position: relative;">
+              <span id="randStartBox" class="dt-box"></span>
+              <input type="datetime-local" id="randStart" class="visually-hidden-datetime">
+            </div>
+          </div>
+            <div style="flex: 1;">
+              <div style="font-size: 0.8em; color: #666; margin-bottom: 0.2em;">End:</div>
+              <div style="position: relative;">
+              <span id="randEndBox" class="dt-box"></span>
+              <input type="datetime-local" id="randEnd" class="visually-hidden-datetime">
+              </div>
+            </div>
+          </div>
+          
+          <label>Events: <span id="randCountVal">25</span>
+            <input type="range" id="randCountRange" min="1" max="500" step="1" value="25" style="width:100%">
+          </label>
+          
+          <label>Length min: <span id="randMinVal">60</span> min, Max: <span id="randMaxVal">240</span> min
+            <input type="range" id="randMinRange" min="5" max="720" step="5" value="60" style="width:100%">
+          
+            <input type="range" id="randMaxRange" min="5" max="720" step="5" value="240" style="width:100%">
+          </label>
+          
+          <label>Night events: <span id="randNightWeightVal">5</span>%
+            <input type="range" id="randNightWeightRange" min="0" max="100" step="5" value="5" style="width:100%">
+          </label>
+          
+          <label style="display:flex; align-items:center; gap:0.5em;">
+            <input type="checkbox" id="randClear" checked/>
+            <span>Clear existing events</span>
+          </label>
+          
+          <div style="display: flex; gap: 0.5em;">
+            <button id="randGenerate" style="flex: 1; padding: 0.35em; background: #666; color: white; border: none; border-radius: 0.3em; cursor: pointer;">Generate</button>
+            <button id="randDeleteRandom" style="padding: 0.35em; background: #d32f2f; color: white; border: none; border-radius: 0.3em; cursor: pointer;" title="Delete only random events">Delete</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+        <!-- Settings Button (top right) -->
+    <button id="settingsPanelBtn"
+      title="Settings"
+      style="position: absolute; top: 1em; right: 1em; z-index: 30; background: #888888; color: white; border: none; border-radius: 50%; width: 44px; height: 44px; aspect-ratio: 1/1; display: grid; place-items: center; box-shadow: 0 2px 6px rgba(0,0,0,0.12); cursor: pointer; padding: 0; min-width: 0; min-height: 0; transition: all 0.2s ease;"
+      onmouseover="this.style.background='#666666'; this.style.transform='scale(1.1)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.2)'"
+      onmouseout="this.style.background='#888888'; this.style.transform='scale(1)'; this.style.boxShadow='0 2px 6px rgba(0,0,0,0.12)'">
+      <img src="icons/settings.png" alt="Settings" style="width: 24px; height: 24px; filter: brightness(0) invert(1);">
+    </button>
+
+    <!-- Settings Panel (hidden by default) -->
+    <div id="settingsPanel" style="display: none; position: absolute; top: 1.0em; right: 1.0em; background: rgba(222, 222, 222, 0.85); padding: .7em .9em .7em .9em; border-radius: .3em; font-size: .9em; z-index: 35; min-width: 360px; max-height: 96vh; overflow-y: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.10);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2em;">
+        <span style="font-weight: bold; font-size: 1.1em;">Settings</span>
+        <button id="closeSettingsPanelBtn" title="Close" style="background: none; border: none; font-size: 1.3em; cursor: pointer; color: #888;">&times;</button>
+      </div>
+      
+      <div class="control-content">
+        <div style="display: flex; justify-content: space-between; gap: 2em; flex-wrap: wrap; align-items: center;">
+          <label style="display: flex; align-items: center;"><input type="checkbox" id="darkModeToggle"> Dark mode</label>
+          <label style="display: flex; align-items: center; cursor: pointer; margin-right: 2px;">
+            <button id="audioFeedbackToggle" style="background: none; border: none; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; width: 25px; height: 25px;">
+              <img id="audioFeedbackIcon" src="icons/speaker.png" alt="Audio/vibration" style="width: 25px; height: 25px;">
+            </button>
+          </label>
+        </div>
+
+       
+
+
+        <label>Days:   <input type="range" id="daysSlider"   min="1" max="40" step="1"   value="7"><span id="daysVal">7</span></label>
+        <label>Scale:  <input type="range" id="scaleSlider" min="0.1" max="1" step="0.01" value="0.40"><span id="scaleVal">0.40</span></label>
+        <label>Radius:   <input type="range" id="radiusSlider"     min="1" max="10" step="0.05" value="2"><span id="radiusVal">2  </span></label>
+        <label>Rotate: <input type="range" id="rotateSlider"min="0" max="720" step="1"   value="0"><span id="rotateVal">0°</span></label>
+        <label>Rotate Max: <input type="range" id="rotateMaxSlider" min="360" max="131400" step="90" value="720"><span id="rotateMaxVal">720°</span></label>
+        
+        <div style="display:flex; gap: .5em; align-items:center; flex-wrap: wrap; margin-top: 1em;">
+          <label style="margin: .25em 0;">Color Palette:
+            <select id="colorModeSelect" style="margin-left:.4em;">
+              <option value="random" selected>Random</option>
+              <option value="calendar">Calendar Color</option>
+              <option value="colorblind">Colorblind</option>
+              <option value="pastel">Pastel</option>
+              <option value="vibrant">Vibrant</option>
+              <option value="monoHue">Single Hue</option>
+              <option value="calendarMono">Monochrome</option>
+              <option value="single">Single Color</option>
+            </select>
+          </label>
+          <label id="singleColorWrapper" style="display:none; margin:.25em 0;">Color:
+            <input type="color" id="singleColorInput" value="#4CAF50" style="margin-left:.4em;">
+          </label>
+          <label id="baseHueWrapper" style="display:none; margin:.25em 0;">Hue:
+            <input type="range" id="baseHueSlider" min="0" max="360" step="1" value="200">
+            <span id="baseHueVal">200</span>
+          </label>
+        </div>
+        
+        <label style="display: flex; align-items: center;" data-dev-mode="true"><input type="checkbox" id="eventListColorStyleToggle"> Full row color list</label>
+         
+        
+        <label><input type="checkbox" id="staticMode" checked> Static Mode</label>
+        <label><input type="checkbox" id="circleMode"> Circle Mode</label>
+        <label><input type="checkbox" id="autoTimeAlign" checked> Auto Time Align</label>
+        <label><input type="checkbox" id="showHourNumbers" checked> Show Hour Numbers</label>
+
+        <!-- Hour numbers sub-options (only visible when hour numbers are enabled) -->
+        <div id="hourNumbersControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
+          <div style="font-size: 0.8em; color: #666; margin-bottom: 0.5em; font-style: italic;">
+            Customize hour number display
+          </div>
+          <label style="display:flex; align-items:center; gap:0.5em;">
+            <input type="checkbox" id="hourNumbersOutward" checked/>
+            <span>Stick numbers to outside</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:0.5em;">
+            <input type="checkbox" id="hourNumbersInsideSegment"/>
+            <span>Place numbers inside outer segments</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:0.5em;">
+            <input type="checkbox" id="hideDayWhenHourInside" checked/>
+            <span>Hide overlapping day/month numbers</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:0.5em;">
+            <input type="checkbox" id="hourNumbersUpright"/>
+            <span>Keep numbers upright</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:0.5em;">
+            <input type="checkbox" id="showEverySixthHour"/>
+            <span>Show only every 6th hour</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:0.5em;">
+            <input type="checkbox" id="hourNumbersStartAtOne"/>
+            <span>Start numbering at 1 (1-24 vs 0-23)</span>
+          </label>
+          <label>Position: <span id="hourNumbersPositionVal">2</span>
+            <input type="range" id="hourNumbersPositionSlider" min="0" max="2" step="1" value="2" style="width:100%">
+          </label>
+        </div>
+        
+        <label><input type="checkbox" id="showDayNumbers" checked> Show Day Numbers</label>
+        
+        <!-- Day numbers sub-options (only visible when day numbers are enabled) -->
+        <div id="dayNumbersControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
+          <div style="font-size: 0.8em; color: #666; margin-bottom: 0.5em; font-style: italic;">
+            Customize day number display
+          </div>
+          <label style="display:flex; align-items:center; gap:0.5em;">
+            <input type="checkbox" id="dayNumbersUpright"/>
+            <span>Keep numbers upright</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:0.5em;">
+            <input type="checkbox" id="dayLabelShowWeekday" checked/>
+            <span>Show weekday</span>
+          </label>
+          <div id="dayLabelWeekdaySubOptions" style="display:flex; flex-direction:column; gap:0.5em; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
+            <label style="display:flex; align-items:center; gap:0.5em; margin:0;">
+              <input type="checkbox" id="dayLabelUseShortNames" checked/>
+              <span>Use short weekday</span>
+            </label>
+          </div>
+          <label style="display:flex; align-items:center; gap:0.5em;">
+            <input type="checkbox" id="dayLabelShowMonth" checked/>
+            <span>Show month</span>
+          </label>
+          <div id="dayLabelMonthSubOptions" style="display:flex; flex-direction:column; gap:0.5em; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
+            <label style="display:flex; align-items:center; gap:0.5em; margin:0;">
+              <input type="checkbox" id="dayLabelMonthOnFirstOnly" checked/>
+              <span>Only first day of month</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:0.5em; margin:0;">
+              <input type="checkbox" id="dayLabelUseShortMonth" checked/>
+              <span>Use short month</span>
+            </label>
+          </div>
+          <label style="display:flex; align-items:center; gap:0.5em;">
+            <input type="checkbox" id="dayLabelShowYear" checked/>
+            <span>Show year</span>
+          </label>
+          <div id="dayLabelYearSubOptions" style="display:flex; flex-direction:column; gap:0.5em; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
+            <label style="display:flex; align-items:center; gap:0.5em; margin:0;">
+              <input type="checkbox" id="dayLabelYearOnFirstOnly" checked/>
+              <span>Only first day of year</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:0.5em; margin:0;">
+              <input type="checkbox" id="dayLabelUseShortYear"/>
+              <span>Use short year</span>
+            </label>
+          </div>
+          <label style="display:flex; align-items:center; gap:0.5em;">
+            <input type="checkbox" id="dayLabelUseOrdinal"/>
+            <span>Use ordinal days</span>
+          </label>
+        </div>
+        
+        <label><input type="checkbox" id="showMonthNumbers"> Show Month Numbers</label>
+        
+        <!-- Month numbers sub-options (only visible when month numbers are enabled) -->
+        <div id="monthNumbersControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
+          <div style="font-size: 0.8em; color: #666; margin-bottom: 0.5em; font-style: italic;">
+            Customize month number display
+          </div>
+          <label style="display:flex; align-items:center; gap:0.5em;">
+            <input type="checkbox" id="showMonthNames" checked/>
+            <span>Show month names</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:0.5em;">
+            <input type="checkbox" id="showYearNumbers"/>
+            <span>Show year numbers</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:0.5em;">
+            <input type="checkbox" id="monthNumbersUpright"/>
+            <span>Keep numbers upright</span>
+          </label>
+        </div>
+
+
+        <label><input type="checkbox" id="textClippingToggle"> Text clipping</label>
+        <label><input type="checkbox" id="timeDisplayToggle" checked> Time display</label>
+        <label><input type="checkbox" id="segmentEdgesToggle"> Segment edges</label>        
+        <label><input type="checkbox" id="showMidnightLinesToggle" checked> Show midnight lines</label>
+        <label><input type="checkbox" id="showNoonLinesToggle"> Show noon (12h) lines</label>
+        <label><input type="checkbox" id="showSixAmPmLinesToggle"> Show 6am/6pm lines</label>
+        <label><input type="checkbox" id="arcLinesToggle" checked> Arc lines</label>
+        <label><input type="checkbox" id="showMonthLinesToggle" checked> Show month lines</label>
+
+
+        <label><input type="checkbox" id="overlayStackMode" checked> Stacked overlaps</label>
+        <label><input type="checkbox" id="tooltipToggle" checked> Hover tooltip</label>
+        <label><input type="checkbox" id="dayOverlayToggle" checked> Weekday gradient</label>
+        <!-- Weekday gradient opacity control (only visible when weekday gradient is enabled) -->
+        <div id="dayOverlayOpacityControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
+          <label>Opacity: <span id="dayOverlayOpacityVal">15%</span>
+            <input type="range" id="dayOverlayOpacitySlider" min="0" max="100" step="1" value="15" style="width:100%">
+          </label>
+        </div>
+        
+        <label><input type="checkbox" id="gradientOverlayToggle" checked> Inward gradient</label>
+        <!-- Inward gradient opacity control (only visible when inward gradient is enabled) -->
+        <div id="gradientOverlayOpacityControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
+          <label>Max opacity (center): <span id="gradientOverlayOpacityVal">5%</span>
+            <input type="range" id="gradientOverlayOpacitySlider" min="0" max="100" step="1" value="5" style="width:100%">
+          </label>
+        </div>
+                
+        <!-- Device orientation sensitivity controls (only visible when device orientation is enabled) -->
+        <div id="deviceOrientationControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
+          <div style="font-size: 0.8em; color: #666; margin-bottom: 0.5em; font-style: italic;">
+            Adjust how much tilt is needed to start zooming/rotating
+          </div>
+          <label>Zoom sensitivity: <span id="betaThresholdVal">8</span>
+            <input type="range" id="betaThresholdSlider" min="3" max="20" step="1" value="8" style="width:100%">
+          </label>
+          <label>Rotation sensitivity: <span id="gammaThresholdVal">6</span>
+            <input type="range" id="gammaThresholdSlider" min="2" max="15" step="1" value="6" style="width:100%">
+          </label>
+        </div>
+        
+        <label><input type="checkbox" id="nightOverlayToggle" checked> Night time overlay</label>
+        <!-- Night overlay opacity control (only visible when night overlay is enabled) -->
+        <div id="nightOverlayOpacityControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
+          <label>Opacity: <span id="nightOverlayOpacityVal">5%</span>
+            <input type="range" id="nightOverlayOpacitySlider" min="0" max="100" step="1" value="5" style="width:100%">
+          </label>
+        </div>
+        
+        <!-- Location controls (only visible when night overlay is enabled) -->
+        <div id="locationControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc; max-width: 270px; width: 100%;">
+          <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 0.4em; align-items: center; margin-bottom: 0.3em;">
+            <input type="text" id="locationSearch" placeholder="Search city or address" style="padding: 0.2em 0.5em; height: 2em;">
+            <button id="locationSearchBtn" title="Search" style="padding: 0.2em 0.6em; font-size: 0.9em;"></button>
+            <button id="geoLocationBtn" title="Use device location" style="padding: 0.2em 0.6em; font-size: 0.9em;"></button>
+          </div>
+          <div style="display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; gap: 0.4em; align-items: center;">
+            <input type="number" id="latInput" step="0.0001" placeholder="Lat" value="53.0793" style="width:100%; padding: 0.2em 0.5em; height: 2em;">
+            <input type="number" id="lngInput" step="0.0001" placeholder="Lng" value="8.8017" style="width:100%; padding: 0.2em 0.5em; height: 2em;">
+            <button id="setLocationBtn" style="padding: 0.2em 1em; font-size: 0.9em;">Set</button>
+          </div>
+      </div>
+        
+        <label><input type="checkbox" id="deviceOrientationToggle"> Device orientation control</label>
+        
+        
+        <!-- Event Input section removed from here -->
+        <label><input type="checkbox" id="animateToggle"> Animate</label>
+        <div id="animationSpeedControls" style="display:none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
+          <label>Speed: <input type="range" id="speedSlider" min="0.01" max="2" step="0.01" value="1" style="width:100%"><span id="speedVal">1.0</span></label>
+        </div>
+        
+        <!-- Study Session Controls (STUDY_MODE only) -->
+        <div id="studySessionSection" style="margin-top: 0.8em; padding-top: 0.6em; border-top: 1px solid #ccc;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em; cursor: pointer;" onclick="toggleStudySession()">
+            <span style="font-weight: bold;">Study Session</span>
+            <span id="studyToggleIcon" style="font-size: 1.2em; transition: transform 0.2s;">▼</span>
+          </div>
+          
+          <div id="studySessionContent" style="display: none; flex-direction: column; gap: 0.5em; max-width: 360px; overflow: hidden; transition: all 0.3s ease;">
+            <div style="margin-bottom: 0.5em;">
+              <input type="text" id="participantName" placeholder="Enter participant name" style="width: 100%; padding: 0.3em; border: 1px solid #ccc; border-radius: 0.3em; font-size: 0.9em;">
+            </div>
+            <div style="display: flex; gap: 0.3em; margin-bottom: 0.5em;">
+              <button id="startRecordingBtn" style="flex: 1; padding: 0.4em; background: #4CAF50; color: white; border: none; border-radius: 0.3em; cursor: pointer; font-size: 0.9em;">Start Recording</button>
+              <button id="stopRecordingBtn" style="flex: 1; padding: 0.4em; background: #f44336; color: white; border: none; border-radius: 0.3em; cursor: pointer; font-size: 0.9em; display: none;">Stop Recording</button>
+            </div>
+            <button id="downloadDataBtn" style="width: 100%; padding: 0.4em; background: #2196F3; color: white; border: none; border-radius: 0.3em; cursor: pointer; font-size: 0.9em; display: none;">Download Study Data</button>
+            <div id="recordingStatus" style="font-size: 0.8em; color: #666; margin-top: 0.3em; text-align: center;"></div>
+          </div>
+        </div>
+        
+        <!-- DEV_MODE Toggle Button (only visible when DEV_MODE is true) -->
+        <div id="devModeToggleSection" style="margin-top: 1em; padding-top: 0.5em; border-top: 1px solid #ccc;">
+          <button id="devModeToggleBtn" style="width: 100%; padding: 0.4em; background: #ff9800; color: white; border: none; border-radius: 0.3em; cursor: pointer; font-size: 0.9em;">Hide Dev Options</button>
+        </div>
+        
+        <button id="resetSettingsBtn" style="width: 100%; padding: 0.4em; background: #d32f2f; color: white; border: none; border-radius: 0.3em; cursor: pointer; font-size: 0.9em; margin-top: 0.3em;">Reset to Defaults</button>
+      </div>
+    </div>
+
+    <!-- Add to Home Screen Banner (mobile only, hidden by default) -->
+    <div id="a2hs-banner" style="display:none;">
+      <div id="a2hs-text"></div>
+      <button id="a2hs-install-btn"></button>
+      <button id="a2hs-open-btn" style="display:none;"></button>
+      <button id="a2hs-close-btn">×</button>
+    </div>
+
+    <!-- iOS Add to Home Screen instructions overlay -->
+    <div id="ios-install-overlay" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 50; align-items: center; justify-content: center;">
+      <div class="ios-install-content" style="background: white; padding: 1.5em; border-radius: 0.5em; max-width: 90vw; text-align: left; color: #333;">
+        <h2 style="font-weight:bold; margin-bottom:0.5em; text-align:center;">Install</h2>
+        <ol style="margin: 0.5em 0; padding-left: 1.2em;">
+          <li style="margin-bottom: 8px;">Tap <strong>Share</strong> <img src="icons/share.png" alt="Share" style="width: 16px; height: 16px; vertical-align: middle; margin: 0 0px;"> button at bottom of Safari</li>
+          <li style="margin-bottom: 8px;">Scroll down and tap <strong>"Add to Home Screen"</strong></li>
+          <li>Tap <strong>"Add"</strong> in top right</li>
+        </ol>
+        <p style="font-size: 13px; color: var(--button-locked-text); margin: 8px 0;">The app will appear on your home screen like a native app!</p>
+        <div style="text-align:center; margin-top:1em;">
+          <button id="ios-close-btn" style="padding:0.5em 1.5em; background:#888888; color:#000000; border:none; border-radius:0.3em; cursor:pointer; font-size:1em;">Got it!</button>
+        </div>
+      </div>
     </div>
   </div>
 
+  <script src="a2hs.js"></script>
+  <script src="main.js"></script>
   <script>
-    // Get canvas context
-    const canvas = document.getElementById('spiral');
-    const ctx = canvas.getContext('2d');
-
-    // Parameters and state variables
-    let days = 7;               // number of spiral turns (days)
-    let spiralScale = 0.3;      // overall size relative to canvas
-    let p = 3;                  // exponent for radial scaling (width ramp)
-    let blankProb = 0.6;        // probability of a blank segment
-    let shift = 0;              // index shift for color array
-    let rotation = 0;           // rotation angle in radians
-
-    // Constants for spiral resolution
-    const segments = 24;        // slices per turn (hours)
-    const startAng = Math.PI / 2;  // initial rotation offset (start at bottom)
-    const arcSteps = 40;        // resolution of each arc
-
-    // Prepare color palette array based on maximum days
-    const maxDays = +document.getElementById('daysSlider').max;
-    const totalSeg = maxDays * segments;
-    let colors = [];
-
-    // Generate colors and blank slots for the palette
-    function generateColors() {
-      colors = Array.from({ length: totalSeg }, () =>
-        Math.random() < blankProb
-          ? '#fff'
-          : `hsl(${Math.random()*360}, ${60+Math.random()*20}%, ${40+Math.random()*20}%)`
-      );
-      // update shift slider maximum
-      document.getElementById('shiftSlider').max = totalSeg - 1;
-    }
-    generateColors();
-
-    // Bind UI controls to state and redraw
-    const daysSlider = document.getElementById('daysSlider');
-    const scaleSlider = document.getElementById('scaleSlider');
-    const pSlider = document.getElementById('pSlider');
-    const blankSlider = document.getElementById('blankSlider');
-    const shiftSlider = document.getElementById('shiftSlider');
-    const rotateSlider = document.getElementById('rotateSlider');
-
-    daysSlider.addEventListener('input', e => {
-      days = +e.target.value;
-      document.getElementById('daysVal').textContent = days;
-      drawSpiral();
-    });
-    scaleSlider.addEventListener('input', e => {
-      spiralScale = +e.target.value;
-      document.getElementById('scaleVal').textContent = spiralScale;
-      drawSpiral();
-    });
-    pSlider.addEventListener('input', e => {
-      p = +e.target.value;
-      document.getElementById('pVal').textContent = p;
-      drawSpiral();
-    });
-    blankSlider.addEventListener('input', e => {
-      blankProb = +e.target.value;
-      document.getElementById('blankVal').textContent = blankProb.toFixed(2);
-      generateColors();
-      drawSpiral();
-    });
-    shiftSlider.addEventListener('input', e => {
-      shift = +e.target.value;
-      document.getElementById('shiftVal').textContent = shift;
-      drawSpiral();
-    });
-    rotateSlider.addEventListener('input', e => {
-      const deg = +e.target.value;
-      rotation = deg * Math.PI / 180;  // convert to radians
-      document.getElementById('rotateVal').textContent = deg + '°';
-      drawSpiral();
-    });
-
-    // Handle canvas resize and initial draw
-    window.addEventListener('resize', resize);
-    function resize() {
-      canvas.width = canvas.clientWidth * devicePixelRatio;
-      canvas.height = canvas.clientHeight * devicePixelRatio;
-      ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-      drawSpiral();
-    }
-
-    // Main draw function
-    function drawSpiral() {
-      const W = canvas.clientWidth;
-      const H = canvas.clientHeight;
-      ctx.clearRect(0, 0, W, H);
-      ctx.save();
-
-      // Center & transform
-      ctx.translate(W/2, H/2);
-      ctx.scale(-1, 1);           // flip spiral direction
-      ctx.rotate(rotation);       // apply user rotation
-
-      // Calculate growth/shrink based on rotation
-      const thetaMax = days * 2 * Math.PI;
-      const coilRatio = 1 - Math.pow((thetaMax - 2*Math.PI) / thetaMax, p);
-      const growScale = 1 + (rotation / (2 * Math.PI)) * coilRatio;
-      ctx.scale(growScale, growScale);
-
-      // Determine which segments to hide
-      const hideAngle = rotation;
-      const visibleMin = -hideAngle;
-      const visibleMax = thetaMax - hideAngle;
-
-      const maxRadius = Math.min(W, H) * spiralScale;
-      const segAng = 2 * Math.PI / segments;
-
-      // Radius mapping function along the spiral
-      function radiusFn(theta) {
-        const t = theta / thetaMax;
-        return maxRadius * Math.pow(t, p);
+    // Function to toggle DEV_MODE visibility
+    function toggleDevModeVisibility() {
+      // Wait for DEV_MODE to be available
+      if (typeof DEV_MODE === 'undefined') {
+        setTimeout(toggleDevModeVisibility, 100);
+        return;
       }
-
-      // Loop through each 'day' turn and each 'hour' slice
-      for (let d = 0; d < days; d++) {
-        for (let s = 0; s < segments; s++) {
-          // Base angles for this wedge
-          const raw0 = d * 2 * Math.PI + s * segAng;
-          const raw1 = raw0 + segAng;
-
-          // Clamp wedge to visible range for smooth disappearance
-          const startTheta = Math.max(raw0, visibleMin);
-          const endTheta = Math.min(raw1, visibleMax);
-          if (endTheta <= startTheta) continue; // fully hidden
-
-          // Color index with shift wrap
-          const idx0 = d * segments + s;
-          const idx = (idx0 + shift + totalSeg) % totalSeg;
-
-          // Draw the wedge path
-          let ang = startTheta + startAng;
-          let rad = radiusFn(startTheta);
-          let x = rad * Math.cos(ang);
-          let y = rad * Math.sin(ang);
-          ctx.beginPath();
-          ctx.moveTo(x, y);
-
-          // Inner arc from start to end
-          const innerSteps = Math.ceil(arcSteps * (endTheta - startTheta) / segAng);
-          for (let i = 1; i <= innerSteps; i++) {
-            const t = i / innerSteps;
-            const raw = startTheta + t * (endTheta - startTheta);
-            ang = raw + startAng;
-            rad = radiusFn(raw);
-            x = rad * Math.cos(ang);
-            y = rad * Math.sin(ang);
-            ctx.lineTo(x, y);
+      const effectiveDevMode = typeof getEffectiveDevMode !== 'undefined' ? getEffectiveDevMode() : DEV_MODE;
+      const advancedOptions = [
+        'rotateSlider', 'rotateVal',
+        'rotateMaxSlider', 'rotateMaxVal', 
+        'autoTimeAlign',
+        'showHourNumbers','hourNumbersControls',
+        'showDayNumbers','dayNumbersControls',
+        'showMonthNumbers','monthNumbersControls',
+        'textClippingToggle',
+        'timeDisplayToggle',
+        'segmentEdgesToggle',
+        'arcLinesToggle',
+        'overlayStackMode',
+        'tooltipToggle',
+        'animateToggle',
+        'speedSlider', 'speedVal',
+        'eventListColorStyleToggle'
+      ];
+      
+      // Show/hide advanced options
+      advancedOptions.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+          const parentLabel = element.closest('label');
+          if (parentLabel) {
+            parentLabel.style.display = effectiveDevMode ? 'flex' : 'none';
+          } else {
+            element.style.display = effectiveDevMode ? 'block' : 'none';
           }
-
-          // Radial line outwards
-          const outEnd = endTheta + 2 * Math.PI;
-          ang = outEnd + startAng;
-          rad = radiusFn(outEnd);
-          ctx.lineTo(rad * Math.cos(ang), rad * Math.sin(ang));
-
-          // Outer arc back to start edge
-          for (let i = 1; i <= innerSteps; i++) {
-            const t = i / innerSteps;
-            const raw = outEnd - t * (endTheta - startTheta);
-            ang = raw + startAng;
-            rad = radiusFn(raw);
-            x = rad * Math.cos(ang);
-            y = rad * Math.sin(ang);
-            ctx.lineTo(x, y);
-          }
-
-          ctx.closePath();
-
-          // Fill and stroke the wedge
-          ctx.fillStyle = colors[idx];
-          ctx.fill();
-          ctx.strokeStyle = '#444';
-          ctx.lineWidth = 1;
-          ctx.stroke();
         }
+      });
+      
+      // Show/hide Random Events section
+      const randomEventsSection = document.getElementById('randomEventsSection');
+      if (randomEventsSection) {
+        randomEventsSection.style.display = effectiveDevMode ? 'block' : 'none';
       }
-
-      ctx.restore();
+      
+      // Show/hide Dev Mode Line Toggles section
+      const devModeLineToggles = document.getElementById('devModeLineToggles');
+      if (devModeLineToggles) {
+        devModeLineToggles.style.display = effectiveDevMode ? 'block' : 'none';
+      }
+      
+      // Show/hide DEV_MODE toggle button
+      const devModeToggleSection = document.getElementById('devModeToggleSection');
+      if (devModeToggleSection) {
+        devModeToggleSection.style.display = (typeof DEV_MODE !== 'undefined' && DEV_MODE) ? 'block' : 'none';
+      }
+      
+      // Update button text
+      const devModeToggleBtn = document.getElementById('devModeToggleBtn');
+      if (devModeToggleBtn) {
+        devModeToggleBtn.textContent = effectiveDevMode ? 'Hide Dev Options' : 'Show Dev Options';
+      }
     }
-
-    // Initial canvas setup
-    resize();
+    
+    // Initialize DEV_MODE visibility
+    toggleDevModeVisibility();
+    
+    // Setup DEV_MODE toggle button
+    const devModeToggleBtn = document.getElementById('devModeToggleBtn');
+    if (devModeToggleBtn) {
+      devModeToggleBtn.addEventListener('click', () => {
+        if (typeof runtimeDevModeOverride !== 'undefined') {
+          runtimeDevModeOverride = runtimeDevModeOverride === null ? false : null;
+        }
+        toggleDevModeVisibility();
+      });
+    }
+    
+    // Hide Study Session section if STUDY_MODE is false
+    if (typeof STUDY_MODE !== 'undefined' && !STUDY_MODE) {
+      const studySessionSection = document.getElementById('studySessionSection');
+      if (studySessionSection) {
+        studySessionSection.style.display = 'none';
+      }
+    }
+    
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./service-worker.js').catch(() => {});
+      });
+    }
   </script>
+
 </body>
 </html>
