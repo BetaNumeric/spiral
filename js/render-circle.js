@@ -1126,7 +1126,6 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     drawCircleModeSegments(maxRadius) {
-      const days = this.state.days + 1;
       const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
       
       // Use the same visibility logic as spiral mode
@@ -1276,11 +1275,7 @@ Object.assign(SpiralCalendar.prototype, {
             
             if (segmentEnd <= segmentStart) continue; // segment is fully hidden
           
-          // Get color for this segment (check events first, then fall back to random colors)
-          const eventInfo = this.getEventColorForSegment(day, segment);
-          
-          // Get base color
-          const segmentIndex = day * CONFIG.SEGMENTS_PER_DAY + segment;
+          // Get base color for this segment.
           const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
           const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
           const colorIndex = ((segmentId % this.cache.colors.length) + this.cache.colors.length) % this.cache.colors.length;

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>v1.31 Spiral Calendar</title>
+  <title>Spiral Calendar</title>
   <link rel="icon" type="image/png" href="icons/icon_32.png">
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#ffffff">
@@ -590,7 +590,10 @@
     <!-- Settings Panel (hidden by default) -->
     <div id="settingsPanel" style="display: none; position: absolute; top: 1.0em; right: 1.0em; background: rgba(222, 222, 222, 0.85); padding: .7em .9em .7em .9em; border-radius: .3em; font-size: .9em; z-index: 35; min-width: 360px; max-height: 96vh; overflow-y: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.10);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2em;">
-        <span style="font-weight: bold; font-size: 1.1em;">Settings</span>
+        <div style="display: flex; align-items: baseline; gap: 0.5em;">
+          <span style="font-weight: bold; font-size: 1.1em;">Settings</span>
+          <span id="appVersionInfo" style="font-size: 0.8em; color: #666;">Version</span>
+        </div>
         <button id="closeSettingsPanelBtn" title="Close" style="background: none; border: none; font-size: 1.3em; cursor: pointer; color: #888;">&times;</button>
       </div>
       
@@ -834,7 +837,6 @@
         <div id="devModeToggleSection" style="margin-top: 1em; padding-top: 0.5em; border-top: 1px solid #ccc;">
           <button id="devModeToggleBtn" style="width: 100%; padding: 0.4em; background: #ff9800; color: white; border: none; border-radius: 0.3em; cursor: pointer; font-size: 0.9em;">Hide Dev Options</button>
         </div>
-        
         <button id="resetSettingsBtn" style="width: 100%; padding: 0.4em; background: #d32f2f; color: white; border: none; border-radius: 0.3em; cursor: pointer; font-size: 0.9em; margin-top: 0.3em;">Reset to Defaults</button>
       </div>
     </div>
@@ -864,6 +866,7 @@
     </div>
   </div>
 
+  <script src="js/app-version.js"></script>
   <script src="a2hs.js"></script>
   <script src="js/config-utils.js"></script>
   <script src="js/core.js"></script>
@@ -878,6 +881,10 @@
   <script src="js/touch-time-orientation.js"></script>
   <script src="js/bootstrap.js"></script>
   <script>
+    if (typeof APP_VERSION !== 'undefined') {
+      document.title = `v${APP_VERSION} Spiral Calendar`;
+    }
+
     // Function to toggle DEV_MODE visibility
     function toggleDevModeVisibility() {
       // Wait for DEV_MODE to be available
@@ -939,6 +946,13 @@
       const devModeToggleBtn = document.getElementById('devModeToggleBtn');
       if (devModeToggleBtn) {
         devModeToggleBtn.textContent = effectiveDevMode ? 'Hide Dev Options' : 'Show Dev Options';
+      }
+
+      const appVersionInfo = document.getElementById('appVersionInfo');
+      if (appVersionInfo) {
+        appVersionInfo.textContent = (typeof APP_VERSION !== 'undefined')
+          ? `Version: ${APP_VERSION}`
+          : 'Version: unknown';
       }
     }
     

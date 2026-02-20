@@ -824,71 +824,205 @@ Object.assign(SpiralCalendar.prototype, {
     }
   },
 
-  drawSelectedEventHandles() {
-    // Only show when an event is selected (detail mode) and a segment is selected
-    if (this.state.detailMode === null || !this.mouseState.selectedSegment) return;
-    
-    // Reset cached handle hit areas
-    this.handleHandles = null;
-    
-    // Resolve the selected event from the selected segment and selectedEventIndex
+  _getSelectedEventForHandleEditing() {
+    if (this.state.detailMode === null || !this.mouseState.selectedSegment) return null;
     const seg = this.mouseState.selectedSegment;
     const eventsHere = this.getAllEventsForSegment(seg.day, seg.segment);
-    if (!eventsHere || eventsHere.length === 0) return;
+    if (!eventsHere || eventsHere.length === 0) return null;
     const idx = Math.min(this.mouseState.selectedEventIndex || 0, eventsHere.length - 1);
-    const selectedEvent = eventsHere[idx] && eventsHere[idx].event ? eventsHere[idx].event : null;
-    if (!selectedEvent) return;
-    
-    const canvasWidth = this.canvas.clientWidth;
-    const canvasHeight = this.canvas.clientHeight;
-    const { thetaMax, maxRadius } = this.calculateTransforms(canvasWidth, canvasHeight);
-    const radiusFunction = this.createRadiusFunction(maxRadius, thetaMax, this.state.radiusExponent, this.state.rotation);
-    const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
-    
-    // Compute the on-spiral handle position for a given UTC date
-    const computeHandlePosition = (date, isEnd) => {
-      const d = new Date(date);
-      // If end is exactly on an hour boundary, nudge slightly backward to stay within the last covered hour
-      if (isEnd && d.getUTCHours !== undefined &&
-          d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0) {
-        d.setTime(d.getTime() - 1);
+    return eventsHere[idx] && eventsHere[idx].event ? eventsHere[idx].event : null;
+  },
+
+  _normalizeHandleDate(date, isEnd) {
+    const d = new Date(date);
+    if (isEnd &&
+        d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0) {
+      d.setTime(d.getTime() - 1);
+    }
+    return d;
+  },
+
+  _resolveHandleSegmentForDate(selectedEvent, selectedEventSegments, totalVisibleSegments, date, isEnd) {
+    const d = this._normalizeHandleDate(date, isEnd);
+
+    if (selectedEventSegments.length > 0) {
+      const hourMatches = new Map();
+      for (const es of selectedEventSegments) {
+        const segId = totalVisibleSegments - (es.day * CONFIG.SEGMENTS_PER_DAY + es.segment) - 1;
+        const hourStart = new Date(this.referenceTime.getTime() + segId * 60 * 60 * 1000);
+        hourStart.setUTCMinutes(0, 0, 0);
+        const hourEnd = new Date(hourStart.getTime() + 60 * 60 * 1000);
+        if (d >= hourStart && d < hourEnd) {
+          const key = `${es.day}:${es.segment}`;
+          if (!hourMatches.has(key)) {
+            hourMatches.set(key, { day: es.day, segment: es.segment });
+          }
+        }
       }
-      const diffHours = (d - this.referenceTime) / (1000 * 60 * 60);
-      const segmentId = Math.floor(diffHours);
-      const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-      const absPos = totalVisibleSegments - segmentId - 1;
-      const day = Math.floor(absPos / CONFIG.SEGMENTS_PER_DAY);
-      const segment = absPos - day * CONFIG.SEGMENTS_PER_DAY;
-      
-      const rawStartAngle = day * 2 * Math.PI + segment * segmentAngle;
-      const minuteFrac = (d.getUTCMinutes() + d.getUTCSeconds() / 60 + d.getUTCMilliseconds() / 60000) / 60;
-      const th = rawStartAngle + (1 - minuteFrac) * segmentAngle;
-      
-      // Default radial slice is full segment thickness; refine if we can find event slice for this hour
-      let rInner = radiusFunction(th);
-      let rOuter = radiusFunction(th + 2 * Math.PI);
-      
-      // Try to align handle radially with the selected event's slice in that hour
-      const es = this.eventSegments.find(es =>
-        es.day === day && es.segment === segment && es.event === selectedEvent
+      if (hourMatches.size > 0) {
+        const selectedDay = (this.mouseState && this.mouseState.selectedSegment) ? this.mouseState.selectedSegment.day : 0;
+        let best = null;
+        for (const match of hourMatches.values()) {
+          if (!best || Math.abs(match.day - selectedDay) < Math.abs(best.day - selectedDay)) {
+            best = match;
+          }
+        }
+        if (best) return { day: best.day, segment: best.segment, d };
+      }
+    }
+
+    const diffHours = (d - this.referenceTime) / (1000 * 60 * 60);
+    const segmentId = Math.floor(diffHours);
+    const absPos = totalVisibleSegments - segmentId - 1;
+    let day = Math.floor(absPos / CONFIG.SEGMENTS_PER_DAY);
+    const segment = (CONFIG.SEGMENTS_PER_DAY - 1) - d.getUTCHours();
+
+    const visibleMatches = (this.eventSegments || []).filter(es =>
+      es.event === selectedEvent && es.segment === segment
+    );
+    if (visibleMatches.length > 0) {
+      day = visibleMatches.reduce((bestDay, es) => {
+        return Math.abs(es.day - day) < Math.abs(bestDay - day) ? es.day : bestDay;
+      }, visibleMatches[0].day);
+      return { day, segment, d };
+    }
+
+    const probeDays = [day, day - 1, day + 1, day - 2, day + 2];
+    for (const probeDay of probeDays) {
+      const list = this.getAllEventsForSegment(probeDay, segment) || [];
+      if (list.some(item => item && item.event === selectedEvent)) {
+        day = probeDay;
+        break;
+      }
+    }
+
+    return { day, segment, d };
+  },
+
+  _findRenderedSliceForHandleTime(selectedEventSegments, totalVisibleSegments, date, segmentAngle) {
+    const d = new Date(date);
+    if (!selectedEventSegments.length) return null;
+
+    const selectedDay = (this.mouseState && this.mouseState.selectedSegment) ? this.mouseState.selectedSegment.day : 0;
+    const minuteFrac = (d.getUTCMinutes() + d.getUTCSeconds() / 60 + d.getUTCMilliseconds() / 60000) / 60;
+    const slicesInHour = [];
+
+    for (const es of selectedEventSegments) {
+      const segId = totalVisibleSegments - (es.day * CONFIG.SEGMENTS_PER_DAY + es.segment) - 1;
+      const hourStart = new Date(this.referenceTime.getTime() + segId * 60 * 60 * 1000);
+      hourStart.setUTCMinutes(0, 0, 0);
+      const hourEnd = new Date(hourStart.getTime() + 60 * 60 * 1000);
+      if (d >= hourStart && d < hourEnd) {
+        slicesInHour.push(es);
+      }
+    }
+
+    if (!slicesInHour.length) return null;
+
+    const targetTheta = slicesInHour[0].rawStartAngle + (1 - minuteFrac) * segmentAngle;
+    let bestSlice = null;
+    let bestScore = Infinity;
+    for (const es of slicesInHour) {
+      const inSlice = targetTheta >= (es.timeStartTheta - 1e-9) && targetTheta <= (es.timeEndTheta + 1e-9);
+      const boundaryDist = inSlice ? 0 : Math.min(
+        Math.abs(targetTheta - es.timeStartTheta),
+        Math.abs(targetTheta - es.timeEndTheta)
       );
-      if (es) {
+      const dayDist = Math.abs(es.day - selectedDay);
+      const score = boundaryDist * 1000 + dayDist;
+      if (score < bestScore) {
+        bestScore = score;
+        bestSlice = es;
+      }
+    }
+
+    if (!bestSlice) return null;
+    return { slice: bestSlice, targetTheta };
+  },
+
+  _computeSelectedEventHandlePosition(selectedEvent, context, date, isEnd) {
+    const { visibilityRange, radiusFunction, segmentAngle, totalVisibleSegments, selectedEventSegments } = context;
+    const d = this._normalizeHandleDate(date, isEnd);
+
+    let th;
+    let matchedSlice = null;
+    const renderedMatch = this._findRenderedSliceForHandleTime(selectedEventSegments, totalVisibleSegments, d, segmentAngle);
+    if (renderedMatch) {
+      matchedSlice = renderedMatch.slice;
+      th = renderedMatch.targetTheta;
+      const rawStartAngle = matchedSlice.rawStartAngle;
+      const rawEndAngle = matchedSlice.rawEndAngle;
+      const visibleStart = Math.max(rawStartAngle, visibilityRange.min);
+      const visibleEnd = Math.min(rawEndAngle, visibilityRange.max);
+      if (visibleEnd > visibleStart) {
+        th = Math.max(visibleStart, Math.min(visibleEnd, th));
+      }
+      th = Math.max(matchedSlice.timeStartTheta, Math.min(matchedSlice.timeEndTheta, th));
+    } else {
+      const { day, segment } = this._resolveHandleSegmentForDate(
+        selectedEvent,
+        selectedEventSegments,
+        totalVisibleSegments,
+        date,
+        isEnd
+      );
+      const rawStartAngle = day * 2 * Math.PI + segment * segmentAngle;
+      const rawEndAngle = rawStartAngle + segmentAngle;
+      const minuteFrac = (d.getUTCMinutes() + d.getUTCSeconds() / 60 + d.getUTCMilliseconds() / 60000) / 60;
+      th = rawStartAngle + (1 - minuteFrac) * segmentAngle;
+      const visibleStart = Math.max(rawStartAngle, visibilityRange.min);
+      const visibleEnd = Math.min(rawEndAngle, visibilityRange.max);
+      if (visibleEnd > visibleStart) {
+        th = Math.max(visibleStart, Math.min(visibleEnd, th));
+      }
+    }
+
+    let rInner;
+    let rOuter;
+    if (matchedSlice && matchedSlice.isCircleMode &&
+        typeof matchedSlice.innerRadius === 'number' &&
+        typeof matchedSlice.outerRadius === 'number') {
+      rInner = matchedSlice.innerRadius;
+      rOuter = matchedSlice.outerRadius;
+    } else {
+      rInner = radiusFunction(th);
+      rOuter = radiusFunction(th + 2 * Math.PI);
+      if (matchedSlice) {
         const h = rOuter - rInner;
-        const sliceStart = (es.eventSliceStart != null) ? es.eventSliceStart : 0;
-        const sliceEnd = (es.eventSliceEnd != null) ? es.eventSliceEnd : 1;
+        const sliceStart = (matchedSlice.eventSliceStart != null) ? matchedSlice.eventSliceStart : 0;
+        const sliceEnd = (matchedSlice.eventSliceEnd != null) ? matchedSlice.eventSliceEnd : 1;
         rInner = rInner + sliceStart * h;
         rOuter = rInner + (sliceEnd - sliceStart) * h;
       }
-      
-      const rMid = (rInner + rOuter) * 0.5;
-      const ang = -th + CONFIG.INITIAL_ROTATION_OFFSET;
-      const x = rMid * Math.cos(ang);
-      const y = rMid * Math.sin(ang);
-      return { x, y };
-    };
-    
-    const startPos = computeHandlePosition(selectedEvent.start, false);
-    const endPos = computeHandlePosition(selectedEvent.end, true);
+    }
+
+    const rMid = (rInner + rOuter) * 0.5;
+    const ang = -th + CONFIG.INITIAL_ROTATION_OFFSET;
+    const x = rMid * Math.cos(ang);
+    const y = rMid * Math.sin(ang);
+    return { x, y };
+  },
+
+  drawSelectedEventHandles() {
+    if (this.state.detailMode === null || !this.mouseState.selectedSegment) return;
+
+    this.handleHandles = null;
+
+    const selectedEvent = this._getSelectedEventForHandleEditing();
+    if (!selectedEvent) return;
+
+    const canvasWidth = this.canvas.clientWidth;
+    const canvasHeight = this.canvas.clientHeight;
+    const { thetaMax, maxRadius } = this.calculateTransforms(canvasWidth, canvasHeight);
+    const visibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
+    const radiusFunction = this.createRadiusFunction(maxRadius, thetaMax, this.state.radiusExponent, this.state.rotation);
+    const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
+    const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
+    const selectedEventSegments = (this.eventSegments || []).filter(es => es && es.event === selectedEvent);
+    const context = { visibilityRange, radiusFunction, segmentAngle, totalVisibleSegments, selectedEventSegments };
+
+    const startPos = this._computeSelectedEventHandlePosition(selectedEvent, context, selectedEvent.start, false);
+    const endPos = this._computeSelectedEventHandlePosition(selectedEvent, context, selectedEvent.end, true);
     
     // Draw small circular handles with the event color stroke and white fill
     const eventColor = this.getDisplayColorForEvent(selectedEvent) || '#000';

@@ -1,11 +1,16 @@
 // service-worker.js
 
-const CACHE_NAME = 'spiral-v3';
+importScripts('./js/app-version.js');
+
+const CACHE_NAME = (typeof APP_CACHE_NAME === 'string' && APP_CACHE_NAME)
+  ? APP_CACHE_NAME
+  : 'spiral-v';
 const toURL = (p) => new URL(p, self.location).toString();
 const ASSETS = [
   './',
   './index.html',
   './a2hs.js',
+  './js/app-version.js',
   './js/config-utils.js',
   './js/core.js',
   './js/core-methods.js',

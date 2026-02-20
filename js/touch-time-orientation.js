@@ -1,5 +1,110 @@
 // Touch and Time Display
 Object.assign(SpiralCalendar.prototype, {
+  _touchToCanvasPoint(touch) {
+    const rect = this.canvas.getBoundingClientRect();
+    const touchX = touch.clientX - rect.left;
+    const touchY = touch.clientY - rect.top;
+    return {
+      touchX,
+      touchY,
+      canvasX: touchX * this.canvas.width / this.canvas.clientWidth,
+      canvasY: touchY * this.canvas.height / this.canvas.clientHeight
+    };
+  },
+
+  _canvasPointToModelSpace(canvasX, canvasY) {
+    const canvasWidth = this.canvas.clientWidth;
+    const canvasHeight = this.canvas.clientHeight;
+    const { centerX, centerY } = this.calculateCenter(canvasWidth, canvasHeight);
+
+    let modelX = canvasX / devicePixelRatio - centerX;
+    let modelY = canvasY / devicePixelRatio - centerY;
+    if (this.state.staticMode) {
+      modelX = -modelX;
+      modelY = -modelY;
+    } else {
+      const cosR = Math.cos(this.state.rotation);
+      const sinR = Math.sin(this.state.rotation);
+      const tx = cosR * modelX - sinR * modelY;
+      const ty = sinR * modelX + cosR * modelY;
+      modelX = tx;
+      modelY = ty;
+    }
+
+    return { modelX, modelY };
+  },
+
+  getHandleAtCanvasPoint(canvasX, canvasY, extraPadding = 4) {
+    if (!this.handleHandles) return null;
+
+    // Convert point to the same pre-rotation spiral coordinate space used for handles.
+    const { modelX, modelY } = this._canvasPointToModelSpace(canvasX, canvasY);
+
+    const distStart = Math.hypot(modelX - this.handleHandles.start.x, modelY - this.handleHandles.start.y);
+    const distEnd = Math.hypot(modelX - this.handleHandles.end.x, modelY - this.handleHandles.end.y);
+    const startHit = distStart <= (this.handleHandles.start.r + extraPadding);
+    const endHit = distEnd <= (this.handleHandles.end.r + extraPadding);
+
+    if (startHit && endHit) return distStart <= distEnd ? 'start' : 'end';
+    if (startHit) return 'start';
+    if (endHit) return 'end';
+    return null;
+  },
+
+  updateDraggingHandleAtCanvasPoint(canvasX, canvasY) {
+    if (!this.mouseState.isHandleDragging || !this.handleDragState || !this.handleDragState.event) {
+      return false;
+    }
+
+    const seg = this.findSegmentAtPoint(canvasX, canvasY);
+    if (!seg) return false;
+
+    // Transform point to pre-rotation spiral space.
+    const { modelX, modelY } = this._canvasPointToModelSpace(canvasX, canvasY);
+
+    const ang = Math.atan2(modelY, modelX);
+    const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
+    const rawStartAngle = seg.day * 2 * Math.PI + seg.segment * segmentAngle;
+    const rawEndAngle = rawStartAngle + segmentAngle;
+    let th = -ang + CONFIG.INITIAL_ROTATION_OFFSET;
+    while (th < rawStartAngle) th += 2 * Math.PI;
+    while (th > rawEndAngle) th -= 2 * Math.PI;
+
+    let minuteFrac = 1 - (th - rawStartAngle) / segmentAngle;
+    minuteFrac = Math.max(0, Math.min(1, minuteFrac));
+    let minute = Math.round((minuteFrac * 60) / 5) * 5;
+    if (minute >= 60) minute = 55;
+    if (minute < 0) minute = 0;
+
+    const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
+    const segmentId = totalVisibleSegments - (seg.day * CONFIG.SEGMENTS_PER_DAY + seg.segment) - 1;
+    const hoursFromReference = segmentId;
+    const hourStart = new Date(this.referenceTime.getTime() + hoursFromReference * 60 * 60 * 1000);
+    hourStart.setUTCMinutes(0, 0, 0);
+    const newTime = new Date(hourStart.getTime() + minute * 60 * 1000);
+
+    const ev = this.handleDragState.event;
+    if (this.mouseState.draggingHandle === 'start') {
+      if (newTime >= ev.end) {
+        ev.start = new Date(ev.end.getTime() - 60 * 1000);
+      } else {
+        ev.start = newTime;
+      }
+    } else if (this.mouseState.draggingHandle === 'end') {
+      if (newTime <= ev.start) {
+        ev.end = new Date(ev.start.getTime() + 60 * 1000);
+      } else {
+        ev.end = newTime;
+      }
+    }
+
+    this._eventCircleHasChanges = true;
+    this._eventsVersion++;
+    this.ensureLayoutCache();
+    this.drawSpiral();
+    return true;
+  },
+
   handleTouchStart(e) {
     // If page zoom is active, allow browser pinch zoom and ignore canvas gesture
     if (this.pageZoomActive) return;
@@ -13,9 +118,8 @@ Object.assign(SpiralCalendar.prototype, {
 
     // Check time display swipe/tap area first (single touch)
     if (e.touches.length === 1 && this.state.showTimeDisplay) {
-      const rect = this.canvas.getBoundingClientRect();
-      const touchX = e.touches[0].clientX - rect.left;
-      const touchY = e.touches[0].clientY - rect.top;
+      const { touchX, touchY, canvasX, canvasY } = this._touchToCanvasPoint(e.touches[0]);
+      const touchesHandleInDetailMode = this.state.detailMode !== null && !!this.getHandleAtCanvasPoint(canvasX, canvasY, 14);
       const canvasWidth = this.canvas.clientWidth;
       const canvasHeight = this.canvas.clientHeight;
       const tdHeight = (this.timeDisplayState && this.timeDisplayState.collapsed) ? (this.timeDisplayState.collapseHeight || 12) : CONFIG.TIME_DISPLAY_HEIGHT;
@@ -25,7 +129,7 @@ Object.assign(SpiralCalendar.prototype, {
       const pad = pullUpOffset > 0 ? Math.max(20, basePad * 0.25) : basePad; // Reduce to 25% (min 20px) when extended
       const timeDisplayArea = { x: 0, y: Math.max(0, canvasHeight - tdHeight - pullUpOffset - pad), width: canvasWidth, height: tdHeight + pad };
       const inside = touchX >= timeDisplayArea.x && touchX <= timeDisplayArea.x + timeDisplayArea.width && touchY >= timeDisplayArea.y && touchY <= timeDisplayArea.y + timeDisplayArea.height;
-      if (inside) {
+      if (inside && !touchesHandleInDetailMode) {
         // Begin swipe tracking for collapse/expand
         this.timeDisplayState.swipeActive = true;
         this.timeDisplayState.swipeStartY = touchY;
@@ -85,11 +189,50 @@ Object.assign(SpiralCalendar.prototype, {
         this.touchState.radiusAdjustActive = false;
       }
     } else if (e.touches.length === 1) {
+      const { touchX, touchY, canvasX, canvasY } = this._touchToCanvasPoint(e.touches[0]);
+
+      // In detail mode, allow direct touch-drag of start/end event handles.
+      if (this.state.detailMode !== null && this.mouseState.selectedSegment) {
+        const touchedHandle = this.getHandleAtCanvasPoint(canvasX, canvasY, 14);
+        if (touchedHandle) {
+          const seg = this.mouseState.selectedSegment;
+          const eventsHere = this.getAllEventsForSegment(seg.day, seg.segment) || [];
+          const idx = Math.min(this.mouseState.selectedEventIndex || 0, Math.max(0, eventsHere.length - 1));
+          const selectedEvent = eventsHere[idx] && eventsHere[idx].event ? eventsHere[idx].event : null;
+          if (selectedEvent) {
+            this.mouseState.hoveredHandle = touchedHandle;
+            this.mouseState.isHandleDragging = true;
+            this.mouseState.draggingHandle = touchedHandle;
+            this.mouseState.isDragging = false;
+            this.mouseState.hasMovedDuringDrag = false;
+            this.handleDragState = {
+              which: touchedHandle,
+              event: selectedEvent,
+              originalStart: new Date(selectedEvent.start),
+              originalEnd: new Date(selectedEvent.end),
+              touchIdentifier: e.touches[0].identifier
+            };
+
+            // Ensure spiral mode during handle drag (temporarily).
+            if (this.state.circleMode) {
+              this._originalCircleModeDuringHandleDrag = true;
+              this.state.circleMode = false;
+            } else {
+              this._originalCircleModeDuringHandleDrag = false;
+            }
+
+            this.touchState.isActive = false;
+            this.stopInertia();
+            this._eventCircleHasChanges = true;
+            this.drawSpiral();
+            e.preventDefault();
+            return;
+          }
+        }
+      }
+
       // If in detail mode and tapping on info circle date boxes, open picker immediately (mobile reliability)
       if (this.state.detailMode !== null && this.canvasClickAreas) {
-        const rect = this.canvas.getBoundingClientRect();
-        const touchX = e.touches[0].clientX - rect.left;
-        const touchY = e.touches[0].clientY - rect.top;
         if (this.canvasClickAreas.startDateBox) {
           const box = this.canvasClickAreas.startDateBox;
           if (touchX >= box.x && touchX <= box.x + box.width &&
@@ -143,6 +286,17 @@ Object.assign(SpiralCalendar.prototype, {
   handleTouchMove(e) {
     // If page zoom is active, allow browser pinch zoom and ignore canvas gesture
     if (this.pageZoomActive) return;
+
+    // While dragging a start/end handle, update event time from touch position.
+    if (this.mouseState.isHandleDragging && this.handleDragState && this.handleDragState.event) {
+      const trackedId = this.handleDragState.touchIdentifier;
+      const activeTouch = Array.from(e.touches).find((touch) => touch.identifier === trackedId) || e.touches[0];
+      if (!activeTouch) return;
+      const { canvasX, canvasY } = this._touchToCanvasPoint(activeTouch);
+      this.updateDraggingHandleAtCanvasPoint(canvasX, canvasY);
+      e.preventDefault();
+      return;
+    }
 
     // Handle time display swipe (interactive tracking - time display stays fixed height, only pull-up offset changes)
     if (this.timeDisplayState && this.timeDisplayState.swipeActive && this.state.showTimeDisplay) {
@@ -547,6 +701,35 @@ Object.assign(SpiralCalendar.prototype, {
   handleTouchEnd(e) {
     // If page zoom is active, no canvas gesture to finalize
     if (this.pageZoomActive) return;
+
+    // Finalize event time handle dragging.
+    if (this.mouseState.isHandleDragging) {
+      const trackedId = this.handleDragState ? this.handleDragState.touchIdentifier : null;
+      const stillTrackedTouchActive = trackedId !== null && Array.from(e.touches || []).some((touch) => touch.identifier === trackedId);
+      if (stillTrackedTouchActive) return;
+
+      this.mouseState.isHandleDragging = false;
+      this.mouseState.draggingHandle = null;
+      this.mouseState.hoveredHandle = null;
+      this.handleDragState = null;
+
+      if (this._originalCircleModeDuringHandleDrag) {
+        this.state.circleMode = true;
+        this._originalCircleModeDuringHandleDrag = false;
+      }
+
+      if (typeof this.saveEventsToStorage === 'function') {
+        this.saveEventsToStorage();
+      }
+      if (typeof window.renderEventList === 'function') {
+        window.renderEventList();
+      }
+
+      this.canvas.style.cursor = 'default';
+      this.drawSpiral();
+      if (e.cancelable) e.preventDefault();
+      return;
+    }
 
     // Finalize time display swipe/tap
     if (this.timeDisplayState && this.timeDisplayState.swipeActive && this.state.showTimeDisplay) {
