@@ -112,6 +112,7 @@ Object.assign(SpiralCalendar.prototype, {
       const isMobile = window.innerWidth <= 768;
       // For event panel (not bottom list), use responsive widths to fit panel
       const isEventPanel = !isBottomList;
+      const isDesktopEventPanel = isEventPanel && !isMobile;
       const gapSize = (isMobile || isEventPanel) ? '0.5em' : '1em'; // Smaller gap for event panel
       // When using row color style, extend header row to edges by using negative margins to counteract container padding
       const useRowColor = this.state.eventListColorStyle === 'row';
@@ -130,8 +131,8 @@ Object.assign(SpiralCalendar.prototype, {
       // Left side with search input and "All:" text (exact same width as event items)
         const leftContent = document.createElement('div');
       // For event panel, use flex to fit panel width; for bottom list on desktop, use fixed 300px
-      const leftWidth = (isMobile || isEventPanel) ? 'flex: 1; min-width: 60px; ' : 'width: 300px; ';
-      leftContent.style.cssText = 'display: flex; align-items: center; gap: 0.5em; ' + leftWidth + 'min-width: ' + (isMobile || isEventPanel ? '60px' : '0') + '; flex-shrink: 1;';
+      const leftWidth = isDesktopEventPanel ? 'flex: 1 1 0; min-width: 48px; ' : ((isMobile || isEventPanel) ? 'flex: 1; min-width: 60px; ' : 'width: 300px; ');
+      leftContent.style.cssText = 'display: flex; align-items: center; gap: 0.5em; ' + leftWidth + 'min-width: ' + (isDesktopEventPanel ? '48px' : ((isMobile || isEventPanel) ? '60px' : '0')) + '; flex-shrink: 1;';
       
       // Search input container with clear button
       const searchContainer = document.createElement('div');
@@ -252,10 +253,10 @@ Object.assign(SpiralCalendar.prototype, {
       
       // Calendar column with dropdown (matching event items - smaller on mobile, but can shrink)
       // For event panel, use responsive widths; for bottom list on desktop, use fixed widths
-      const calendarWidth = (isMobile || isEventPanel) ? (isMobile ? '60px' : 'flex: 0 0 auto; min-width: 40px; max-width: 65px;') : '80px';
+      const calendarWidth = isDesktopEventPanel ? 'flex: 0 0 95px; min-width: 95px; max-width: 95px;' : ((isMobile || isEventPanel) ? (isMobile ? '60px' : 'flex: 0 0 auto; min-width: 40px; max-width: 65px;') : '80px');
       const calendarContent = document.createElement('div');
       const calendarWidthStyle = (isMobile || isEventPanel) && !isMobile ? calendarWidth : `width: ${isMobile ? '70px' : '80px'};`;
-      calendarContent.style.cssText = `display: flex; align-items: center; justify-content: flex-start; ${calendarWidthStyle} ${isMobile || isEventPanel ? 'flex-shrink: 1; min-width: 30px;' : 'flex-shrink: 0;'} ${!isMobile && !isEventPanel ? 'max-width: 80px;' : ''} overflow: visible; position: relative;`;
+      calendarContent.style.cssText = `display: flex; align-items: center; justify-content: flex-start; ${calendarWidthStyle} ${isDesktopEventPanel ? 'flex-shrink: 0; min-width: 95px;' : (isMobile || isEventPanel ? 'flex-shrink: 1; min-width: 30px;' : 'flex-shrink: 0;')} ${!isMobile && !isEventPanel ? 'max-width: 80px;' : ''} overflow: visible; position: relative;`;
       
       // Calendar dropdown button
       const bottomCalendarDropdownBtn = document.createElement('button');
@@ -364,6 +365,47 @@ Object.assign(SpiralCalendar.prototype, {
         };
         bottomCalendarDropdownMenu.appendChild(addNewCalendar);
       };
+
+      const positionBottomCalendarDropdownDesktop = () => {
+        const buttonRect = bottomCalendarDropdownBtn.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const margin = 8;
+        const gap = 6;
+
+        bottomCalendarDropdownMenu.style.transform = 'none';
+        bottomCalendarDropdownMenu.style.width = 'auto';
+        bottomCalendarDropdownMenu.style.maxWidth = 'none';
+        bottomCalendarDropdownMenu.style.maxHeight = '60vh';
+        bottomCalendarDropdownMenu.style.overflowY = 'auto';
+        bottomCalendarDropdownMenu.style.display = 'block';
+        bottomCalendarDropdownMenu.style.visibility = 'hidden';
+        bottomCalendarDropdownMenu.style.left = `${margin}px`;
+        bottomCalendarDropdownMenu.style.top = `${margin}px`;
+
+        const menuWidth = bottomCalendarDropdownMenu.offsetWidth || 200;
+        const menuHeight = bottomCalendarDropdownMenu.offsetHeight || 240;
+
+        let left = buttonRect.left;
+        if (left + menuWidth > viewportWidth - margin) {
+          left = viewportWidth - menuWidth - margin;
+        }
+        if (left < margin) left = margin;
+
+        let top = buttonRect.bottom + gap;
+        const canPlaceAbove = buttonRect.top - gap - menuHeight >= margin;
+        if (top + menuHeight > viewportHeight - margin && canPlaceAbove) {
+          top = buttonRect.top - menuHeight - gap;
+        }
+        if (top < margin) top = margin;
+        if (top + menuHeight > viewportHeight - margin) {
+          top = Math.max(margin, viewportHeight - menuHeight - margin);
+        }
+
+        bottomCalendarDropdownMenu.style.left = `${Math.round(left)}px`;
+        bottomCalendarDropdownMenu.style.top = `${Math.round(top)}px`;
+        bottomCalendarDropdownMenu.style.visibility = 'visible';
+      };
       
       // Toggle dropdown
       bottomCalendarDropdownBtn.onclick = (e) => {
@@ -373,6 +415,7 @@ Object.assign(SpiralCalendar.prototype, {
         const isVisible = bottomCalendarDropdownMenu.style.display === 'block';
         if (!isVisible) {
           const isMobileDevice = window.innerWidth <= 768;
+          buildBottomCalendarMenu();
           if (isMobileDevice) {
             bottomCalendarDropdownMenu.style.left = '50%';
             bottomCalendarDropdownMenu.style.top = '50%';
@@ -381,30 +424,11 @@ Object.assign(SpiralCalendar.prototype, {
             bottomCalendarDropdownMenu.style.maxWidth = '300px';
             bottomCalendarDropdownMenu.style.maxHeight = '70vh';
             bottomCalendarDropdownMenu.style.overflowY = 'auto';
+            bottomCalendarDropdownMenu.style.display = 'block';
+            bottomCalendarDropdownMenu.style.visibility = 'visible';
           } else {
-            const buttonRect = bottomCalendarDropdownBtn.getBoundingClientRect();
-            const viewportHeight = window.innerHeight;
-            const spaceBelow = viewportHeight - buttonRect.bottom;
-            const spaceAbove = buttonRect.top;
-            const estimatedDropdownHeight = 400; // Approximate max height before scrolling
-            
-            // Position above button if not enough space below, otherwise below
-            if (spaceBelow < estimatedDropdownHeight && spaceAbove > spaceBelow) {
-              bottomCalendarDropdownMenu.style.top = (buttonRect.top - estimatedDropdownHeight - 5) + 'px';
-            } else {
-              bottomCalendarDropdownMenu.style.top = (buttonRect.bottom + 5) + 'px';
-            }
-            
-            bottomCalendarDropdownMenu.style.left = (buttonRect.left - 120) + 'px';
-            bottomCalendarDropdownMenu.style.transform = 'none';
-            bottomCalendarDropdownMenu.style.width = 'auto';
-            // Constrain height on desktop and allow scrolling
-            bottomCalendarDropdownMenu.style.maxWidth = 'none';
-            bottomCalendarDropdownMenu.style.maxHeight = '60vh';
-            bottomCalendarDropdownMenu.style.overflowY = 'auto';
+            positionBottomCalendarDropdownDesktop();
           }
-          bottomCalendarDropdownMenu.style.display = 'block';
-          buildBottomCalendarMenu();
         } else {
           bottomCalendarDropdownMenu.style.display = 'none';
         }
@@ -522,6 +546,7 @@ Object.assign(SpiralCalendar.prototype, {
       const isMobile = window.innerWidth <= 768;
       // For event panel (not bottom list), use responsive widths to fit panel
       const isEventPanel = !isBottomList;
+      const isDesktopEventPanel = isEventPanel && !isMobile;
       const gapSize = (isMobile || isEventPanel) ? '0.5em' : '1em'; // Smaller gap for event panel
       
       // Calculate padding based on height scale (base padding scales with proximity)
@@ -561,8 +586,8 @@ Object.assign(SpiralCalendar.prototype, {
       // Left side with color dot and title
         const leftContent = document.createElement('div');
       // For event panel, use flex to fit panel width; for bottom list on desktop, use fixed 300px
-      const leftWidth = (isMobile || isEventPanel) ? 'flex: 1; min-width: 60px; ' : 'width: 300px; ';
-      leftContent.style.cssText = 'display: flex; align-items: center; ' + leftWidth + 'min-width: ' + (isMobile || isEventPanel ? '60px' : '0') + '; flex-shrink: 1;';
+      const leftWidth = isDesktopEventPanel ? 'flex: 1 1 0; min-width: 48px; ' : ((isMobile || isEventPanel) ? 'flex: 1; min-width: 60px; ' : 'width: 300px; ');
+      leftContent.style.cssText = 'display: flex; align-items: center; ' + leftWidth + 'min-width: ' + (isDesktopEventPanel ? '48px' : ((isMobile || isEventPanel) ? '60px' : '0')) + '; flex-shrink: 1;';
         
         // Format time using UTC to avoid DST issues (date is shown in day header)
         const eventDate = new Date(ev.start);
@@ -577,10 +602,10 @@ Object.assign(SpiralCalendar.prototype, {
       
       // Calendar column (smaller on mobile to fit narrow screens, but can shrink if needed)
       // For event panel, use responsive widths; for bottom list on desktop, use fixed widths
-      const calendarWidth = (isMobile || isEventPanel) ? (isMobile ? '60px' : 'flex: 0 0 auto; min-width: 40px; max-width: 65px;') : '80px';
+      const calendarWidth = isDesktopEventPanel ? 'flex: 0 0 95px; min-width: 95px; max-width: 95px;' : ((isMobile || isEventPanel) ? (isMobile ? '60px' : 'flex: 0 0 auto; min-width: 40px; max-width: 65px;') : '80px');
       const calendarContent = document.createElement('div');
       const calendarWidthStyle = (isMobile || isEventPanel) && !isMobile ? calendarWidth : `width: ${isMobile ? '60px' : '80px'};`;
-      calendarContent.style.cssText = `display: flex; align-items: center; justify-content: flex-start; ${calendarWidthStyle} ${isMobile || isEventPanel ? 'flex-shrink: 1; min-width: 30px;' : 'flex-shrink: 0;'} ${!isMobile && !isEventPanel ? 'max-width: 80px;' : ''} overflow: hidden;`;
+      calendarContent.style.cssText = `display: flex; align-items: center; justify-content: flex-start; ${calendarWidthStyle} ${isDesktopEventPanel ? 'flex-shrink: 0; min-width: 95px;' : (isMobile || isEventPanel ? 'flex-shrink: 1; min-width: 30px;' : 'flex-shrink: 0;')} ${!isMobile && !isEventPanel ? 'max-width: 80px;' : ''} overflow: hidden;`;
       
       // Get calendar color for background, with fallback
       let calBgColor = isDarkMode ? 'var(--dark-bg-secondary)' : '#eee';
@@ -1214,6 +1239,7 @@ Object.assign(SpiralCalendar.prototype, {
         const li = document.createElement('li');
         const isMobile = window.innerWidth <= 768;
         const isEventPanel = !isBottomList;
+        const isDesktopEventPanel = isEventPanel && !isMobile;
         const isDarkMode = document.body.classList.contains('dark-mode');
         const gapSize = (isMobile || isEventPanel) ? '0.5em' : '1em';
         
@@ -1242,8 +1268,8 @@ Object.assign(SpiralCalendar.prototype, {
         
         // Left side - matches event title position (same width/style as leftContent in event rows)
         const leftContent = document.createElement('div');
-        const leftWidth = (isMobile || isEventPanel) ? 'flex: 1; min-width: 60px; ' : 'width: 300px; ';
-        leftContent.style.cssText = 'display: flex; align-items: center; ' + leftWidth + 'min-width: ' + (isMobile || isEventPanel ? '60px' : '0') + '; flex-shrink: 1;';
+        const leftWidth = isDesktopEventPanel ? 'flex: 1 1 0; min-width: 48px; ' : ((isMobile || isEventPanel) ? 'flex: 1; min-width: 60px; ' : 'width: 300px; ');
+        leftContent.style.cssText = 'display: flex; align-items: center; ' + leftWidth + 'min-width: ' + (isDesktopEventPanel ? '48px' : ((isMobile || isEventPanel) ? '60px' : '0')) + '; flex-shrink: 1;';
         
         // When dot style is enabled, add an invisible placeholder dot to align with event color circles
         const useRowColor = this.state.eventListColorStyle === 'row';
@@ -1261,10 +1287,10 @@ Object.assign(SpiralCalendar.prototype, {
         li.appendChild(leftContent);
         
         // Calendar column - empty but maintains spacing (same width as event rows)
-        const calendarWidth = (isMobile || isEventPanel) ? (isMobile ? '60px' : 'flex: 0 0 auto; min-width: 40px; max-width: 65px;') : '80px';
+        const calendarWidth = isDesktopEventPanel ? 'flex: 0 0 95px; min-width: 95px; max-width: 95px;' : ((isMobile || isEventPanel) ? (isMobile ? '60px' : 'flex: 0 0 auto; min-width: 40px; max-width: 65px;') : '80px');
         const calendarContent = document.createElement('div');
         const calendarWidthStyle = (isMobile || isEventPanel) && !isMobile ? calendarWidth : `width: ${isMobile ? '60px' : '80px'};`;
-        calendarContent.style.cssText = `display: flex; align-items: center; justify-content: flex-start; ${calendarWidthStyle} ${isMobile || isEventPanel ? 'flex-shrink: 1; min-width: 30px;' : 'flex-shrink: 0;'} ${!isMobile && !isEventPanel ? 'max-width: 80px;' : ''} overflow: hidden;`;
+        calendarContent.style.cssText = `display: flex; align-items: center; justify-content: flex-start; ${calendarWidthStyle} ${isDesktopEventPanel ? 'flex-shrink: 0; min-width: 95px;' : (isMobile || isEventPanel ? 'flex-shrink: 1; min-width: 30px;' : 'flex-shrink: 0;')} ${!isMobile && !isEventPanel ? 'max-width: 80px;' : ''} overflow: hidden;`;
         li.appendChild(calendarContent);
         
         // Time column - empty but maintains spacing (same width as event rows)
@@ -1987,6 +2013,21 @@ Object.assign(SpiralCalendar.prototype, {
     // Initial value display updates
     clampLengths();
     
+    // Event list toggle functionality
+    window.toggleEventListSection = function() {
+      const content = document.getElementById('eventListContent');
+      const icon = document.getElementById('eventListToggleIcon');
+      if (!content || !icon) return;
+
+      if (content.style.display === 'none') {
+        content.style.display = 'flex';
+        icon.textContent = '▲';
+      } else {
+        content.style.display = 'none';
+        icon.textContent = '▼';
+      }
+    };
+
     // Random events toggle functionality
     window.toggleRandomEvents = function() {
       const content = document.getElementById('randomEventsContent');
