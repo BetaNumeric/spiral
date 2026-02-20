@@ -1,6 +1,7 @@
 // Event Panel and Event List UI
 Object.assign(SpiralCalendar.prototype, {
   setupEventInputPanel() {
+    const self = this;
     // Elements
     const addEventPanelBtn = document.getElementById('addEventPanelBtn');
     const eventInputPanel = document.getElementById('eventInputPanel');
@@ -2605,12 +2606,6 @@ Object.assign(SpiralCalendar.prototype, {
       this.resetMobileZoom();
     });
     
-    // Hide tilt zoom HTML button on mobile; we use in-canvas control instead
-    const tiltZoomBtn = document.getElementById('tiltZoomBtn');
-    const isMobile = isMobileDevice();
-    if (tiltZoomBtn) {
-      tiltZoomBtn.style.display = isMobile ? 'none' : 'grid';
-    }
     // --- Click outside to close ---
     document.addEventListener('mousedown', function handleOutsideClick(e) {
       // Handle event panel
@@ -2621,19 +2616,19 @@ Object.assign(SpiralCalendar.prototype, {
             (!eventCalendarDropdown || !eventCalendarDropdown.contains(e.target)) &&
             (!newCalendarDialog || !newCalendarDialog.contains(e.target))) {
           // Restore previous calendar visibility if it was filtered
-          if (spiralCalendar._previousVisibleCalendars !== null) {
-            spiralCalendar.state.visibleCalendars = [...spiralCalendar._previousVisibleCalendars];
-            spiralCalendar._previousVisibleCalendars = null;
-            spiralCalendar.saveSettingsToStorage();
+          if (self._previousVisibleCalendars !== null) {
+            self.state.visibleCalendars = [...self._previousVisibleCalendars];
+            self._previousVisibleCalendars = null;
+            self.saveSettingsToStorage();
             // Rebuild calendar dropdown menu to update checkboxes
-            if (typeof spiralCalendar.buildCalendarMenu === 'function') {
-              spiralCalendar.buildCalendarMenu();
+            if (typeof self.buildCalendarMenu === 'function') {
+              self.buildCalendarMenu();
             }
             // Re-render event list and spiral
             if (typeof window.renderEventList === 'function') {
               window.renderEventList();
             }
-            spiralCalendar.drawSpiral();
+            self.drawSpiral();
           }
           
           eventInputPanel.style.display = 'none';
@@ -2641,7 +2636,7 @@ Object.assign(SpiralCalendar.prototype, {
           addEventPanelBtn.style.display = 'grid';
           // Re-enable zooming and reset zoom level
           document.body.classList.remove('panel-open');
-          spiralCalendar.resetMobileZoom();
+          self.resetMobileZoom();
         }
       }
       
@@ -2655,7 +2650,7 @@ Object.assign(SpiralCalendar.prototype, {
           settingsPanelBtn.style.display = 'grid';
           // Re-enable zooming and reset zoom level
           document.body.classList.remove('panel-open');
-          spiralCalendar.resetMobileZoom();
+          self.resetMobileZoom();
         }
       }
     });

@@ -46,9 +46,6 @@ Object.assign(SpiralCalendar.prototype, {
     // Ensure checkbox state is synchronized with internal state
     this.syncAutoTimeAlignCheckbox();
     
-    // Initialize threshold controls to match current values
-    this.syncThresholdControls();
-    
     // Sync all UI controls with loaded settings
     this.syncAllUIControls();
     

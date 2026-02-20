@@ -50,11 +50,8 @@ class SpiralCalendar {
         showArcLines: true,
         overlayStackMode: true,
         audioFeedbackEnabled: true,
-        deviceOrientationEnabled: false,
         animationEnabled: false,
         animationSpeed: 1.0,
-        betaThreshold: 8,
-        gammaThreshold: 6,
         textClippingEnabled: false,
         darkMode: false,
         calendars: ['Home', 'Work'],
@@ -185,7 +182,6 @@ class SpiralCalendar {
       hasMovedDuringDrag: false,
       hoveredTimeDisplay: false, // Track if hovering over time display
         clickingTimeDisplay: false, // Track if clicking on time display
-        clickingTiltZoomArea: false, // Track if pressing the tilt-zoom area in time display
         previousInertiaVelocity: 0, // Store previous inertia velocity for momentum accumulation
         hoveredEvent: null, // Track hovered event for tooltip
         tooltipPosition: { x: 0, y: 0 } // Tooltip position next to cursor
@@ -214,14 +210,8 @@ class SpiralCalendar {
         startDateBox: null,
         endDateBox: null,
         colorBox: null,
-        colorRing: null,
-        tiltZoomArea: null
+        colorRing: null
       };
-      // Long-press/suppression helpers for tilt-zoom
-      this._tiltZoomPressTimerId = null;
-      this._suppressTimeDisplayClickOnce = false;
-      // Pending enable flag to trigger iOS permission on touchend/mouseup
-      this._pendingEnableDeviceOrientation = false;
       
       // Store virtual event for blank segments being edited
       this.virtualEvent = null;
@@ -236,22 +226,6 @@ class SpiralCalendar {
 
       // Midnight lines to draw on top
       this.midnightLines = [];
-      
-      // Unified device orientation thresholds - control both visual indicators and actual rotation
-      // To modify sensitivity: change these values (higher = less sensitive, lower = more sensitive)
-      // 
-      // ADJUSTMENT GUIDE:
-      // - beta: Minimum tilt up/down to start zooming (default: 8°)
-      // - gamma: Minimum tilt left/right to start rotating (default: 6°)
-      // - maxBeta: Maximum tilt range for zooming (default: 45°)
-      // - maxGamma: Maximum tilt range for rotation (default: 45°)
-      
-      this.deviceOrientationThresholds = {
-        beta: this.defaultSettings.betaThreshold,     // degrees - minimum tilt to start zooming (up/down)
-        gamma: this.defaultSettings.gammaThreshold,    // degrees - minimum tilt to start rotating (left/right)
-        maxBeta: 45, // degrees - maximum tilt range for zooming
-        maxGamma: 45 // degrees - maximum tilt range for rotation
-      };
       
       // Month lines to draw on top
       this.monthLines = [];
@@ -270,32 +244,6 @@ class SpiralCalendar {
     
           // Event segments to draw after main segments
       this.eventSegments = [];
-      
-      // Device orientation control state
-      this.deviceOrientationState = {
-        enabled: this.defaultSettings.deviceOrientationEnabled,
-        permissionGranted: false,
-        buttonVisible: this.defaultSettings.deviceOrientationEnabled, // Controls whether tilt-zoom button is shown
-        alpha: 0,
-        beta: 0,
-        gamma: 0,
-  
-        lastBeta: null,
-        lastGamma: null,
-        lastAlpha: null,
-        betaOffset: null,
-        gammaOffset: null,
-        boundHandler: null,
-        lastUpdateTime: null,
-        isRequestingPermission: false,
-        tiltZoomActive: false,
-        tiltZoomStartBeta: null,
-        tiltZoomStartGamma: null,
-        tiltZoomStartAlpha: null,
-        tiltZoomStartRotation: null,
-        lastJumpTime: null,
-        lastRotationTime: null
-      };
       
       // Mobile orientation state for time display
       this.mobileOrientationState = {

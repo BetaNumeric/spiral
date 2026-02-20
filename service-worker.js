@@ -1,23 +1,22 @@
 // service-worker.js
 
-const CACHE_NAME = 'spiral-v2';
+const CACHE_NAME = 'spiral-v3';
 const toURL = (p) => new URL(p, self.location).toString();
 const ASSETS = [
   './',
   './index.html',
   './a2hs.js',
-  './main.js',
   './js/config-utils.js',
-  './js/spiral-calendar-core.js',
-  './js/spiral-calendar-core-methods.js',
-  './js/spiral-calendar-ui-handlers.js',
-  './js/spiral-calendar-ui-event-panel.js',
-  './js/spiral-calendar-input-mouse.js',
-  './js/spiral-calendar-render-spiral.js',
-  './js/spiral-calendar-render-circle.js',
-  './js/spiral-calendar-state-storage-sync.js',
-  './js/spiral-calendar-pickers-calendars.js',
-  './js/spiral-calendar-touch-time-orientation.js',
+  './js/core.js',
+  './js/core-methods.js',
+  './js/ui-handlers.js',
+  './js/ui-event-panel.js',
+  './js/input-mouse.js',
+  './js/render-spiral.js',
+  './js/render-circle.js',
+  './js/state-storage-sync.js',
+  './js/pickers-calendars.js',
+  './js/touch-time-orientation.js',
   './js/bootstrap.js',
   './manifest.json',
   './icons/icon_32.png',

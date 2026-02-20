@@ -21,7 +21,7 @@ function getA2HSBannerElements() {
 }
 
 function shouldShowA2HSBanner() {
-  // Use the global isMobileDevice function from main.js
+  // Use the global isMobileDevice helper from config-utils.js
   if (typeof isMobileDevice === 'function' && !isMobileDevice()) return false;
   if (isStandaloneDisplayMode()) return false;
   try {
@@ -194,7 +194,7 @@ function initA2HSBanner() {
   });
 }
 
-// Initialize when DOM is ready and main.js has loaded
+// Initialize when DOM is ready and shared helpers have loaded
 function initializeA2HS() {
   // Wait for isMobileDevice function to be available
   if (typeof isMobileDevice === 'function') {

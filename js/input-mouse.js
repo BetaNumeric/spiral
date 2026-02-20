@@ -452,12 +452,6 @@ Object.assign(SpiralCalendar.prototype, {
           this.setTimeDisplayCollapsed(false);
           return;
         }
-        // If we just long-pressed to start tilt zoom, suppress this click once
-        if (this._suppressTimeDisplayClickOnce) {
-          this._suppressTimeDisplayClickOnce = false;
-          return;
-        }
-        
         // If an event is open, close it and reset auto-activated settings
         if (this.state.detailMode !== null) {
           // Close the event circle
@@ -1049,31 +1043,6 @@ Object.assign(SpiralCalendar.prototype, {
         height: CONFIG.TIME_DISPLAY_HEIGHT
       };
       
-      // If tilt-zoom area exists, allow press to enable orientation (and request permission) and long-press to activate
-      if (this.canvasClickAreas && this.canvasClickAreas.tiltZoomArea) {
-        const a = this.canvasClickAreas.tiltZoomArea;
-        if (mouseX >= a.x && mouseX <= a.x + a.width && mouseY >= a.y && mouseY <= a.y + a.height) {
-          // If orientation is not enabled yet, mark to enable after press completes to keep user gesture context
-          if (!this.deviceOrientationState.enabled) {
-            this._pendingEnableDeviceOrientation = true;
-          }
-          // Arm long-press (500ms) to start tilt-zoom; simple click should still reset time
-          this.mouseState.clickingTiltZoomArea = true;
-          if (this._tiltZoomPressTimerId) clearTimeout(this._tiltZoomPressTimerId);
-          this._tiltZoomPressTimerId = setTimeout(() => {
-            // Long press activated - only start tilt zoom if orientation is already enabled
-            if (this.deviceOrientationState.enabled && this.deviceOrientationState.permissionGranted) {
-              this.startTiltZoomMode();
-              this._suppressTimeDisplayClickOnce = true; // prevent time reset from the eventual click
-            } else {
-              // Clear the pending flag to prevent permission request on release
-              this._pendingEnableDeviceOrientation = false;
-            }
-          }, 500);
-          return;
-        }
-      }
-      
       const isClickingTimeDisplay = mouseX >= timeDisplayArea.x && mouseX <= timeDisplayArea.x + timeDisplayArea.width &&
                                   mouseY >= timeDisplayArea.y && mouseY <= timeDisplayArea.y + timeDisplayArea.height;
       
@@ -1199,24 +1168,6 @@ Object.assign(SpiralCalendar.prototype, {
         }, 100);
         this.drawSpiral();
         return;
-      }
-      // Handle long-press timer and stop tilt zoom if it was active
-      if (this.mouseState.clickingTiltZoomArea) {
-        if (this._tiltZoomPressTimerId) {
-          clearTimeout(this._tiltZoomPressTimerId);
-          this._tiltZoomPressTimerId = null;
-        }
-        // If currently active, stop on release
-        if (this.deviceOrientationState.tiltZoomActive) {
-          this.stopTiltZoomMode();
-        }
-        this.mouseState.clickingTiltZoomArea = false;
-      }
-      // If we marked to enable device orientation from button press, do it now (still in user gesture)
-      if (this._pendingEnableDeviceOrientation) {
-        this._pendingEnableDeviceOrientation = false;
-        // Call the gesture-safe enabler to ensure iOS prompt appears
-        this.enableDeviceOrientationViaGesture();
       }
       if (this.mouseState.isDragging && this.mouseState.hasMovedDuringDrag) {
         this.mouseState.wasDragging = true;

@@ -1,6 +1,7 @@
 // UI Event Handlers
 Object.assign(SpiralCalendar.prototype, {
     setupEventHandlers() {
+      const self = this;
       const sliderConfigs = [
         { 
           sliderId: 'daysSlider', 
@@ -384,21 +385,21 @@ Object.assign(SpiralCalendar.prototype, {
     const nightOverlayToggle = document.getElementById('nightOverlayToggle');
     if (nightOverlayToggle) {
       nightOverlayToggle.addEventListener('change', function(e) {
-      spiralCalendar.setNightOverlayEnabled(e.target.checked);
+      self.setNightOverlayEnabled(e.target.checked);
     });
     }
 
     const dayOverlayToggle = document.getElementById('dayOverlayToggle');
     if (dayOverlayToggle) {
       dayOverlayToggle.addEventListener('change', function(e) {
-      spiralCalendar.setDayOverlayEnabled(e.target.checked);
+      self.setDayOverlayEnabled(e.target.checked);
     });
     }
 
     const gradientOverlayToggle = document.getElementById('gradientOverlayToggle');
     if (gradientOverlayToggle) {
       gradientOverlayToggle.addEventListener('change', function(e) {
-      spiralCalendar.setGradientOverlayEnabled(e.target.checked);
+      self.setGradientOverlayEnabled(e.target.checked);
     });
     }
 
@@ -408,10 +409,10 @@ Object.assign(SpiralCalendar.prototype, {
     if (nightOverlayOpacitySlider && nightOverlayOpacityVal) {
       nightOverlayOpacitySlider.addEventListener('input', function(e) {
         const opacity = parseFloat(e.target.value) / 100; // Convert from 0-100 to 0-1
-        spiralCalendar.state.nightOverlayOpacity = opacity;
+        self.state.nightOverlayOpacity = opacity;
         nightOverlayOpacityVal.textContent = e.target.value + '%';
-        spiralCalendar.drawSpiral();
-        spiralCalendar.saveSettingsToStorage();
+        self.drawSpiral();
+        self.saveSettingsToStorage();
       });
     }
 
@@ -420,10 +421,10 @@ Object.assign(SpiralCalendar.prototype, {
     if (dayOverlayOpacitySlider && dayOverlayOpacityVal) {
       dayOverlayOpacitySlider.addEventListener('input', function(e) {
         const opacity = parseFloat(e.target.value) / 100; // Convert from 0-100 to 0-1
-        spiralCalendar.state.dayOverlayOpacity = opacity;
+        self.state.dayOverlayOpacity = opacity;
         dayOverlayOpacityVal.textContent = e.target.value + '%';
-        spiralCalendar.drawSpiral();
-        spiralCalendar.saveSettingsToStorage();
+        self.drawSpiral();
+        self.saveSettingsToStorage();
       });
     }
 
@@ -432,18 +433,18 @@ Object.assign(SpiralCalendar.prototype, {
     if (gradientOverlayOpacitySlider && gradientOverlayOpacityVal) {
       gradientOverlayOpacitySlider.addEventListener('input', function(e) {
         const opacity = parseFloat(e.target.value) / 100; // Convert from 0-100 to 0-1
-        spiralCalendar.state.gradientOverlayOpacity = opacity;
+        self.state.gradientOverlayOpacity = opacity;
         gradientOverlayOpacityVal.textContent = e.target.value + '%';
-        spiralCalendar.drawSpiral();
-        spiralCalendar.saveSettingsToStorage();
+        self.drawSpiral();
+        self.saveSettingsToStorage();
       });
     }
 
     const eventListColorStyleToggle = document.getElementById('eventListColorStyleToggle');
     if (eventListColorStyleToggle) {
       eventListColorStyleToggle.addEventListener('change', function(e) {
-        spiralCalendar.state.eventListColorStyle = e.target.checked ? 'row' : 'dot';
-        spiralCalendar.saveSettingsToStorage();
+        self.state.eventListColorStyle = e.target.checked ? 'row' : 'dot';
+        self.saveSettingsToStorage();
         if (typeof window.renderEventList === 'function') {
           window.renderEventList();
         }
@@ -454,36 +455,36 @@ Object.assign(SpiralCalendar.prototype, {
     const showMonthLinesToggle = document.getElementById('showMonthLinesToggle');
     if (showMonthLinesToggle) {
       showMonthLinesToggle.addEventListener('change', function(e) {
-        spiralCalendar.state.showMonthLines = e.target.checked;
-        spiralCalendar.drawSpiral();
-        spiralCalendar.saveSettingsToStorage();
+        self.state.showMonthLines = e.target.checked;
+        self.drawSpiral();
+        self.saveSettingsToStorage();
       });
     }
 
     const showMidnightLinesToggle = document.getElementById('showMidnightLinesToggle');
     if (showMidnightLinesToggle) {
       showMidnightLinesToggle.addEventListener('change', function(e) {
-        spiralCalendar.state.showMidnightLines = e.target.checked;
-        spiralCalendar.drawSpiral();
-        spiralCalendar.saveSettingsToStorage();
+        self.state.showMidnightLines = e.target.checked;
+        self.drawSpiral();
+        self.saveSettingsToStorage();
       });
     }
 
     const showNoonLinesToggle = document.getElementById('showNoonLinesToggle');
     if (showNoonLinesToggle) {
       showNoonLinesToggle.addEventListener('change', function(e) {
-        spiralCalendar.state.showNoonLines = e.target.checked;
-        spiralCalendar.drawSpiral();
-        spiralCalendar.saveSettingsToStorage();
+        self.state.showNoonLines = e.target.checked;
+        self.drawSpiral();
+        self.saveSettingsToStorage();
       });
     }
 
     const showSixAmPmLinesToggle = document.getElementById('showSixAmPmLinesToggle');
     if (showSixAmPmLinesToggle) {
       showSixAmPmLinesToggle.addEventListener('change', function(e) {
-        spiralCalendar.state.showSixAmPmLines = e.target.checked;
-        spiralCalendar.drawSpiral();
-        spiralCalendar.saveSettingsToStorage();
+        self.state.showSixAmPmLines = e.target.checked;
+        self.drawSpiral();
+        self.saveSettingsToStorage();
       });
     }
 
@@ -554,21 +555,21 @@ Object.assign(SpiralCalendar.prototype, {
     const timeDisplayToggle = document.getElementById('timeDisplayToggle');
     if (timeDisplayToggle) {
       timeDisplayToggle.addEventListener('change', function(e) {
-      spiralCalendar.setTimeDisplayEnabled(e.target.checked);
+      self.setTimeDisplayEnabled(e.target.checked);
       });
     }
 
     const segmentEdgesToggle = document.getElementById('segmentEdgesToggle');
     if (segmentEdgesToggle) {
       segmentEdgesToggle.addEventListener('change', function(e) {
-      spiralCalendar.setSegmentEdgesEnabled(e.target.checked);
+      self.setSegmentEdgesEnabled(e.target.checked);
     });
     }
 
     const arcLinesToggle = document.getElementById('arcLinesToggle');
     if (arcLinesToggle) {
       arcLinesToggle.addEventListener('change', function(e) {
-      spiralCalendar.setArcLinesEnabled(e.target.checked);
+      self.setArcLinesEnabled(e.target.checked);
     });
     }
 
@@ -642,46 +643,6 @@ Object.assign(SpiralCalendar.prototype, {
           }
         });
       }
-
-    // Device orientation control
-    const deviceOrientationToggle = document.getElementById('deviceOrientationToggle');
-    if (deviceOrientationToggle) {
-      deviceOrientationToggle.addEventListener('change', function(e) {
-      spiralCalendar.setDeviceOrientationEnabled(e.target.checked);
-        
-        // Show/hide threshold controls based on device orientation state (only if DEV_MODE is true)
-        const thresholdControls = document.getElementById('deviceOrientationControls');
-        if (thresholdControls) {
-          thresholdControls.style.display = (e.target.checked && DEV_MODE) ? 'block' : 'none';
-        }
-      });
-    }
-    
-    // Device orientation threshold controls
-    const betaThresholdSlider = document.getElementById('betaThresholdSlider');
-    const gammaThresholdSlider = document.getElementById('gammaThresholdSlider');
-    
-    if (betaThresholdSlider) {
-      betaThresholdSlider.addEventListener('input', (e) => {
-        const value = +e.target.value;
-        this.deviceOrientationThresholds.beta = value;
-        const display = document.getElementById('betaThresholdVal');
-        if (display) display.textContent = value + '°';
-        this.drawSpiral(); // Redraw to update visual indicators
-        this.saveSettingsToStorage();
-      });
-    }
-    
-    if (gammaThresholdSlider) {
-      gammaThresholdSlider.addEventListener('input', (e) => {
-        const value = +e.target.value;
-        this.deviceOrientationThresholds.gamma = value;
-        const display = document.getElementById('gammaThresholdVal');
-        if (display) display.textContent = value + '°';
-        this.drawSpiral(); // Redraw to update visual indicators
-        this.saveSettingsToStorage();
-      });
-    }
 
       // Add animation controls
       const animateToggle = document.getElementById('animateToggle');

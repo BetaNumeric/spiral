@@ -337,30 +337,6 @@ Object.assign(SpiralCalendar.prototype, {
     }
   },
 
-  syncThresholdControls() {
-    // Update slider values and displays to match current thresholds
-    const betaSlider = document.getElementById('betaThresholdSlider');
-    const gammaSlider = document.getElementById('gammaThresholdSlider');
-    const betaVal = document.getElementById('betaThresholdVal');
-    const gammaVal = document.getElementById('gammaThresholdVal');
-    
-    if (betaSlider && betaVal) {
-      betaSlider.value = this.deviceOrientationThresholds.beta;
-      betaVal.textContent = this.deviceOrientationThresholds.beta + '°';
-    }
-    
-    if (gammaSlider && gammaVal) {
-      gammaSlider.value = this.deviceOrientationThresholds.gamma;
-      gammaVal.textContent = this.deviceOrientationThresholds.gamma + '°';
-    }
-    
-    // Show/hide threshold controls based on device orientation state
-    const thresholdControls = document.getElementById('deviceOrientationControls');
-    if (thresholdControls) {
-      thresholdControls.style.display = this.deviceOrientationState.enabled ? 'block' : 'none';
-    }
-  },
-
   saveEventsToStorage() {
     try {
       const eventsData = this.events.map(event => ({
@@ -446,9 +422,6 @@ Object.assign(SpiralCalendar.prototype, {
         selectedCalendar: this.state.selectedCalendar,
         visibleCalendars: this.state.visibleCalendars,
         calendarColors: this.state.calendarColors,
-        deviceOrientationEnabled: this.deviceOrientationState.enabled,
-        betaThreshold: this.deviceOrientationThresholds.beta,
-        gammaThreshold: this.deviceOrientationThresholds.gamma,
         colorMode: this.state.colorMode,
         baseHue: this.state.baseHue,
         singleColor: this.state.singleColor,
@@ -486,20 +459,16 @@ Object.assign(SpiralCalendar.prototype, {
         
         // Apply loaded settings to state
         Object.keys(settings).forEach(key => {
-          if (key === 'deviceOrientationEnabled') {
-            this.deviceOrientationState.enabled = settings[key];
-            this.deviceOrientationState.buttonVisible = settings[key];
-          } else if (key === 'betaThreshold') {
-            this.deviceOrientationThresholds.beta = settings[key];
-          } else if (key === 'gammaThreshold') {
-            this.deviceOrientationThresholds.gamma = settings[key];
-          } else if (key === 'textClippingEnabled') {
+          if (key === 'textClippingEnabled') {
             this.state.textClippingEnabled = settings[key];
           } else if (key === 'circleMode') {
             // Skip circleMode - always start in spiral mode
             return;
           } else if (key === 'spiralScale') {
             // Skip spiralScale - always use default value, don't load from storage
+            return;
+          } else if (key === 'deviceOrientationEnabled' || key === 'betaThreshold' || key === 'gammaThreshold') {
+            // Legacy settings keys from removed device-orientation feature
             return;
           } else if (this.state.hasOwnProperty(key)) {
             this.state[key] = settings[key];
@@ -552,14 +521,7 @@ Object.assign(SpiralCalendar.prototype, {
   resetSettingsToDefaults() {
     // Reset state
     Object.keys(this.defaultSettings).forEach(key => {
-      if (key === 'deviceOrientationEnabled') {
-        this.deviceOrientationState.enabled = this.defaultSettings[key];
-        this.deviceOrientationState.buttonVisible = this.defaultSettings[key];
-      } else if (key === 'betaThreshold') {
-        this.deviceOrientationThresholds.beta = this.defaultSettings[key];
-      } else if (key === 'gammaThreshold') {
-        this.deviceOrientationThresholds.gamma = this.defaultSettings[key];
-      } else if (key === 'textClippingEnabled') {
+      if (key === 'textClippingEnabled') {
         this.state.textClippingEnabled = this.defaultSettings[key];
       } else if (this.state.hasOwnProperty(key)) {
         this.state[key] = this.defaultSettings[key];
@@ -609,8 +571,6 @@ Object.assign(SpiralCalendar.prototype, {
       { slider: 'radiusSlider', value: this.state.radiusExponent, display: 'radiusVal' },
       { slider: 'rotateSlider', value: this.state.rotation * 180 / Math.PI, display: 'rotateVal', suffix: '°' },
       { slider: 'hourNumbersPositionSlider', value: this.state.hourNumbersPosition, display: 'hourNumbersPositionVal' },
-      { slider: 'betaThresholdSlider', value: this.deviceOrientationThresholds.beta, display: 'betaThresholdVal', suffix: '°' },
-      { slider: 'gammaThresholdSlider', value: this.deviceOrientationThresholds.gamma, display: 'gammaThresholdVal', suffix: '°' },
     ];
     
     controls.forEach(control => {
@@ -657,7 +617,6 @@ Object.assign(SpiralCalendar.prototype, {
       { id: 'arcLinesToggle', value: this.state.showArcLines },
       { id: 'overlayStackMode', value: this.state.overlayStackMode },
       { id: 'textClippingToggle', value: this.state.textClippingEnabled },
-      { id: 'deviceOrientationToggle', value: this.deviceOrientationState.enabled },
     ];
     
     checkboxes.forEach(checkbox => {
@@ -744,11 +703,6 @@ Object.assign(SpiralCalendar.prototype, {
     const showSixAmPmLinesToggle = document.getElementById('showSixAmPmLinesToggle');
     if (showSixAmPmLinesToggle) {
       showSixAmPmLinesToggle.checked = this.state.showSixAmPmLines;
-    }
-    
-    const deviceOrientationControls = document.getElementById('deviceOrientationControls');
-    if (deviceOrientationControls) {
-      deviceOrientationControls.style.display = (this.deviceOrientationState.enabled && DEV_MODE) ? 'block' : 'none';
     }
     
     // Sync overlay opacity sliders and show/hide controls

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>v1.3 Spiral Calendar</title>
+  <title>v1.31 Spiral Calendar</title>
   <link rel="icon" type="image/png" href="icons/icon_32.png">
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#ffffff">
@@ -782,19 +782,6 @@
           </label>
         </div>
                 
-        <!-- Device orientation sensitivity controls (only visible when device orientation is enabled) -->
-        <div id="deviceOrientationControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
-          <div style="font-size: 0.8em; color: #666; margin-bottom: 0.5em; font-style: italic;">
-            Adjust how much tilt is needed to start zooming/rotating
-          </div>
-          <label>Zoom sensitivity: <span id="betaThresholdVal">8</span>
-            <input type="range" id="betaThresholdSlider" min="3" max="20" step="1" value="8" style="width:100%">
-          </label>
-          <label>Rotation sensitivity: <span id="gammaThresholdVal">6</span>
-            <input type="range" id="gammaThresholdSlider" min="2" max="15" step="1" value="6" style="width:100%">
-          </label>
-        </div>
-        
         <label><input type="checkbox" id="nightOverlayToggle" checked> Night time overlay</label>
         <!-- Night overlay opacity control (only visible when night overlay is enabled) -->
         <div id="nightOverlayOpacityControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
@@ -816,9 +803,6 @@
             <button id="setLocationBtn" style="padding: 0.2em 1em; font-size: 0.9em;">Set</button>
           </div>
       </div>
-        
-        <label><input type="checkbox" id="deviceOrientationToggle"> Device orientation control</label>
-        
         
         <!-- Event Input section removed from here -->
         <label><input type="checkbox" id="animateToggle"> Animate</label>
@@ -882,16 +866,16 @@
 
   <script src="a2hs.js"></script>
   <script src="js/config-utils.js"></script>
-  <script src="js/spiral-calendar-core.js"></script>
-  <script src="js/spiral-calendar-core-methods.js"></script>
-  <script src="js/spiral-calendar-ui-handlers.js"></script>
-  <script src="js/spiral-calendar-ui-event-panel.js"></script>
-  <script src="js/spiral-calendar-input-mouse.js"></script>
-  <script src="js/spiral-calendar-render-spiral.js"></script>
-  <script src="js/spiral-calendar-render-circle.js"></script>
-  <script src="js/spiral-calendar-state-storage-sync.js"></script>
-  <script src="js/spiral-calendar-pickers-calendars.js"></script>
-  <script src="js/spiral-calendar-touch-time-orientation.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/core-methods.js"></script>
+  <script src="js/ui-handlers.js"></script>
+  <script src="js/ui-event-panel.js"></script>
+  <script src="js/input-mouse.js"></script>
+  <script src="js/render-spiral.js"></script>
+  <script src="js/render-circle.js"></script>
+  <script src="js/state-storage-sync.js"></script>
+  <script src="js/pickers-calendars.js"></script>
+  <script src="js/touch-time-orientation.js"></script>
   <script src="js/bootstrap.js"></script>
   <script>
     // Function to toggle DEV_MODE visibility
