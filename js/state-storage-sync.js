@@ -313,8 +313,7 @@ Object.assign(SpiralCalendar.prototype, {
 
   startAutoTimeAlign() {
     if (this.autoTimeAlignState.intervalId) return;
-  this.autoTimeAlignState.enabled = true;
-    this.syncAutoTimeAlignCheckbox();
+    this.autoTimeAlignState.enabled = true;
     this.updateRotationToCurrentTime();
     this.autoTimeAlignState.intervalId = setInterval(() => {
       this.updateRotationToCurrentTime();
@@ -326,15 +325,7 @@ Object.assign(SpiralCalendar.prototype, {
       clearInterval(this.autoTimeAlignState.intervalId);
       this.autoTimeAlignState.intervalId = null;
     }
-  this.autoTimeAlignState.enabled = false;
-    this.syncAutoTimeAlignCheckbox();
-  },
-
-  syncAutoTimeAlignCheckbox() {
-    const autoTimeAlignCheckbox = document.getElementById('autoTimeAlign');
-    if (autoTimeAlignCheckbox) {
-      autoTimeAlignCheckbox.checked = this.autoTimeAlignState.enabled;
-    }
+    this.autoTimeAlignState.enabled = false;
   },
 
   saveEventsToStorage() {
@@ -395,16 +386,12 @@ Object.assign(SpiralCalendar.prototype, {
         staticMode: this.state.staticMode,
         showHourNumbers: this.state.showHourNumbers,
         showDayNumbers: this.state.showDayNumbers,
-        showMonthNumbers: this.state.showMonthNumbers,
-        showMonthNames: this.state.showMonthNames,
-        showYearNumbers: this.state.showYearNumbers,
         showTooltip: this.state.showTooltip,
         hourNumbersOutward: this.state.hourNumbersOutward,
         // Only save original value if auto-activation is active, otherwise save current value
         hourNumbersInsideSegment: this.state.autoInsideSegmentNumbers ? false : this.state.hourNumbersInsideSegment,
         hourNumbersUpright: this.state.hourNumbersUpright,
         dayNumbersUpright: this.state.dayNumbersUpright,
-        monthNumbersUpright: this.state.monthNumbersUpright,
         showEverySixthHour: this.state.showEverySixthHour,
         hourNumbersStartAtOne: this.state.hourNumbersStartAtOne,
         hourNumbersPosition: this.state.hourNumbersPosition,
@@ -416,13 +403,13 @@ Object.assign(SpiralCalendar.prototype, {
         showArcLines: this.state.showArcLines,
         overlayStackMode: this.state.overlayStackMode,
         audioFeedbackEnabled: this.state.audioFeedbackEnabled,
-        textClippingEnabled: this.state.textClippingEnabled,
         darkMode: this.state.darkMode,
         calendars: this.state.calendars,
         selectedCalendar: this.state.selectedCalendar,
         visibleCalendars: this.state.visibleCalendars,
         calendarColors: this.state.calendarColors,
         colorMode: this.state.colorMode,
+        saturationLevel: this.state.saturationLevel,
         baseHue: this.state.baseHue,
         singleColor: this.state.singleColor,
         dayLabelShowWeekday: this.state.dayLabelShowWeekday,
@@ -456,12 +443,39 @@ Object.assign(SpiralCalendar.prototype, {
       const stored = localStorage.getItem('spiralCalendarSettings');
       if (stored) {
         const settings = JSON.parse(stored);
+
+        // Backward compatibility for removed palette modes.
+        if (settings.colorMode === 'vibrant') {
+          settings.colorMode = 'saturation';
+          if (settings.saturationLevel === undefined || settings.saturationLevel === null) {
+            settings.saturationLevel = 90;
+          }
+        } else if (settings.colorMode === 'calendarMono') {
+          settings.colorMode = 'saturation';
+          if (settings.saturationLevel === undefined || settings.saturationLevel === null) {
+            settings.saturationLevel = 0;
+          }
+        }
+
+        const validColorModes = new Set([
+          'random', 'calendar', 'colorblind', 'pastel',
+          'saturation', 'seasonal', 'monoHue', 'single'
+        ]);
+        if (settings.colorMode && !validColorModes.has(settings.colorMode)) {
+          settings.colorMode = this.defaultSettings.colorMode || 'random';
+        }
+        if (settings.saturationLevel !== undefined && settings.saturationLevel !== null) {
+          const parsedSaturation = Number(settings.saturationLevel);
+          if (Number.isFinite(parsedSaturation)) {
+            settings.saturationLevel = Math.max(0, Math.min(100, Math.round(parsedSaturation)));
+          } else {
+            delete settings.saturationLevel;
+          }
+        }
         
         // Apply loaded settings to state
         Object.keys(settings).forEach(key => {
-          if (key === 'textClippingEnabled') {
-            this.state.textClippingEnabled = settings[key];
-          } else if (key === 'circleMode') {
+          if (key === 'circleMode') {
             // Skip circleMode - always start in spiral mode
             return;
           } else if (key === 'spiralScale') {
@@ -509,6 +523,19 @@ Object.assign(SpiralCalendar.prototype, {
         if (!this.state.eventListColorStyle || (this.state.eventListColorStyle !== 'row' && this.state.eventListColorStyle !== 'dot')) {
           this.state.eventListColorStyle = this.defaultSettings.eventListColorStyle;
         }
+
+        // Backfill saturation level if missing/invalid from older storage.
+        const defaultSaturation = Number(this.defaultSettings.saturationLevel ?? 80);
+        const fallbackSaturation = Number.isFinite(defaultSaturation)
+          ? Math.max(0, Math.min(100, Math.round(defaultSaturation)))
+          : 80;
+        const currentSaturation = Number(this.state.saturationLevel);
+        this.state.saturationLevel = Number.isFinite(currentSaturation)
+          ? Math.max(0, Math.min(100, Math.round(currentSaturation)))
+          : fallbackSaturation;
+
+        // Removed toggle: always keep overlap-hiding on.
+        this.state.hideDayWhenHourInside = true;
         
         return true;
       }
@@ -521,12 +548,12 @@ Object.assign(SpiralCalendar.prototype, {
   resetSettingsToDefaults() {
     // Reset state
     Object.keys(this.defaultSettings).forEach(key => {
-      if (key === 'textClippingEnabled') {
-        this.state.textClippingEnabled = this.defaultSettings[key];
-      } else if (this.state.hasOwnProperty(key)) {
+      if (this.state.hasOwnProperty(key)) {
         this.state[key] = this.defaultSettings[key];
       }
     });
+    // Removed toggle: always keep overlap-hiding on.
+    this.state.hideDayWhenHourInside = true;
     
     // Reset rotation slider max value
     const rotateMaxSlider = document.getElementById('rotateMaxSlider');
@@ -589,17 +616,12 @@ Object.assign(SpiralCalendar.prototype, {
       { id: 'staticMode', value: this.state.staticMode },
       { id: 'showHourNumbers', value: this.state.showHourNumbers },
       { id: 'showDayNumbers', value: this.state.showDayNumbers },
-      { id: 'showMonthNumbers', value: this.state.showMonthNumbers },
-      { id: 'showMonthNames', value: this.state.showMonthNames },
-      { id: 'showYearNumbers', value: this.state.showYearNumbers },
       { id: 'tooltipToggle', value: this.state.showTooltip },
       { id: 'darkModeToggle', value: this.state.darkMode },
       { id: 'hourNumbersOutward', value: this.state.hourNumbersOutward },
       { id: 'hourNumbersInsideSegment', value: this.state.hourNumbersInsideSegment },
       { id: 'hourNumbersUpright', value: this.state.hourNumbersUpright },
       { id: 'dayNumbersUpright', value: this.state.dayNumbersUpright },
-      { id: 'hideDayWhenHourInside', value: this.state.hideDayWhenHourInside },
-      { id: 'monthNumbersUpright', value: this.state.monthNumbersUpright },
       { id: 'showEverySixthHour', value: this.state.showEverySixthHour },
       { id: 'hourNumbersStartAtOne', value: this.state.hourNumbersStartAtOne },
       { id: 'dayLabelShowWeekday', value: this.state.dayLabelShowWeekday },
@@ -616,7 +638,6 @@ Object.assign(SpiralCalendar.prototype, {
       { id: 'segmentEdgesToggle', value: this.state.showSegmentEdges },
       { id: 'arcLinesToggle', value: this.state.showArcLines },
       { id: 'overlayStackMode', value: this.state.overlayStackMode },
-      { id: 'textClippingToggle', value: this.state.textClippingEnabled },
     ];
     
     checkboxes.forEach(checkbox => {
@@ -637,14 +658,28 @@ Object.assign(SpiralCalendar.prototype, {
       baseHueSlider.value = String(this.state.baseHue ?? 200);
       baseHueVal.textContent = String(this.state.baseHue ?? 200);
     }
+    const saturationSlider = document.getElementById('saturationSlider');
+    const saturationVal = document.getElementById('saturationVal');
+    if (saturationSlider && saturationVal) {
+      const saturation = Math.max(0, Math.min(100, Number(this.state.saturationLevel ?? 80)));
+      saturationSlider.value = String(Math.round(saturation));
+      saturationVal.textContent = String(Math.round(saturation));
+    }
     
-    // Update color mode visibility after setting values
-    const singleColorWrapper = document.getElementById('singleColorWrapper');
-    const baseHueWrapper = document.getElementById('baseHueWrapper');
-    if (singleColorWrapper && baseHueWrapper && colorModeSelect) {
-      const mode = this.state.colorMode;
-      singleColorWrapper.style.display = (mode === 'single' || mode === 'monoHue') ? '' : 'none';
-      baseHueWrapper.style.display = mode === 'monoHue' ? '' : 'none';
+    // Keep custom palette selector UI in sync if available.
+    if (typeof this.syncColorModePickerUI === 'function') {
+      this.syncColorModePickerUI();
+    } else {
+      // Fallback for startup sequencing.
+      const singleColorWrapper = document.getElementById('singleColorWrapper');
+      const saturationWrapper = document.getElementById('saturationWrapper');
+      const baseHueWrapper = document.getElementById('baseHueWrapper');
+      if (colorModeSelect) {
+        const mode = this.state.colorMode;
+        if (singleColorWrapper) singleColorWrapper.style.display = mode === 'single' ? '' : 'none';
+        if (saturationWrapper) saturationWrapper.style.display = mode === 'saturation' ? '' : 'none';
+        if (baseHueWrapper) baseHueWrapper.style.display = mode === 'monoHue' ? '' : 'none';
+      }
     }
     
     // Manually sync circleMode checkbox (not persisted, always starts false)
@@ -667,10 +702,6 @@ Object.assign(SpiralCalendar.prototype, {
     const dayLabelUseShortNames = document.getElementById('dayLabelUseShortNames');
     if (dayLabelUseShortNames) dayLabelUseShortNames.checked = !!this.state.dayLabelUseShortNames;
     
-    const monthNumbersControls = document.getElementById('monthNumbersControls');
-    if (monthNumbersControls) {
-      monthNumbersControls.style.display = (this.state.showMonthNumbers && DEV_MODE) ? 'block' : 'none';
-    }
     // Ensure day label weekday/month/year sub-options visibility
     const dayLabelWeekdaySubOptions = document.getElementById('dayLabelWeekdaySubOptions');
     if (dayLabelWeekdaySubOptions) dayLabelWeekdaySubOptions.style.display = this.state.dayLabelShowWeekday ? 'flex' : 'none';

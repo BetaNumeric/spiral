@@ -6,8 +6,9 @@ class SpiralCalendar {
       this.canvas = document.getElementById(canvasId);
       this.ctx = this.canvas.getContext('2d');
       
-      // Default settings object for persistence and reset functionality
-      this.defaultSettings = {
+      // Default settings object for persistence and reset functionality.
+      // Primary source: js/settings-config.js (APP_SETTINGS_DEFAULTS).
+      const builtInDefaultSettings = {
         days: CONFIG.DEFAULT_VALUES.days,
         spiralScale: CONFIG.DEFAULT_VALUES.spiralScale,
         radiusExponent: CONFIG.DEFAULT_VALUES.radiusExponent,
@@ -15,17 +16,12 @@ class SpiralCalendar {
         staticMode: true,
         showHourNumbers: true,
         showDayNumbers: true,
-        showMonthNumbers: false,
-        showMonthNames: true,
-        showYearNumbers: false,
         showTooltip: true,
         hourNumbersOutward: true,
         hourNumbersInsideSegment: false,
         hourNumbersUpright: false,
         dayNumbersUpright: false,
         hideDayWhenHourInside: true,
-        monthNumbersUpright: false,
-        // Day label composition options
         dayLabelShowWeekday: true,
         dayLabelShowMonth: true,
         dayLabelShowYear: true,
@@ -40,9 +36,9 @@ class SpiralCalendar {
         hourNumbersPosition: 2,
         showNightOverlay: true,
         showDayOverlay: true,
-        // Event color generation
-        colorMode: 'random', // 'random' | 'pastel' | 'vibrant' | 'monoHue' | 'single'
-        baseHue: 200,        // used by monoHue
+        colorMode: 'random',
+        saturationLevel: 80,
+        baseHue: 200,
         singleColor: '#4CAF50',
         showGradientOverlay: true,
         showTimeDisplay: true,
@@ -52,26 +48,48 @@ class SpiralCalendar {
         audioFeedbackEnabled: true,
         animationEnabled: false,
         animationSpeed: 1.0,
-        textClippingEnabled: false,
         darkMode: false,
         calendars: ['Home', 'Work'],
         selectedCalendar: 'Home',
         visibleCalendars: ['Home', 'Work'],
         calendarColors: {
-          'Home': '#59a7d7',
-          'Work': '#d57ff5'
+          Home: '#59a7d7',
+          Work: '#d57ff5'
         },
-        eventListColorStyle: 'dot', // 'row' for full row background, 'dot' for colored circle
-        // Dev mode line toggles
+        eventListColorStyle: 'dot',
         showMonthLines: true,
         showMidnightLines: true,
         showNoonLines: false,
         showSixAmPmLines: false,
-        // Overlay opacity values (0.0 to 1.0)
         nightOverlayOpacity: 0.05,
         dayOverlayOpacity: 0.15,
-        gradientOverlayOpacity: 0.05, // Maximum opacity at center/inward edge
+        gradientOverlayOpacity: 0.05
       };
+      const configuredDefaultSettings =
+        (typeof APP_SETTINGS_DEFAULTS !== 'undefined' &&
+         APP_SETTINGS_DEFAULTS &&
+         typeof APP_SETTINGS_DEFAULTS === 'object')
+          ? APP_SETTINGS_DEFAULTS
+          : {};
+      this.defaultSettings = {
+        ...builtInDefaultSettings,
+        ...configuredDefaultSettings,
+        calendars: Array.isArray(configuredDefaultSettings.calendars)
+          ? configuredDefaultSettings.calendars.slice()
+          : builtInDefaultSettings.calendars.slice(),
+        visibleCalendars: Array.isArray(configuredDefaultSettings.visibleCalendars)
+          ? configuredDefaultSettings.visibleCalendars.slice()
+          : builtInDefaultSettings.visibleCalendars.slice(),
+        calendarColors: JSON.parse(JSON.stringify(
+          (configuredDefaultSettings.calendarColors &&
+           typeof configuredDefaultSettings.calendarColors === 'object')
+            ? configuredDefaultSettings.calendarColors
+            : builtInDefaultSettings.calendarColors
+        ))
+      };
+      if (!Array.isArray(this.defaultSettings.visibleCalendars) || this.defaultSettings.visibleCalendars.length === 0) {
+        this.defaultSettings.visibleCalendars = this.defaultSettings.calendars.slice();
+      }
       
       // State variables - load from localStorage or use defaults
       this.state = {
@@ -82,16 +100,12 @@ class SpiralCalendar {
         staticMode: this.defaultSettings.staticMode,
         showHourNumbers: this.defaultSettings.showHourNumbers,
         showDayNumbers: this.defaultSettings.showDayNumbers,
-        showMonthNumbers: this.defaultSettings.showMonthNumbers,
-        showMonthNames: this.defaultSettings.showMonthNames,
-        showYearNumbers: this.defaultSettings.showYearNumbers,
         showTooltip: this.defaultSettings.showTooltip,
         hourNumbersOutward: this.defaultSettings.hourNumbersOutward,
         hourNumbersInsideSegment: this.defaultSettings.hourNumbersInsideSegment,
         hourNumbersUpright: this.defaultSettings.hourNumbersUpright,
         dayNumbersUpright: this.defaultSettings.dayNumbersUpright,
         hideDayWhenHourInside: this.defaultSettings.hideDayWhenHourInside,
-        monthNumbersUpright: this.defaultSettings.monthNumbersUpright,
         dayLabelShowWeekday: this.defaultSettings.dayLabelShowWeekday,
         dayLabelShowMonth: this.defaultSettings.dayLabelShowMonth,
         dayLabelShowYear: this.defaultSettings.dayLabelShowYear,
@@ -114,6 +128,7 @@ class SpiralCalendar {
         showNightOverlay: this.defaultSettings.showNightOverlay,
         showDayOverlay: this.defaultSettings.showDayOverlay,
         colorMode: this.defaultSettings.colorMode,
+        saturationLevel: this.defaultSettings.saturationLevel,
         baseHue: this.defaultSettings.baseHue,
         singleColor: this.defaultSettings.singleColor,
         showGradientOverlay: this.defaultSettings.showGradientOverlay,
@@ -122,7 +137,6 @@ class SpiralCalendar {
         showArcLines: this.defaultSettings.showArcLines,
         overlayStackMode: this.defaultSettings.overlayStackMode,
         audioFeedbackEnabled: this.defaultSettings.audioFeedbackEnabled,
-        textClippingEnabled: this.defaultSettings.textClippingEnabled,
         darkMode: this.defaultSettings.darkMode,
         calendars: this.defaultSettings.calendars.slice(),
         selectedCalendar: this.defaultSettings.selectedCalendar,
@@ -229,9 +243,6 @@ class SpiralCalendar {
       
       // Month lines to draw on top
       this.monthLines = [];
-      
-      // Month numbers to draw on top
-      this.monthNumbers = [];
         
         // Day numbers to draw on top
         this.dayNumbers = [];

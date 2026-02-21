@@ -742,9 +742,7 @@ Object.assign(SpiralCalendar.prototype, {
           this.setTimeDisplayCollapsed(false);
         } else {
           // Tap on expanded bar -> enable Auto Time Align if currently off
-          const autoTimeAlignCheckbox = document.getElementById('autoTimeAlign');
           if (!this.autoTimeAlignState.enabled) {
-            if (autoTimeAlignCheckbox) autoTimeAlignCheckbox.checked = true;
             this.autoTimeAlignState.enabled = true;
             this.startAutoTimeAlign();
           }
@@ -902,12 +900,8 @@ Object.assign(SpiralCalendar.prototype, {
               touchY >= timeDisplayArea.y && touchY <= timeDisplayArea.y + timeDisplayArea.height) {
             // Time display tapped - activate Auto Time Align if it's currently off
             if (!this.autoTimeAlignState.enabled) {
-              const autoTimeAlignCheckbox = document.getElementById('autoTimeAlign');
-              if (autoTimeAlignCheckbox) {
-                autoTimeAlignCheckbox.checked = true;
-                this.autoTimeAlignState.enabled = true;
-                this.startAutoTimeAlign();
-              }
+              this.autoTimeAlignState.enabled = true;
+              this.startAutoTimeAlign();
             }
             return; // Don't process other clicks
           }

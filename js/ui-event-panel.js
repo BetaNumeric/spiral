@@ -83,6 +83,49 @@ Object.assign(SpiralCalendar.prototype, {
       if (eventStartBox) eventStartBox.textContent = eventStart && eventStart.value ? formatBox(eventStart.value) : '';
       if (eventEndBox) eventEndBox.textContent = eventEnd && eventEnd.value ? formatBox(eventEnd.value) : '';
     };
+    const getAddPanelStartDate = () => {
+      try {
+        if (eventStart && eventStart.value) {
+          if (typeof parseDateTimeLocalAsUTC === 'function') {
+            return parseDateTimeLocalAsUTC(eventStart.value);
+          }
+          return new Date(eventStart.value);
+        }
+      } catch (_) {}
+      return new Date();
+    };
+    const getSeasonalSuggestedColor = () => {
+      try {
+        if (typeof this.generateSeasonalColor === 'function') {
+          const seasonalColor = this.generateSeasonalColor(getAddPanelStartDate());
+          return seasonalColor.startsWith('#') ? seasonalColor : this.hslToHex(seasonalColor);
+        }
+      } catch (_) {}
+      return '#4CAF50';
+    };
+    const applyAddEventPaletteSuggestion = () => {
+      try {
+        if (this.state.colorMode === 'calendar') {
+          const calName = (this.selectedEventCalendar || 'Home').trim();
+          const calColor = this.state.calendarColors && this.state.calendarColors[calName];
+          const hex = calColor
+            ? (calColor.startsWith('#') ? calColor : this.hslToHex(calColor))
+            : this.generateRandomColorForStorage(this.state.selectedCalendar || 'Home');
+          eventColor.value = hex;
+          colorBox.style.background = hex;
+          return;
+        }
+        if (this.state.colorMode === 'seasonal') {
+          const seasonalHex = getSeasonalSuggestedColor();
+          eventColor.value = seasonalHex;
+          colorBox.style.background = seasonalHex;
+          return;
+        }
+        colorBox.style.background = eventColor.value;
+      } catch (_) {
+        colorBox.style.background = eventColor.value;
+      }
+    };
 
     if (eventStartBox) eventStartBox.addEventListener('click', (e) => {
       e.preventDefault(); e.stopPropagation();
@@ -1713,7 +1756,7 @@ Object.assign(SpiralCalendar.prototype, {
             // Preserve color if provided; otherwise assign a random color
             if (!currentEvent.color) {
               const eventCalendar = currentEvent.calendar || 'Home';
-              const randomColor = this.generateRandomColor(eventCalendar);
+              const randomColor = this.generateRandomColor(eventCalendar, currentEvent.start);
               // If generateRandomColor returns hex (single mode), keep it;
               // if it returns HSL, convert to hex for consistency
               currentEvent.color = randomColor.startsWith('#') ? randomColor : this.hslToHex(randomColor);
@@ -2502,7 +2545,7 @@ Object.assign(SpiralCalendar.prototype, {
             }
           }
 
-          const randomColor = this.generateRandomColor('Random');
+          const randomColor = this.generateRandomColor('Random', startDate);
           const ev = {
             title: `Random Event ${i + 1}`,
             description: '',
@@ -2600,19 +2643,12 @@ Object.assign(SpiralCalendar.prototype, {
       eventEnd.value = formatLocalDateTime(endTime);
       // Update visible dt boxes
       if (typeof syncEventBoxes === 'function') syncEventBoxes();
-      if (this.state.colorMode === 'calendar' || this.state.colorMode === 'calendarMono') {
-        // Suggest selected calendar color in calendar mode
-        const calName = (this.selectedEventCalendar || 'Home').trim();
-        const calColor = this.state.calendarColors && this.state.calendarColors[calName];
-        let hex = calColor ? (calColor.startsWith('#') ? calColor : this.hslToHex(calColor)) : this.generateRandomColorForStorage(this.state.selectedCalendar || 'Home');
-        if (this.state.colorMode === 'calendarMono') hex = this.toGrayscaleHex(hex);
-        eventColor.value = hex;
-        colorBox.style.background = hex;
+      if (this.state.colorMode === 'seasonal') {
+        eventColor.value = getSeasonalSuggestedColor();
       } else {
-        // Stored event color (independent from calendar palette)
-        eventColor.value = this.generateRandomColorForStorage(this.state.selectedCalendar || 'Home');
-      colorBox.style.background = eventColor.value;
+        eventColor.value = this.generateRandomColorForStorage(this.state.selectedCalendar || 'Home', getAddPanelStartDate());
       }
+      applyAddEventPaletteSuggestion();
       eventTitle.value = '';
       eventDescription.value = '';
       titleCharCount.textContent = '0';
@@ -2767,15 +2803,12 @@ Object.assign(SpiralCalendar.prototype, {
         titleCharCount.textContent = '0';
         descCharCount.textContent = '0';
         // Generate new suggested color for next event
-        if (this.state.colorMode === 'calendar' || this.state.colorMode === 'calendarMono') {
-          const calName = (this.selectedEventCalendar || 'Home').trim();
-          const calColor = this.state.calendarColors && this.state.calendarColors[calName];
-          let hex = calColor ? (calColor.startsWith('#') ? calColor : this.hslToHex(calColor)) : this.generateRandomColorForStorage(this.state.selectedCalendar || 'Home');
-          if (this.state.colorMode === 'calendarMono') hex = this.toGrayscaleHex(hex);
-          eventColor.value = hex;
+        if (this.state.colorMode === 'seasonal') {
+          eventColor.value = getSeasonalSuggestedColor();
         } else {
-          eventColor.value = this.generateRandomColorForStorage(this.state.selectedCalendar || 'Home');
+          eventColor.value = this.generateRandomColorForStorage(this.state.selectedCalendar || 'Home', getAddPanelStartDate());
         }
+        applyAddEventPaletteSuggestion();
         // Reset auto-activated settings
         this.resetAutoActivatedSettings();
         
@@ -2793,12 +2826,18 @@ Object.assign(SpiralCalendar.prototype, {
 
     eventColor.addEventListener('input', () => {
       // If user picks a color, reflect it unless we are in 'calendar' palette
-      if (this.state.colorMode === 'calendar') {
-        // Keep showing calendar color as preview in calendar mode
+      if (this.state.colorMode === 'calendar' || this.state.colorMode === 'seasonal') {
+        // Keep showing computed palette color as preview in fixed palette modes
         try {
-          const calName = (this.selectedEventCalendar || 'Home').trim();
-          const calColor = this.state.calendarColors && this.state.calendarColors[calName];
-          colorBox.style.background = calColor ? (calColor.startsWith('#') ? calColor : this.hslToHex(calColor)) : eventColor.value;
+          if (this.state.colorMode === 'seasonal') {
+            const seasonalHex = getSeasonalSuggestedColor();
+            eventColor.value = seasonalHex;
+            colorBox.style.background = seasonalHex;
+          } else {
+            const calName = (this.selectedEventCalendar || 'Home').trim();
+            const calColor = this.state.calendarColors && this.state.calendarColors[calName];
+            colorBox.style.background = calColor ? (calColor.startsWith('#') ? calColor : this.hslToHex(calColor)) : eventColor.value;
+          }
         } catch (_) {
       colorBox.style.background = eventColor.value;
         }
@@ -2811,13 +2850,7 @@ Object.assign(SpiralCalendar.prototype, {
     });
     // Set initial color box background per current palette
     try {
-      if (this.state.colorMode === 'calendar') {
-        const calName = (this.selectedEventCalendar || 'Home').trim();
-        const calColor = this.state.calendarColors && this.state.calendarColors[calName];
-        colorBox.style.background = calColor ? (calColor.startsWith('#') ? calColor : this.hslToHex(calColor)) : eventColor.value;
-      } else {
-    colorBox.style.background = eventColor.value;
-      }
+      applyAddEventPaletteSuggestion();
     } catch (_) {
       colorBox.style.background = eventColor.value;
     }
@@ -2862,6 +2895,9 @@ Object.assign(SpiralCalendar.prototype, {
         const endTimeStr = `${endHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
       eventEnd.value = `${endDateStr}T${endTimeStr}`;
       if (typeof syncEventBoxes === 'function') syncEventBoxes();
+      if (this.state.colorMode === 'seasonal') {
+        applyAddEventPaletteSuggestion();
+      }
     });
     // Prevent end date from being set earlier than start date
     eventEnd.addEventListener('change', (e) => {

@@ -43,9 +43,6 @@ Object.assign(SpiralCalendar.prototype, {
     // Load saved events from localStorage
     this.loadEventsFromStorage();
     
-    // Ensure checkbox state is synchronized with internal state
-    this.syncAutoTimeAlignCheckbox();
-    
     // Sync all UI controls with loaded settings
     this.syncAllUIControls();
     
@@ -167,28 +164,6 @@ Object.assign(SpiralCalendar.prototype, {
       
     // Check if this date is the 1st day of the month (using UTC)
     return segmentDate.getUTCDate() === 1;
-    },
-
-    isFirstHourOfMonth(day, segment) {
-      // Calculate the date this segment represents
-      const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-      const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
-      const hoursFromReference = segmentId;
-      const segmentDate = new Date(this.referenceTime.getTime() + hoursFromReference * 60 * 60 * 1000);
-      
-    // Check if this date is the 1st day of the month AND the hour is 0 (first hour) (using UTC)
-    return segmentDate.getUTCDate() === 1 && segmentDate.getUTCHours() === 0;
-    },
-
-    getMonthNumber(day, segment) {
-      // Calculate the date this segment represents
-      const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-      const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
-      const hoursFromReference = segmentId;
-      const segmentDate = new Date(this.referenceTime.getTime() + hoursFromReference * 60 * 60 * 1000);
-      
-    // Return month number (1-12) (using UTC)
-    return segmentDate.getUTCMonth() + 1;
     },
 
     isFirstHourOfDay(day, segment) {
@@ -727,22 +702,6 @@ Object.assign(SpiralCalendar.prototype, {
 
   getEventListHeight() {
     return this.timeDisplayState ? (this.timeDisplayState.eventListCurrentHeight || 0) : 0;
-  },
-
-  isFirstDayOfYear(day, segment) {
-    const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-    const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
-    const hoursFromReference = segmentId;
-    const segmentDate = new Date(this.referenceTime.getTime() + hoursFromReference * 60 * 60 * 1000);
-    return segmentDate.getUTCMonth() === 0 && segmentDate.getUTCDate() === 1;
-  },
-
-  getYearNumber(day, segment) {
-    const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-    const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
-    const hoursFromReference = segmentId;
-    const segmentDate = new Date(this.referenceTime.getTime() + hoursFromReference * 60 * 60 * 1000);
-    return segmentDate.getUTCFullYear();
   },
 
   setupMobileOrientationFallback() {

@@ -692,11 +692,10 @@ Object.assign(SpiralCalendar.prototype, {
         this.updateEventCalendarDisplay();
         // If palette is 'calendar', suggest that calendar color (both preview and input)
         try {
-          if (this.state.colorMode === 'calendar' || this.state.colorMode === 'calendarMono') {
+          if (this.state.colorMode === 'calendar') {
             const calColor = this.state.calendarColors && this.state.calendarColors[calendarName];
             if (calColor && colorBox) {
-              let hex = calColor.startsWith('#') ? calColor : this.hslToHex(calColor);
-              if (this.state.colorMode === 'calendarMono') hex = this.toGrayscaleHex(hex);
+              const hex = calColor.startsWith('#') ? calColor : this.hslToHex(calColor);
               colorBox.style.background = hex;
               if (eventColor) eventColor.value = hex;
             }
@@ -820,11 +819,10 @@ Object.assign(SpiralCalendar.prototype, {
           event.calendar = calendarName;
           // In Calendar Color mode, also suggest/update the color to the calendar's color
           try {
-            if (this.state.colorMode === 'calendar' || this.state.colorMode === 'calendarMono') {
+            if (this.state.colorMode === 'calendar') {
               const calColor = this.state.calendarColors && this.state.calendarColors[calendarName];
               if (calColor) {
-                let hex = calColor.startsWith('#') ? calColor : this.hslToHex(calColor);
-                if (this.state.colorMode === 'calendarMono') hex = this.toGrayscaleHex(hex);
+                const hex = calColor.startsWith('#') ? calColor : this.hslToHex(calColor);
                 event.color = hex;
                 // Update persistent color picker UI if present
                 const persistentColorPicker = document.getElementById('persistentColorPicker');
@@ -879,11 +877,10 @@ Object.assign(SpiralCalendar.prototype, {
           
           // In Calendar Color mode, also suggest/update the color to the new calendar's color
           try {
-            if (this.state.colorMode === 'calendar' || this.state.colorMode === 'calendarMono') {
+            if (this.state.colorMode === 'calendar') {
               const calColor = this.state.calendarColors && this.state.calendarColors[newCalendarName];
               if (calColor) {
-                let hex = calColor.startsWith('#') ? calColor : this.hslToHex(calColor);
-                if (this.state.colorMode === 'calendarMono') hex = this.toGrayscaleHex(hex);
+                const hex = calColor.startsWith('#') ? calColor : this.hslToHex(calColor);
                 event.color = hex;
                 const persistentColorPicker = document.getElementById('persistentColorPicker');
                 if (persistentColorPicker) persistentColorPicker.value = hex;

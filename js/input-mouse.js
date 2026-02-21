@@ -473,12 +473,8 @@ Object.assign(SpiralCalendar.prototype, {
         
         // Time display clicked - activate Auto Time Align if it's currently off
         if (!this.autoTimeAlignState.enabled) {
-          const autoTimeAlignCheckbox = document.getElementById('autoTimeAlign');
-          if (autoTimeAlignCheckbox) {
-            autoTimeAlignCheckbox.checked = true;
-            this.autoTimeAlignState.enabled = true;
-            this.startAutoTimeAlign();
-          }
+          this.autoTimeAlignState.enabled = true;
+          this.startAutoTimeAlign();
         }
         // Play feedback for time display click
         this.playFeedback(0.15, 10);
@@ -621,7 +617,7 @@ Object.assign(SpiralCalendar.prototype, {
               segmentHourEnd.setUTCHours(segmentHourStart.getUTCHours() + 1);
                 
                 // Create a virtual event for editing (like clicking on a blank segment)
-                const randomColor = this.generateRandomColor('Home');
+                const randomColor = this.generateRandomColor('Home', segmentHourStart);
                 this.virtualEvent = {
                   title: '',
                   description: '',
@@ -1108,9 +1104,7 @@ Object.assign(SpiralCalendar.prototype, {
             this.setTimeDisplayCollapsed(false);
           } else {
             // Enable Auto Time Align on tap if off
-            const autoTimeAlignCheckbox = document.getElementById('autoTimeAlign');
             if (!this.autoTimeAlignState.enabled) {
-              if (autoTimeAlignCheckbox) autoTimeAlignCheckbox.checked = true;
               this.autoTimeAlignState.enabled = true;
               this.startAutoTimeAlign();
             }

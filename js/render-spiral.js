@@ -587,7 +587,7 @@ Object.assign(SpiralCalendar.prototype, {
           segmentHourStart.setUTCMinutes(0, 0, 0);
           const segmentHourEnd = new Date(segmentHourStart);
           segmentHourEnd.setUTCHours(segmentHourStart.getUTCHours() + 1);
-          const randomColor = this.generateRandomColor('Home');
+          const randomColor = this.generateRandomColor('Home', segmentHourStart);
           this.virtualEvent = {
             title: '',
             description: '',
@@ -1524,7 +1524,6 @@ Object.assign(SpiralCalendar.prototype, {
       // Clear arrays for this frame
       this.midnightLines = [];
       this.monthLines = [];
-      this.monthNumbers = [];
         this.dayNumbers = [];
       this.hourNumbersInSegments = [];
       this.highlightedSegments = [];
@@ -1739,9 +1738,6 @@ Object.assign(SpiralCalendar.prototype, {
           // Check if this is a month boundary segment
           const isFirstDayOfMonth = this.isFirstDayOfMonth(day, segment);
           
-          // Check if this is the first hour of a month (for month numbers)
-          const isFirstHourOfMonth = this.isFirstHourOfMonth(day, segment);
-          
           // Check if this segment is currently hovered
           const isHovered = this.mouseState.hoveredSegment && 
                            this.mouseState.hoveredSegment.day === day && 
@@ -1883,64 +1879,6 @@ Object.assign(SpiralCalendar.prototype, {
             });
           }
           
-          // Store month number info if this is the first hour of a month
-          if (isFirstHourOfMonth && rawStartAngle !== null && rawEndAngle !== null) {
-            // Determine if this is one of the outermost visible day rings (up to 2 days)
-            const currentDayTheta = day * 2 * Math.PI;
-            const outermostDayTheta = Math.floor(visibilityRange.max / (2 * Math.PI)) * 2 * Math.PI;
-            const secondOutermostDayTheta = outermostDayTheta - 2 * Math.PI;
-            const isOutermostDay = Math.abs(currentDayTheta - outermostDayTheta) < 0.1;
-            const isSecondOutermostDay = Math.abs(currentDayTheta - secondOutermostDayTheta) < 0.1;
-            const isOutermostTwoDays = isOutermostDay || isSecondOutermostDay;
-
-            // Skip month number if hiding outermost due to inside hour numbers
-            const skipForHourOverlap = (this.state.hideDayWhenHourInside && this.state.hourNumbersInsideSegment && this.state.showHourNumbers && isOutermostTwoDays);
-            if (!skipForHourOverlap) {
-            // Only collect on full segments if clipping is disabled
-            if (this.state.textClippingEnabled || (startTheta === rawStartAngle && endTheta === rawEndAngle)) {
-            const monthNumber = this.getMonthNumber(day, segment);
-            const centerTheta = (startTheta + endTheta) / 2;
-            const centerRadius = radiusFunction(centerTheta + Math.PI); // Middle of segment (between inner and outer)
-            
-            // Calculate font size based on segment dimensions
-            const segmentAngleSize = endTheta - startTheta;
-            const innerRadius = radiusFunction(centerTheta);
-            const outerRadius = radiusFunction(centerTheta + 2 * Math.PI);
-            const radialHeight = outerRadius - innerRadius;
-            const arcWidth = centerRadius * segmentAngleSize;
-            
-            // Use smaller dimension, with some padding
-            const maxDimension = Math.min(radialHeight, arcWidth) * 0.4;
-            let fontSize = Math.max(0.1, Math.min(24, maxDimension));
-            
-            // Determine display text: replace January with year when enabled
-            const showYearForThis = this.state.showYearNumbers && monthNumber === 1;
-            const monthText = this.state.showMonthNames ? MONTHS_SHORT_UTC[monthNumber - 1] : monthNumber.toString();
-            const displayText = showYearForThis ? this.getYearNumber(day, segment).toString() : monthText;
-            
-            // Make year numbers slightly smaller than month names (4 digits vs 3 letters)
-            if (showYearForThis) {
-              fontSize = Math.max(1, Math.floor(fontSize * 0.85));
-            }
-            
-            this.monthNumbers.push({
-              x: centerRadius * Math.cos(-centerTheta + CONFIG.INITIAL_ROTATION_OFFSET),
-              y: centerRadius * Math.sin(-centerTheta + CONFIG.INITIAL_ROTATION_OFFSET),
-              text: displayText,
-              fontSize: fontSize,
-              isCircleMode: false,
-              // Add clipping information
-              clipStartTheta: startTheta,
-              clipEndTheta: endTheta,
-              clipInnerRadius: radiusFunction(centerTheta),
-              clipOuterRadius: radiusFunction(centerTheta + 2 * Math.PI),
-              centerTheta: centerTheta,
-              fullSegment: startTheta === rawStartAngle && endTheta === rawEndAngle
-            });
-            }
-            }
-          }
-          
           // Store day number info if this is the first hour of a day
           const isFirstHourOfDay = this.isFirstHourOfDay(day, segment);
           if (isFirstHourOfDay && rawStartAngle !== null && rawEndAngle !== null) {
@@ -1952,12 +1890,9 @@ Object.assign(SpiralCalendar.prototype, {
             const isSecondOutermostDay = Math.abs(currentDayTheta - secondOutermostDayTheta) < 0.1;
             const isOutermostTwoDays = isOutermostDay || isSecondOutermostDay;
 
-            // Skip day number if overlapping with month or if hiding outermost due to inside hour numbers
-            const skipForMonthOverlap = (isFirstDayOfMonth && this.state.showDayNumbers && this.state.showMonthNumbers);
+            // Skip day number if hiding outermost due to inside hour numbers
             const skipForHourOverlap = (this.state.hideDayWhenHourInside && this.state.hourNumbersInsideSegment && this.state.showHourNumbers && isOutermostTwoDays);
-            if (!skipForMonthOverlap && !skipForHourOverlap) {
-            // Only collect on full segments if clipping is disabled
-            if (this.state.textClippingEnabled || (startTheta === rawStartAngle && endTheta === rawEndAngle)) {
+            if (!skipForHourOverlap && startTheta === rawStartAngle && endTheta === rawEndAngle) {
             const dayNumber = this.getDayNumber(day, segment);
             const centerTheta = (startTheta + endTheta) / 2;
             const centerRadius = radiusFunction(centerTheta + Math.PI); // Middle of segment (between inner and outer)
@@ -2018,17 +1953,10 @@ Object.assign(SpiralCalendar.prototype, {
               fontSize: fontSize,
               isCircleMode: false,
               radiusFunction: radiusFunction,
-              // Add clipping information
-              clipStartTheta: startTheta,
-              clipEndTheta: endTheta,
-              clipInnerRadius: radiusFunction(centerTheta),
-              clipOuterRadius: radiusFunction(centerTheta + 2 * Math.PI),
               centerTheta: centerTheta,
               centerRadius: centerRadius,
-              onlyNumeric: (!this.state.dayLabelShowWeekday && !includeMonth && !includeYear),
-              fullSegment: startTheta === rawStartAngle && endTheta === rawEndAngle
+              onlyNumeric: (!this.state.dayLabelShowWeekday && !includeMonth && !includeYear)
             });
-            }
             }
           }
           
@@ -2212,8 +2140,6 @@ Object.assign(SpiralCalendar.prototype, {
       if (this.state.showHourNumbers && (this.state.hourNumbersOutward || this.state.hourNumbersInsideSegment)) {
         this.drawHourNumbersInSegments();
       }
-      
-      this.drawMonthNumbers();
       this.drawDayNumbers();
       
       // Draw month lines on top of all segments

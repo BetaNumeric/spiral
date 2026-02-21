@@ -79,24 +79,6 @@ Object.assign(SpiralCalendar.prototype, {
       });
       }
 
-      // Add auto time align checkbox handler
-      const autoTimeAlignCheckbox = document.getElementById('autoTimeAlign');
-      if (autoTimeAlignCheckbox) {
-        // Synchronize checkbox state with internal state
-        autoTimeAlignCheckbox.checked = this.autoTimeAlignState.enabled;
-        
-      autoTimeAlignCheckbox.addEventListener('change', (e) => {
-        this.autoTimeAlignState.enabled = e.target.checked;
-        if (this.autoTimeAlignState.enabled) {
-          this.startAutoTimeAlign();
-        } else {
-          this.stopAutoTimeAlign();
-        }
-      });
-        
-
-      }
-
       // Add show hour numbers checkbox handler
       const showHourNumbersCheckbox = document.getElementById('showHourNumbers');
       const hourNumbersControls = document.getElementById('hourNumbersControls');
@@ -115,8 +97,6 @@ Object.assign(SpiralCalendar.prototype, {
         this.drawSpiral();
           this.saveSettingsToStorage();
         });
-        
-        // Remove legacy commented initialization (handled dynamically elsewhere)
       }
       
       
@@ -134,43 +114,6 @@ Object.assign(SpiralCalendar.prototype, {
           this.saveSettingsToStorage();
         });
       }
-      
-      // Month numbers checkbox handler
-      const showMonthNumbersCheckbox = document.getElementById('showMonthNumbers');
-      if (showMonthNumbersCheckbox) {
-        showMonthNumbersCheckbox.addEventListener('change', (e) => {
-          this.state.showMonthNumbers = e.target.checked;
-          this.drawSpiral();
-          
-          // Show/hide month numbers sub-options (only if DEV_MODE is true)
-          const monthNumbersControls = document.getElementById('monthNumbersControls');
-          if (monthNumbersControls) {
-            monthNumbersControls.style.display = (e.target.checked && DEV_MODE) ? 'block' : 'none';
-          }
-          this.saveSettingsToStorage();
-        });
-        
-        // Remove legacy commented initialization (handled dynamically elsewhere)
-      }
-      
-        const showMonthNamesCheckbox = document.getElementById('showMonthNames');
-        if (showMonthNamesCheckbox) {
-          showMonthNamesCheckbox.addEventListener('change', (e) => {
-            this.state.showMonthNames = e.target.checked;
-            this.drawSpiral();
-            this.saveSettingsToStorage();
-          });
-        }
-
-        // Year numbers checkbox handler (sub-option of month numbers)
-        const showYearNumbersCheckbox = document.getElementById('showYearNumbers');
-        if (showYearNumbersCheckbox) {
-          showYearNumbersCheckbox.addEventListener('change', (e) => {
-            this.state.showYearNumbers = e.target.checked;
-            this.drawSpiral();
-            this.saveSettingsToStorage();
-          });
-        }
       
       // Add sub-option handlers
       if (showEverySixthHourCheckbox) {
@@ -339,26 +282,6 @@ Object.assign(SpiralCalendar.prototype, {
         });
       }
 
-      // Add hide day when hour inside checkbox handler
-      const hideDayWhenHourInsideCheckbox = document.getElementById('hideDayWhenHourInside');
-      if (hideDayWhenHourInsideCheckbox) {
-        hideDayWhenHourInsideCheckbox.addEventListener('change', (e) => {
-          this.state.hideDayWhenHourInside = e.target.checked;
-          this.drawSpiral();
-          this.saveSettingsToStorage();
-        });
-      }
-
-      // Add month numbers upright checkbox handler
-      const monthNumbersUprightCheckbox = document.getElementById('monthNumbersUpright');
-      if (monthNumbersUprightCheckbox) {
-        monthNumbersUprightCheckbox.addEventListener('change', (e) => {
-          this.state.monthNumbersUpright = e.target.checked;
-          this.drawSpiral();
-          this.saveSettingsToStorage();
-        });
-      }
-
       // Add circle mode checkbox handler
       const circleModeCheckbox = document.getElementById('circleMode');
       if (circleModeCheckbox) {
@@ -490,51 +413,237 @@ Object.assign(SpiralCalendar.prototype, {
 
     // Event color mode controls
     const colorModeSelect = document.getElementById('colorModeSelect');
+    const colorModeButtons = Array.from(document.querySelectorAll('#colorModeButtons .palette-mode-btn'));
+    const paletteCurrentMode = document.getElementById('paletteCurrentMode');
+    const paletteSelectorSection = document.getElementById('paletteSelectorSection');
+    const paletteSelectorToggle = document.getElementById('paletteSelectorToggle');
+    const paletteSelectorContent = document.getElementById('paletteSelectorContent');
     const singleColorWrapper = document.getElementById('singleColorWrapper');
     const singleColorInput = document.getElementById('singleColorInput');
+    const saturationWrapper = document.getElementById('saturationWrapper');
+    const saturationSlider = document.getElementById('saturationSlider');
+    const saturationVal = document.getElementById('saturationVal');
     const baseHueWrapper = document.getElementById('baseHueWrapper');
     const baseHueSlider = document.getElementById('baseHueSlider');
     const baseHueVal = document.getElementById('baseHueVal');
+    const modeLabels = {
+      random: 'Random',
+      calendar: 'Calendar Color',
+      colorblind: 'Colorblind',
+      pastel: 'Pastel',
+      saturation: 'Saturation',
+      seasonal: 'Seasonal',
+      monoHue: 'Single Hue',
+      single: 'Single Color'
+    };
+    const colorblindPalette = [
+      '#E69F00',
+      '#56B4E9',
+      '#009E73',
+      '#F0E442',
+      '#0072B2',
+      '#D55E00',
+      '#CC79A7'
+    ];
+    const previewCount = 5;
+    const setPaletteSelectorExpanded = (expanded) => {
+      if (paletteSelectorContent) {
+        paletteSelectorContent.style.display = expanded ? 'block' : 'none';
+      }
+      if (paletteSelectorToggle) {
+        paletteSelectorToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      }
+      if (paletteSelectorSection) {
+        paletteSelectorSection.classList.toggle('expanded', expanded);
+      }
+    };
     const updateColorModeVisibility = () => {
       const mode = this.state.colorMode;
       if (singleColorWrapper) singleColorWrapper.style.display = mode === 'single' ? '' : 'none';
+      if (saturationWrapper) saturationWrapper.style.display = mode === 'saturation' ? '' : 'none';
       if (baseHueWrapper) baseHueWrapper.style.display = mode === 'monoHue' ? '' : 'none';
+    };
+    const getCalendarPreviewColor = (index) => {
+      const calendars = Array.isArray(this.state.calendars) && this.state.calendars.length > 0
+        ? this.state.calendars
+        : [this.state.selectedCalendar || 'Home'];
+      const calName = calendars[index % calendars.length];
+      const calColor = this.state.calendarColors && this.state.calendarColors[calName];
+      if (calColor) {
+        return calColor.startsWith('#') ? calColor : this.hslToHex(calColor);
+      }
+      const hue = (index * 67 + 23) % 360;
+      return this.hslToHex(`hsl(${hue}, 70%, 60%)`);
+    };
+    const getPreviewColor = (mode, index) => {
+      if (mode === 'single') {
+        return this.state.singleColor || '#4CAF50';
+      }
+      if (mode === 'calendar') {
+        return getCalendarPreviewColor(index);
+      }
+      if (mode === 'colorblind') {
+        return colorblindPalette[index % colorblindPalette.length];
+      }
+      if (mode === 'saturation') {
+        const hue = (index * 73 + 34) % 360;
+        const saturation = Math.max(0, Math.min(100, Number(this.state.saturationLevel ?? 80)));
+        const lightnessBase = saturation < 15 ? 62 : 58;
+        const lightnessRange = saturation < 15 ? 14 : 10;
+        const lightness = lightnessBase + ((index * 3) % (lightnessRange + 1));
+        return this.hslToHex(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
+      }
+      if (mode === 'monoHue') {
+        const hue = this.state.baseHue ?? 200;
+        const saturation = 60 + ((index * 9) % 31);
+        const lightness = 60 + ((index * 5) % 16);
+        return this.hslToHex(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
+      }
+      if (mode === 'pastel') {
+        const hue = (index * 71 + 12) % 360;
+        const saturation = 45 + ((index * 4) % 16);
+        const lightness = 75 + ((index * 3) % 11);
+        return this.hslToHex(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
+      }
+      if (mode === 'seasonal') {
+        if (typeof this.generateSeasonalColor === 'function') {
+          const now = new Date();
+          const year = now.getUTCFullYear();
+          const yearStartUtc = Date.UTC(year, 0, 1);
+          const nextYearStartUtc = Date.UTC(year + 1, 0, 1);
+          const daysInYear = Math.max(1, Math.round((nextYearStartUtc - yearStartUtc) / (24 * 60 * 60 * 1000)));
+          const sampleProgress = previewCount > 1 ? (index / (previewCount - 1)) : 0;
+          const sampleDay = Math.round(sampleProgress * Math.max(0, daysInYear - 1));
+          const sampleDate = new Date(yearStartUtc + sampleDay * 24 * 60 * 60 * 1000);
+          return this.hslToHex(this.generateSeasonalColor(sampleDate));
+        }
+        const hue = (index * 67 + 5) % 360;
+        return this.hslToHex(`hsl(${hue}, 72%, 62%)`);
+      }
+      const hue = (index * 67 + 5) % 360;
+      const saturation = 60 + ((index * 7) % 31);
+      const lightness = 70 + ((index * 3) % 11);
+      return this.hslToHex(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
+    };
+    const renderColorModePreviews = () => {
+      colorModeButtons.forEach((button) => {
+        const mode = button.dataset.colorMode;
+        const previewRow = button.querySelector('[data-preview-mode]');
+        if (!previewRow || !mode) return;
+        previewRow.innerHTML = '';
+        for (let i = 0; i < previewCount; i++) {
+          const swatch = document.createElement('span');
+          swatch.className = 'palette-swatch';
+          swatch.style.background = getPreviewColor(mode, i);
+          previewRow.appendChild(swatch);
+        }
+      });
+    };
+    const updateAddEventColorPreview = () => {
+      try {
+        const colorBox = document.getElementById('colorBox');
+        const eventCalendarDisplay = document.getElementById('eventCalendarDisplay');
+        const eventColor = document.getElementById('eventColor');
+        if (colorBox && eventCalendarDisplay && eventColor) {
+          if (this.state.colorMode === 'single') {
+            const singleColor = this.state.singleColor || '#4CAF50';
+            colorBox.style.background = singleColor;
+            eventColor.value = singleColor;
+            return;
+          }
+          if (this.state.colorMode === 'seasonal') {
+            let seasonalDate = new Date();
+            try {
+              const eventStartInput = document.getElementById('eventStart');
+              if (eventStartInput && eventStartInput.value) {
+                seasonalDate = (typeof parseDateTimeLocalAsUTC === 'function')
+                  ? parseDateTimeLocalAsUTC(eventStartInput.value)
+                  : new Date(eventStartInput.value);
+              }
+            } catch (_) {}
+            const seasonalColor = typeof this.generateSeasonalColor === 'function'
+              ? this.generateSeasonalColor(seasonalDate)
+              : '#4CAF50';
+            const seasonalHex = seasonalColor.startsWith('#') ? seasonalColor : this.hslToHex(seasonalColor);
+            colorBox.style.background = seasonalHex;
+            eventColor.value = seasonalHex;
+            return;
+          }
+          const calName = (this.selectedEventCalendar || 'Home').trim();
+          const calColor = this.state.calendarColors && this.state.calendarColors[calName];
+          if (this.state.colorMode === 'calendar' && calColor) {
+            let hex = calColor.startsWith('#') ? calColor : this.hslToHex(calColor);
+            colorBox.style.background = hex;
+            eventColor.value = hex;
+          } else {
+            colorBox.style.background = eventColor.value;
+          }
+        }
+      } catch (_) {}
+    };
+    const syncColorModePickerUI = () => {
+      const mode = this.state.colorMode || 'random';
+      if (colorModeSelect) colorModeSelect.value = mode;
+      colorModeButtons.forEach((button) => {
+        const isActive = button.dataset.colorMode === mode;
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-checked', isActive ? 'true' : 'false');
+      });
+      if (paletteCurrentMode) {
+        paletteCurrentMode.textContent = modeLabels[mode] || mode;
+      }
+      updateColorModeVisibility();
+      renderColorModePreviews();
+    };
+    const applyColorMode = (mode) => {
+      if (!mode) return;
+      this.state.colorMode = mode;
+      syncColorModePickerUI();
+      this.drawSpiral();
+      this.saveSettingsToStorage();
+      if (typeof window.renderEventList === 'function') {
+        window.renderEventList();
+      }
+      updateAddEventColorPreview();
     };
     if (colorModeSelect) {
       colorModeSelect.value = this.state.colorMode;
       colorModeSelect.addEventListener('change', (e) => {
-        this.state.colorMode = e.target.value;
-        updateColorModeVisibility();
-        this.drawSpiral();
-        this.saveSettingsToStorage();
-        // Refresh event list so dots/badges update to current palette
-        if (typeof window.renderEventList === 'function') {
-          window.renderEventList();
-        }
-        // Update Add Event panel preview if open
-        try {
-          const colorBox = document.getElementById('colorBox');
-          const eventCalendarDisplay = document.getElementById('eventCalendarDisplay');
-          const eventColor = document.getElementById('eventColor');
-          if (colorBox && eventCalendarDisplay && eventColor) {
-            const calName = (this.selectedEventCalendar || 'Home').trim();
-            const calColor = this.state.calendarColors && this.state.calendarColors[calName];
-            if ((this.state.colorMode === 'calendar' || this.state.colorMode === 'calendarMono') && calColor) {
-              let hex = calColor.startsWith('#') ? calColor : this.hslToHex(calColor);
-              if (this.state.colorMode === 'calendarMono') hex = this.toGrayscaleHex(hex);
-              colorBox.style.background = hex;
-              eventColor.value = hex; // suggest calendar (mono) color
-            } else {
-              colorBox.style.background = eventColor.value;
-            }
-          }
-        } catch (_) {}
+        applyColorMode(e.target.value);
       });
     }
+    colorModeButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        applyColorMode(button.dataset.colorMode);
+      });
+    });
+    if (paletteSelectorToggle) {
+      paletteSelectorToggle.addEventListener('click', () => {
+        const currentlyExpanded = paletteSelectorToggle.getAttribute('aria-expanded') === 'true';
+        setPaletteSelectorExpanded(!currentlyExpanded);
+      });
+    }
+    setPaletteSelectorExpanded(false);
     if (singleColorInput) {
       singleColorInput.value = this.state.singleColor || '#4CAF50';
       singleColorInput.addEventListener('input', (e) => {
         this.state.singleColor = e.target.value;
+        renderColorModePreviews();
+        updateAddEventColorPreview();
+        this.drawSpiral();
+        this.saveSettingsToStorage();
+      });
+    }
+    if (saturationSlider && saturationVal) {
+      const initialSat = Math.max(0, Math.min(100, Number(this.state.saturationLevel ?? 80)));
+      saturationSlider.value = String(initialSat);
+      saturationVal.textContent = String(initialSat);
+      saturationSlider.addEventListener('input', (e) => {
+        const v = Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0));
+        this.state.saturationLevel = v;
+        saturationVal.textContent = String(v);
+        renderColorModePreviews();
+        updateAddEventColorPreview();
         this.drawSpiral();
         this.saveSettingsToStorage();
       });
@@ -546,11 +655,14 @@ Object.assign(SpiralCalendar.prototype, {
         const v = parseInt(e.target.value, 10) || 0;
         this.state.baseHue = v;
         baseHueVal.textContent = String(v);
+        renderColorModePreviews();
+        updateAddEventColorPreview();
         this.drawSpiral();
         this.saveSettingsToStorage();
       });
     }
-    updateColorModeVisibility();
+    this.syncColorModePickerUI = syncColorModePickerUI;
+    syncColorModePickerUI();
 
     const timeDisplayToggle = document.getElementById('timeDisplayToggle');
     if (timeDisplayToggle) {
@@ -604,16 +716,6 @@ Object.assign(SpiralCalendar.prototype, {
       if (tooltipToggle) {
         tooltipToggle.addEventListener('change', (e) => {
           this.state.showTooltip = e.target.checked;
-          this.drawSpiral();
-          this.saveSettingsToStorage();
-        });
-      }
-
-      // Text clipping toggle
-      const textClippingToggle = document.getElementById('textClippingToggle');
-      if (textClippingToggle) {
-        textClippingToggle.addEventListener('change', (e) => {
-          this.state.textClippingEnabled = e.target.checked;
           this.drawSpiral();
           this.saveSettingsToStorage();
         });

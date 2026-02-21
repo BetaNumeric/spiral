@@ -1,6 +1,37 @@
 // Circle Rendering and Labels
 Object.assign(SpiralCalendar.prototype, {
-  generateRandomColor(calendarName = null) {
+  getYearProgressForColor(date = null) {
+    const referenceDate = date instanceof Date ? date : new Date();
+    const year = referenceDate.getUTCFullYear();
+    const yearStartUtc = Date.UTC(year, 0, 1, 0, 0, 0, 0);
+    const nextYearStartUtc = Date.UTC(year + 1, 0, 1, 0, 0, 0, 0);
+    const daysInYear = Math.max(1, Math.round((nextYearStartUtc - yearStartUtc) / (24 * 60 * 60 * 1000)));
+    const dayStartUtc = Date.UTC(
+      referenceDate.getUTCFullYear(),
+      referenceDate.getUTCMonth(),
+      referenceDate.getUTCDate(),
+      0, 0, 0, 0
+    );
+    const dayIndex = Math.max(0, Math.min(daysInYear - 1, Math.floor((dayStartUtc - yearStartUtc) / (24 * 60 * 60 * 1000))));
+    const progress = dayIndex / Math.max(1, daysInYear - 1);
+    return {
+      dayIndex,
+      daysInYear,
+      progress
+    };
+  },
+
+  generateSeasonalColor(date = null) {
+    const { progress } = this.getYearProgressForColor(date);
+    // Requested mapping: Jan 1 -> 0, Dec 31 -> 255
+    const hueByte = Math.round(progress * 255);
+    const hue = (hueByte / 255) * 360;
+    const saturation = 80;
+    const lightness = 60;
+    return `hsl(${Math.round(hue)}, ${saturation}%, ${lightness}%)`;
+  },
+
+  generateRandomColor(calendarName = null, eventDate = null) {
     const mode = this.state?.colorMode || 'random';
     if (mode === 'single') {
       return this.state.singleColor || '#4CAF50';
@@ -13,16 +44,6 @@ Object.assign(SpiralCalendar.prototype, {
       // Fallback to random if calendar color not found
       const hue = Math.random() * 360;
       return this.hslToHex(`hsl(${hue}, 70%, 60%)`);
-    }
-    if (mode === 'calendarMono') {
-      // Use grayscale of calendar color if available
-      if (calendarName && this.state.calendarColors && this.state.calendarColors[calendarName]) {
-        return this.toGrayscaleHex(this.state.calendarColors[calendarName]);
-      }
-      // Fallback: grayscale of a pleasant random color
-      const hue = Math.random() * 360;
-      const hex = this.hslToHex(`hsl(${hue}, 70%, 60%)`);
-      return this.toGrayscaleHex(hex);
     }
     if (mode === 'colorblind') {
       // Okabe–Ito colorblind-safe qualitative palette (excluding black)
@@ -37,6 +58,17 @@ Object.assign(SpiralCalendar.prototype, {
       ];
       return palette[Math.floor(Math.random() * palette.length)];
     }
+    if (mode === 'seasonal') {
+      return this.generateSeasonalColor(eventDate);
+    }
+    if (mode === 'saturation') {
+      const hue = Math.random() * 360;
+      const saturation = Math.max(0, Math.min(100, Number(this.state?.saturationLevel ?? 80)));
+      const lightnessBase = saturation < 15 ? 62 : 58;
+      const lightnessRange = saturation < 15 ? 14 : 10;
+      const lightness = lightnessBase + Math.random() * lightnessRange;
+      return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+    }
     if (mode === 'monoHue') {
       const hue = this.state.baseHue || 200;
       const saturation = 60 + Math.random() * 30; // 60-90%
@@ -49,12 +81,6 @@ Object.assign(SpiralCalendar.prototype, {
       const lightness = 75 + Math.random() * 10; // 75-85%
       return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
     }
-    if (mode === 'vibrant') {
-      const hue = Math.random() * 360;
-      const saturation = 75 + Math.random() * 20; // 75-95%
-      const lightness = 50 + Math.random() * 10; // 50-60%
-      return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-    }
     // default 'random'
     const hue = Math.random() * 360;
     const saturation = 60 + Math.random() * 30; // 60-90% saturation
@@ -62,43 +88,29 @@ Object.assign(SpiralCalendar.prototype, {
     return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
   },
 
-  toGrayscaleHex(color) {
-    try {
-      let hex = color;
-      if (!hex.startsWith('#')) {
-        hex = this.hslToHex(hex);
-      }
-      const clean = hex.replace('#', '');
-      const r = parseInt(clean.substring(0, 2), 16);
-      const g = parseInt(clean.substring(2, 4), 16);
-      const b = parseInt(clean.substring(4, 6), 16);
-      const y = Math.round((0.299 * r) + (0.587 * g) + (0.114 * b));
-      const v = Math.max(0, Math.min(255, y));
-      const h = v.toString(16).padStart(2, '0');
-      return `#${h}${h}${h}`;
-    } catch (_) {
-      return '#888888';
-    }
-  },
-
-  generateRandomColorForStorage(calendarName = null) {
+  generateRandomColorForStorage(calendarName = null, eventDate = null) {
     const mode = this.state?.colorMode || 'random';
     if (mode === 'calendar') {
       // Pleasant random color independent of calendar color
       const hue = Math.random() * 360;
       return this.hslToHex(`hsl(${hue}, 70%, 60%)`);
     }
-    const generated = this.generateRandomColor(calendarName);
+    const generated = this.generateRandomColor(calendarName, eventDate);
     return generated.startsWith('#') ? generated : this.hslToHex(generated);
   },
 
   getDisplayColorForEvent(event) {
     try {
-      if (this.state && (this.state.colorMode === 'calendar' || this.state.colorMode === 'calendarMono')) {
+      if (this.state && this.state.colorMode === 'seasonal') {
+        const eventStart = event && event.start ? new Date(event.start) : new Date();
+        const seasonal = this.generateSeasonalColor(eventStart);
+        return seasonal.startsWith('#') ? seasonal : this.hslToHex(seasonal);
+      }
+      if (this.state && this.state.colorMode === 'calendar') {
         const calName = event && ((event.calendar || 'Home').trim());
         const calColor = this.state.calendarColors && this.state.calendarColors[calName];
         if (calColor) {
-          return this.state.colorMode === 'calendarMono' ? this.toGrayscaleHex(calColor) : calColor;
+          return calColor;
         }
       }
       const c = event && event.color ? event.color : '#888888';
@@ -775,90 +787,6 @@ Object.assign(SpiralCalendar.prototype, {
       this.ctx.restore();
     },
 
-    drawMonthNumbers() {
-      // Only draw if month numbers are enabled
-      if (!this.state.showMonthNumbers) return;
-      
-      this.ctx.save();
-      this.ctx.textAlign = 'center';
-      this.ctx.textBaseline = 'middle';
-      this.ctx.fillStyle = CONFIG.LABEL_COLOR;
-      
-      // 7.5 degrees in radians
-      const tiltRadians = 7.5 * Math.PI / 180;
-      
-      for (const monthNum of this.monthNumbers) {
-        this.ctx.save();
-        this.ctx.translate(monthNum.x, monthNum.y);
-        
-        // Set font size for this specific month number (bold)
-        this.ctx.font = getFontString(monthNum.fontSize, 'bold ');
-        
-        // Apply rotation based on upright option
-        if (this.state.monthNumbersUpright) {
-          // Keep numbers upright - compensate for spiral rotation
-          if (this.state.staticMode) {
-            this.ctx.rotate(Math.PI); // Static mode: just flip 180°
-          } else {
-            // Non-static mode: compensate for current spiral rotation
-            this.ctx.rotate(this.state.rotation);
-          }
-        } else {
-          // Normal rotation behavior
-        // Tilt the month number by 7.5° in the direction of the segment
-        // If spiral counts from outside in, positive tilt is correct
-        this.ctx.rotate(tiltRadians);
-        
-        // Keep text upright in static mode
-        if (this.state.staticMode) {
-          this.ctx.rotate(Math.PI);
-          }
-        }
-        
-        // Apply clipping if this is a partial segment and clipping is enabled
-        if (this.state.textClippingEnabled && !monthNum.fullSegment && monthNum.clipStartTheta !== undefined) {
-          this.ctx.save();
-          
-          // Create clipping path for the segment
-          this.ctx.beginPath();
-          
-          if (monthNum.isCircleMode) {
-            // Circle mode clipping
-            const startAngle = -monthNum.clipStartAngle + CONFIG.INITIAL_ROTATION_OFFSET;
-            const endAngle = -monthNum.clipEndAngle + CONFIG.INITIAL_ROTATION_OFFSET;
-            
-            // Create a sector clipping path
-            this.ctx.moveTo(0, 0);
-            this.ctx.arc(0, 0, monthNum.clipOuterRadius * 1.1, startAngle, endAngle, false);
-            this.ctx.lineTo(0, 0);
-          } else {
-            // Spiral mode clipping
-            const startAngle = -monthNum.clipStartTheta + CONFIG.INITIAL_ROTATION_OFFSET;
-            const endAngle = -monthNum.clipEndTheta + CONFIG.INITIAL_ROTATION_OFFSET;
-            
-            // Create a sector clipping path
-            this.ctx.moveTo(0, 0);
-            this.ctx.arc(0, 0, monthNum.clipOuterRadius * 1.1, startAngle, endAngle, false);
-            this.ctx.lineTo(0, 0);
-          }
-          
-          this.ctx.clip();
-          
-          // Draw the text
-        this.ctx.fillText(monthNum.text, 0, 0);
-          
-          this.ctx.restore();
-        } else {
-          // Draw normally for full segments
-          this.ctx.fillText(monthNum.text, 0, 0);
-        }
-        
-        this.ctx.restore();
-      }
-      
-      this.ctx.restore();
-    },
-
     drawDayNumbers() {
       // Only draw if day numbers are enabled
       if (!this.state.showDayNumbers) return;
@@ -992,54 +920,12 @@ Object.assign(SpiralCalendar.prototype, {
           this.ctx.fillText(dayNum.text, 0, 0);
           this.ctx.restore();
         };
-        if (this.state.textClippingEnabled && !dayNum.fullSegment && (dayNum.clipStartTheta !== undefined || dayNum.clipStartAngle !== undefined)) {
-          this.ctx.save();
-          this.ctx.beginPath();
-          if (dayNum.isCircleMode) {
-            const startAngle = -dayNum.clipStartAngle + CONFIG.INITIAL_ROTATION_OFFSET;
-            const endAngle = -dayNum.clipEndAngle + CONFIG.INITIAL_ROTATION_OFFSET;
-            this.ctx.moveTo(0, 0);
-            this.ctx.arc(0, 0, dayNum.clipOuterRadius * 1.1, startAngle, endAngle, false);
-            this.ctx.lineTo(0, 0);
-          } else {
-            const startAngle = -dayNum.clipStartTheta + CONFIG.INITIAL_ROTATION_OFFSET;
-            const endAngle = -dayNum.clipEndTheta + CONFIG.INITIAL_ROTATION_OFFSET;
-            this.ctx.moveTo(0, 0);
-            this.ctx.arc(0, 0, dayNum.clipOuterRadius * 1.1, startAngle, endAngle, false);
-            this.ctx.lineTo(0, 0);
-          }
-          this.ctx.clip();
-          drawCentered();
-          this.ctx.restore();
-        } else {
-          drawCentered();
-        }
+        drawCentered();
         continue;
       }
 
       // Otherwise, curved rendering
-      if (this.state.textClippingEnabled && !dayNum.fullSegment && (dayNum.clipStartTheta !== undefined || dayNum.clipStartAngle !== undefined)) {
-        this.ctx.save();
-        this.ctx.beginPath();
-        if (dayNum.isCircleMode) {
-          const startAngle = -dayNum.clipStartAngle + CONFIG.INITIAL_ROTATION_OFFSET;
-          const endAngle = -dayNum.clipEndAngle + CONFIG.INITIAL_ROTATION_OFFSET;
-          this.ctx.moveTo(0, 0);
-          this.ctx.arc(0, 0, dayNum.clipOuterRadius * 1.1, startAngle, endAngle, false);
-          this.ctx.lineTo(0, 0);
-        } else {
-          const startAngle = -dayNum.clipStartTheta + CONFIG.INITIAL_ROTATION_OFFSET;
-          const endAngle = -dayNum.clipEndTheta + CONFIG.INITIAL_ROTATION_OFFSET;
-          this.ctx.moveTo(0, 0);
-          this.ctx.arc(0, 0, dayNum.clipOuterRadius * 1.1, startAngle, endAngle, false);
-          this.ctx.lineTo(0, 0);
-        }
-        this.ctx.clip();
-        drawCurvedText(dayNum);
-        this.ctx.restore();
-      } else {
-        drawCurvedText(dayNum);
-      }
+      drawCurvedText(dayNum);
       }
       
       this.ctx.restore();
@@ -1293,7 +1179,6 @@ Object.assign(SpiralCalendar.prototype, {
           const isSixPMSegment = segment === 18;
           
           const isFirstDayOfMonth = this.isFirstDayOfMonth(day, segment);
-          const isFirstHourOfMonth = this.isFirstHourOfMonth(day, segment);
           const isHovered = this.mouseState.hoveredSegment &&
                            this.mouseState.hoveredSegment.day === day &&
                            this.mouseState.hoveredSegment.segment === segment;
@@ -1304,62 +1189,6 @@ Object.assign(SpiralCalendar.prototype, {
         
 
 
-          
-          // Store month number info if this is the first hour of a month
-          if (isFirstHourOfMonth && segmentStartAngle !== null && segmentEndAngle !== null) {
-            // Determine if this is one of the outermost visible day rings (up to 2 days)
-            const currentDayTheta = day * 2 * Math.PI;
-            const outermostDayTheta = Math.floor(visibilityRange.max / (2 * Math.PI)) * 2 * Math.PI;
-            const secondOutermostDayTheta = outermostDayTheta - 2 * Math.PI;
-            const isOutermostDay = Math.abs(currentDayTheta - outermostDayTheta) < 0.1;
-            const isSecondOutermostDay = Math.abs(currentDayTheta - secondOutermostDayTheta) < 0.1;
-            const isOutermostTwoDays = isOutermostDay || isSecondOutermostDay;
-
-            // Skip month number if hiding outermost due to inside hour numbers
-            const skipForHourOverlap = (this.state.hideDayWhenHourInside && this.state.hourNumbersInsideSegment && this.state.showHourNumbers && isOutermostTwoDays);
-            if (!skipForHourOverlap) {
-            // Only collect on full segments if clipping is disabled
-            if (this.state.textClippingEnabled || (segmentStart === segmentStartAngle && segmentEnd === segmentEndAngle)) {
-            const monthNumber = this.getMonthNumber(day, segment);
-            const centerAngle = (segmentStart + segmentEnd) / 2;
-            const centerRadius = (innerRadius + outerRadius) / 2;
-            
-            // Calculate font size based on segment dimensions in circle mode
-            const segmentAngleSize = segmentEnd - segmentStart;
-            const radialHeight = outerRadius - innerRadius;
-            const arcWidth = centerRadius * segmentAngleSize;
-            
-            // Use smaller dimension, with some padding
-            const maxDimension = Math.min(radialHeight, arcWidth) * 0.4;
-            let fontSize = Math.max(1, Math.min(24, maxDimension));
-            
-            // Determine display text: replace January with year when enabled
-            const showYearForThis = this.state.showYearNumbers && monthNumber === 1;
-            const monthText = this.state.showMonthNames ? MONTHS_SHORT_UTC[monthNumber - 1] : monthNumber.toString();
-            const displayText = showYearForThis ? this.getYearNumber(day, segment).toString() : monthText;
-            
-            // Make year numbers slightly smaller than month names (4 digits vs 3 letters)
-            if (showYearForThis) {
-              fontSize = Math.max(1, Math.floor(fontSize * 0.85));
-            }
-            
-            this.monthNumbers.push({
-              x: centerRadius * Math.cos(-centerAngle + CONFIG.INITIAL_ROTATION_OFFSET),
-              y: centerRadius * Math.sin(-centerAngle + CONFIG.INITIAL_ROTATION_OFFSET),
-              text: displayText,
-              fontSize: fontSize,
-              isCircleMode: true,
-              // Add clipping information for circle mode
-              clipStartAngle: segmentStart,
-              clipEndAngle: segmentEnd,
-              clipInnerRadius: innerRadius,
-              clipOuterRadius: outerRadius,
-              centerAngle: centerAngle,
-              fullSegment: segmentStart === segmentStartAngle && segmentEnd === segmentEndAngle
-            });
-            }
-            }
-          }
           
           // Store day number info if this is the first hour of a day
           const isFirstHourOfDay = this.isFirstHourOfDay(day, segment);
@@ -1372,12 +1201,9 @@ Object.assign(SpiralCalendar.prototype, {
             const isSecondOutermostDay = Math.abs(currentDayTheta - secondOutermostDayTheta) < 0.1;
             const isOutermostTwoDays = isOutermostDay || isSecondOutermostDay;
 
-            // Skip day number if overlapping with month or if hiding outermost due to inside hour numbers
-            const skipForMonthOverlap = (isFirstDayOfMonth && this.state.showDayNumbers && this.state.showMonthNumbers);
+            // Skip day number if hiding outermost due to inside hour numbers
             const skipForHourOverlap = (this.state.hideDayWhenHourInside && this.state.hourNumbersInsideSegment && this.state.showHourNumbers && isOutermostTwoDays);
-            if (!skipForMonthOverlap && !skipForHourOverlap) {
-            // Only collect on full segments if clipping is disabled
-            if (this.state.textClippingEnabled || (segmentStart === segmentStartAngle && segmentEnd === segmentEndAngle)) {
+            if (!skipForHourOverlap && segmentStart === segmentStartAngle && segmentEnd === segmentEndAngle) {
             const dayNumber = this.getDayNumber(day, segment);
             const centerAngle = (segmentStart + segmentEnd) / 2;
             const centerRadius = (innerRadius + outerRadius) / 2;
@@ -1435,17 +1261,10 @@ Object.assign(SpiralCalendar.prototype, {
               text: fullDayLabel,
               fontSize: fontSize,
               isCircleMode: true,
-              // Add clipping information for circle mode
-              clipStartAngle: segmentStart,
-              clipEndAngle: segmentEnd,
-              clipInnerRadius: innerRadius,
-              clipOuterRadius: outerRadius,
               centerAngle: centerAngle,
               centerRadius: centerRadius,
-              onlyNumeric: (!this.state.dayLabelShowWeekday && !includeMonth && !includeYear),
-              fullSegment: segmentStart === segmentStartAngle && segmentEnd === segmentEndAngle
+              onlyNumeric: (!this.state.dayLabelShowWeekday && !includeMonth && !includeYear)
             });
-            }
             }
           }
         // Draw as a ring segment with inner and outer radius

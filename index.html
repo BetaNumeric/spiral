@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>Spiral Calendar</title>
-  <link rel="icon" type="image/png" href="icons/icon_32.png">
+  <link rel="icon" type="image/gif" href="icons/icon_32.gif">
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#ffffff">
 
@@ -317,6 +317,140 @@
     /* Settings panel styling */
     #settingsPanel label { display: flex; align-items: center; margin-bottom: .3em; margin-top: 1em; }
     #settingsPanel input[type=range] { margin: 0 0.5em; flex: 1; }
+    #settingsPanel .palette-selector {
+      margin-top: 1em;
+      padding: 0.55em;
+      border: 1px solid #ccc;
+      border-radius: 0.45em;
+      background: rgba(255, 255, 255, 0.35);
+    }
+    #settingsPanel .palette-selector-toggle {
+      width: 100%;
+      background: transparent;
+      border: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      color: inherit;
+      font: inherit;
+    }
+    #settingsPanel .palette-selector-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0;
+      font-weight: 600;
+      font-size: 0.93em;
+    }
+    #settingsPanel .palette-selector-content {
+      display: none;
+      margin-top: 0.45em;
+    }
+    #settingsPanel .palette-chevron {
+      margin-left: 0.35em;
+      display: inline-block;
+      transition: transform 0.15s ease;
+      font-size: 0.95em;
+    }
+    #settingsPanel .palette-selector.expanded .palette-chevron {
+      transform: rotate(180deg);
+    }
+    #settingsPanel .palette-current-mode {
+      font-size: 0.78em;
+      font-weight: 500;
+      color: #666;
+      background: rgba(0, 0, 0, 0.05);
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      border-radius: 999px;
+      padding: 0.15em 0.5em;
+      line-height: 1.2;
+    }
+    #settingsPanel .palette-mode-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.35em;
+    }
+    #settingsPanel .palette-mode-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3em;
+    }
+    #settingsPanel .palette-mode-btn {
+      appearance: none;
+      border: 1px solid #cfcfcf;
+      border-radius: 0.4em;
+      background: #f8f8f8;
+      padding: 0.45em 0.5em;
+      min-height: 54px;
+      cursor: pointer;
+      text-align: left;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 0.3em;
+      transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+    }
+    #settingsPanel .palette-mode-btn:hover {
+      background: #fff;
+      border-color: #9ea8b2;
+    }
+    #settingsPanel .palette-mode-btn:active {
+      transform: translateY(1px);
+    }
+    #settingsPanel .palette-mode-btn.active {
+      border-color: #59a7d7;
+      box-shadow: 0 0 0 2px rgba(89, 167, 215, 0.2);
+      background: #eef6fb;
+    }
+    #settingsPanel .palette-mode-name {
+      font-size: 0.82em;
+      font-weight: 600;
+      line-height: 1.1;
+    }
+    #settingsPanel .palette-mode-preview {
+      display: flex;
+      gap: 0.15em;
+      height: 0.46em;
+    }
+    #settingsPanel .palette-swatch {
+      flex: 1;
+      border-radius: 999px;
+      border: 1px solid rgba(0, 0, 0, 0.07);
+    }
+    #settingsPanel .palette-input-row {
+      margin-top: 0.1em;
+      margin-bottom: 0;
+      align-items: stretch;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25em;
+      width: 100%;
+    }
+    #settingsPanel .palette-input-label {
+      font-size: 0.75em;
+      color: #666;
+      line-height: 1;
+      margin-left: 0.05em;
+    }
+    #settingsPanel .palette-range-row {
+      display: flex;
+      align-items: center;
+      width: 100%;
+    }
+    #settingsPanel .palette-input-row input[type="color"] {
+      margin-left: 0;
+      width: 100%;
+      height: 2.05em;
+      padding: 0;
+      border-radius: 0.25em;
+    }
+    #settingsPanel .palette-input-row input[type="range"] {
+      margin: 0 0.45em 0 0;
+      flex: 1;
+    }
     
     /* Event input styling */
     #controls input[type="datetime-local"] {
@@ -366,6 +500,30 @@
 
     body.dark-mode #eventInputPanel .event-char-count {
       color: var(--dark-text-secondary) !important;
+    }
+    body.dark-mode #settingsPanel .palette-selector {
+      background: rgba(0, 0, 0, 0.15) !important;
+      border-color: var(--dark-border) !important;
+    }
+    body.dark-mode #settingsPanel .palette-mode-btn {
+      background: var(--dark-bg-secondary) !important;
+      border-color: var(--dark-border) !important;
+      color: var(--dark-text-primary) !important;
+    }
+    body.dark-mode #settingsPanel .palette-mode-btn.active {
+      border-color: #8fc6e5 !important;
+      box-shadow: 0 0 0 2px rgba(143, 198, 229, 0.28);
+    }
+    body.dark-mode #settingsPanel .palette-current-mode {
+      color: var(--dark-text-secondary) !important;
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+    body.dark-mode #settingsPanel .palette-input-label {
+      color: var(--dark-text-secondary) !important;
+    }
+    body.dark-mode #settingsPanel .palette-swatch {
+      border-color: rgba(255, 255, 255, 0.15);
     }
     
     #addEventBtn:hover {
@@ -447,6 +605,14 @@
 
       #eventInputPanel #eventList {
         max-height: 220px !important;
+      }
+
+      #settingsPanel .palette-mode-grid {
+        grid-template-columns: 1fr;
+      }
+
+      #settingsPanel .palette-mode-btn {
+        min-height: 48px;
       }
     }
 
@@ -648,26 +814,96 @@
         <label>Rotate: <input type="range" id="rotateSlider"min="0" max="720" step="1"   value="0"><span id="rotateVal">0°</span></label>
         <label>Rotate Max: <input type="range" id="rotateMaxSlider" min="360" max="131400" step="90" value="720"><span id="rotateMaxVal">720°</span></label>
         
-        <div style="display:flex; gap: .5em; align-items:center; flex-wrap: wrap; margin-top: 1em;">
-          <label style="margin: .25em 0;">Color Palette:
-            <select id="colorModeSelect" style="margin-left:.4em;">
-              <option value="random" selected>Random</option>
-              <option value="calendar">Calendar Color</option>
-              <option value="colorblind">Colorblind</option>
-              <option value="pastel">Pastel</option>
-              <option value="vibrant">Vibrant</option>
-              <option value="monoHue">Single Hue</option>
-              <option value="calendarMono">Monochrome</option>
-              <option value="single">Single Color</option>
-            </select>
-          </label>
-          <label id="singleColorWrapper" style="display:none; margin:.25em 0;">Color:
-            <input type="color" id="singleColorInput" value="#4CAF50" style="margin-left:.4em;">
-          </label>
-          <label id="baseHueWrapper" style="display:none; margin:.25em 0;">Hue:
-            <input type="range" id="baseHueSlider" min="0" max="360" step="1" value="200">
-            <span id="baseHueVal">200</span>
-          </label>
+        <div id="paletteSelectorSection" class="palette-selector">
+          <div class="palette-selector-header">
+            <button type="button" id="paletteSelectorToggle" class="palette-selector-toggle" aria-expanded="false" aria-controls="paletteSelectorContent">
+              <span>Color Palette</span>
+              <span>
+                <span id="paletteCurrentMode" class="palette-current-mode">Random</span>
+                <span id="paletteSelectorChevron" class="palette-chevron">&#9662;</span>
+              </span>
+            </button>
+          </div>
+          <div id="paletteSelectorContent" class="palette-selector-content">
+            <div id="colorModeButtons" class="palette-mode-grid" role="radiogroup" aria-label="Color palette mode">
+              <div class="palette-mode-card">
+                <button type="button" class="palette-mode-btn" data-color-mode="random" role="radio" aria-checked="false">
+                  <span class="palette-mode-name">Random</span>
+                  <span class="palette-mode-preview" data-preview-mode="random"></span>
+                </button>
+              </div>
+              <div class="palette-mode-card">
+                <button type="button" class="palette-mode-btn" data-color-mode="calendar" role="radio" aria-checked="false">
+                  <span class="palette-mode-name">Calendar Color</span>
+                  <span class="palette-mode-preview" data-preview-mode="calendar"></span>
+                </button>
+              </div>
+              <div class="palette-mode-card">
+                <button type="button" class="palette-mode-btn" data-color-mode="colorblind" role="radio" aria-checked="false">
+                  <span class="palette-mode-name">Colorblind</span>
+                  <span class="palette-mode-preview" data-preview-mode="colorblind"></span>
+                </button>
+              </div>
+              <div class="palette-mode-card">
+                <button type="button" class="palette-mode-btn" data-color-mode="pastel" role="radio" aria-checked="false">
+                  <span class="palette-mode-name">Pastel</span>
+                  <span class="palette-mode-preview" data-preview-mode="pastel"></span>
+                </button>
+              </div>
+              <div class="palette-mode-card">
+                <button type="button" class="palette-mode-btn" data-color-mode="saturation" role="radio" aria-checked="false">
+                  <span class="palette-mode-name">Saturation</span>
+                  <span class="palette-mode-preview" data-preview-mode="saturation"></span>
+                </button>
+                <label id="saturationWrapper" class="palette-input-row" style="display:none;">
+                  <span class="palette-input-label">Saturation</span>
+                  <span class="palette-range-row">
+                    <input type="range" id="saturationSlider" min="0" max="100" step="1" value="80">
+                    <span id="saturationVal">80</span>
+                  </span>
+                </label>
+              </div>
+              <div class="palette-mode-card">
+                <button type="button" class="palette-mode-btn" data-color-mode="seasonal" role="radio" aria-checked="false">
+                  <span class="palette-mode-name">Seasonal</span>
+                  <span class="palette-mode-preview" data-preview-mode="seasonal"></span>
+                </button>
+              </div>
+              <div class="palette-mode-card">
+                <button type="button" class="palette-mode-btn" data-color-mode="monoHue" role="radio" aria-checked="false">
+                  <span class="palette-mode-name">Single Hue</span>
+                  <span class="palette-mode-preview" data-preview-mode="monoHue"></span>
+                </button>
+                <label id="baseHueWrapper" class="palette-input-row" style="display:none;">
+                  <span class="palette-input-label">Hue</span>
+                  <span class="palette-range-row">
+                    <input type="range" id="baseHueSlider" min="0" max="360" step="1" value="200">
+                    <span id="baseHueVal">200</span>
+                  </span>
+                </label>
+              </div>
+              <div class="palette-mode-card">
+                <button type="button" class="palette-mode-btn" data-color-mode="single" role="radio" aria-checked="false">
+                  <span class="palette-mode-name">Single Color</span>
+                  <span class="palette-mode-preview" data-preview-mode="single"></span>
+                </button>
+                <label id="singleColorWrapper" class="palette-input-row" style="display:none;">
+                  <span class="palette-input-label">Color</span>
+                  <input type="color" id="singleColorInput" value="#4CAF50">
+                </label>
+              </div>
+            </div>
+          </div>
+          <select id="colorModeSelect" style="display:none;">
+            <option value="random" selected>Random</option>
+            <option value="calendar">Calendar Color</option>
+            <option value="colorblind">Colorblind</option>
+            <option value="pastel">Pastel</option>
+            <option value="saturation">Saturation</option>
+            <option value="seasonal">Seasonal</option>
+            <option value="monoHue">Single Hue</option>
+            <option value="single">Single Color</option>
+          </select>
         </div>
         
         <label style="display: flex; align-items: center;" data-dev-mode="true"><input type="checkbox" id="eventListColorStyleToggle"> Full row color list</label>
@@ -675,7 +911,6 @@
         
         <label><input type="checkbox" id="staticMode" checked> Static Mode</label>
         <label><input type="checkbox" id="circleMode"> Circle Mode</label>
-        <label><input type="checkbox" id="autoTimeAlign" checked> Auto Time Align</label>
         <label><input type="checkbox" id="showHourNumbers" checked> Show Hour Numbers</label>
 
         <!-- Hour numbers sub-options (only visible when hour numbers are enabled) -->
@@ -690,10 +925,6 @@
           <label style="display:flex; align-items:center; gap:0.5em;">
             <input type="checkbox" id="hourNumbersInsideSegment"/>
             <span>Place numbers inside outer segments</span>
-          </label>
-          <label style="display:flex; align-items:center; gap:0.5em;">
-            <input type="checkbox" id="hideDayWhenHourInside" checked/>
-            <span>Hide overlapping day/month numbers</span>
           </label>
           <label style="display:flex; align-items:center; gap:0.5em;">
             <input type="checkbox" id="hourNumbersUpright"/>
@@ -767,29 +998,6 @@
           </label>
         </div>
         
-        <label><input type="checkbox" id="showMonthNumbers"> Show Month Numbers</label>
-        
-        <!-- Month numbers sub-options (only visible when month numbers are enabled) -->
-        <div id="monthNumbersControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
-          <div style="font-size: 0.8em; color: #666; margin-bottom: 0.5em; font-style: italic;">
-            Customize month number display
-          </div>
-          <label style="display:flex; align-items:center; gap:0.5em;">
-            <input type="checkbox" id="showMonthNames" checked/>
-            <span>Show month names</span>
-          </label>
-          <label style="display:flex; align-items:center; gap:0.5em;">
-            <input type="checkbox" id="showYearNumbers"/>
-            <span>Show year numbers</span>
-          </label>
-          <label style="display:flex; align-items:center; gap:0.5em;">
-            <input type="checkbox" id="monthNumbersUpright"/>
-            <span>Keep numbers upright</span>
-          </label>
-        </div>
-
-
-        <label><input type="checkbox" id="textClippingToggle"> Text clipping</label>
         <label><input type="checkbox" id="timeDisplayToggle" checked> Time display</label>
         <label><input type="checkbox" id="segmentEdgesToggle"> Segment edges</label>        
         <label><input type="checkbox" id="showMidnightLinesToggle" checked> Show midnight lines</label>
@@ -901,6 +1109,7 @@
   <script src="js/app-version.js"></script>
   <script src="a2hs.js"></script>
   <script src="js/config-utils.js"></script>
+  <script src="js/settings-config.js"></script>
   <script src="js/core.js"></script>
   <script src="js/core-methods.js"></script>
   <script src="js/ui-handlers.js"></script>
@@ -925,23 +1134,35 @@
         return;
       }
       const effectiveDevMode = typeof getEffectiveDevMode !== 'undefined' ? getEffectiveDevMode() : DEV_MODE;
-      const advancedOptions = [
-        'rotateSlider', 'rotateVal',
-        'rotateMaxSlider', 'rotateMaxVal', 
-        'autoTimeAlign',
-        'showHourNumbers','hourNumbersControls',
-        'showDayNumbers','dayNumbersControls',
-        'showMonthNumbers','monthNumbersControls',
-        'textClippingToggle',
-        'timeDisplayToggle',
-        'segmentEdgesToggle',
-        'arcLinesToggle',
-        'overlayStackMode',
-        'tooltipToggle',
-        'animateToggle',
-        'speedSlider', 'speedVal',
-        'eventListColorStyleToggle'
-      ];
+      const devOptionsConfig =
+        (typeof APP_DEV_OPTIONS_CONFIG !== 'undefined' &&
+         APP_DEV_OPTIONS_CONFIG &&
+         typeof APP_DEV_OPTIONS_CONFIG === 'object')
+          ? APP_DEV_OPTIONS_CONFIG
+          : {};
+      const advancedOptions = Array.isArray(devOptionsConfig.advancedOptionIds)
+        ? devOptionsConfig.advancedOptionIds
+        : [
+            'rotateSlider', 'rotateVal',
+            'rotateMaxSlider', 'rotateMaxVal',
+            'showHourNumbers', 'hourNumbersControls',
+            'showDayNumbers', 'dayNumbersControls',
+            'timeDisplayToggle',
+            'segmentEdgesToggle',
+            'arcLinesToggle',
+            'overlayStackMode',
+            'tooltipToggle',
+            'animateToggle',
+            'speedSlider', 'speedVal',
+            'eventListColorStyleToggle'
+          ];
+      const devOnlySectionIds = Array.isArray(devOptionsConfig.devOnlySectionIds)
+        ? devOptionsConfig.devOnlySectionIds
+        : ['randomEventsSection', 'devModeLineToggles'];
+      const devModeToggleSectionId =
+        typeof devOptionsConfig.devModeToggleSectionId === 'string'
+          ? devOptionsConfig.devModeToggleSectionId
+          : 'devModeToggleSection';
       
       // Show/hide advanced options
       advancedOptions.forEach(id => {
@@ -956,20 +1177,15 @@
         }
       });
       
-      // Show/hide Random Events section
-      const randomEventsSection = document.getElementById('randomEventsSection');
-      if (randomEventsSection) {
-        randomEventsSection.style.display = effectiveDevMode ? 'block' : 'none';
-      }
-      
-      // Show/hide Dev Mode Line Toggles section
-      const devModeLineToggles = document.getElementById('devModeLineToggles');
-      if (devModeLineToggles) {
-        devModeLineToggles.style.display = effectiveDevMode ? 'block' : 'none';
-      }
+      devOnlySectionIds.forEach((id) => {
+        const section = document.getElementById(id);
+        if (section) {
+          section.style.display = effectiveDevMode ? 'block' : 'none';
+        }
+      });
       
       // Show/hide DEV_MODE toggle button
-      const devModeToggleSection = document.getElementById('devModeToggleSection');
+      const devModeToggleSection = document.getElementById(devModeToggleSectionId);
       if (devModeToggleSection) {
         devModeToggleSection.style.display = (typeof DEV_MODE !== 'undefined' && DEV_MODE) ? 'block' : 'none';
       }
