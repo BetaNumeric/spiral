@@ -315,27 +315,40 @@ Object.assign(SpiralCalendar.prototype, {
       if (!bottomCalendarDropdownMenu) {
         bottomCalendarDropdownMenu = document.createElement('div');
         bottomCalendarDropdownMenu.id = 'bottomCalendarDropdownMenu';
-        bottomCalendarDropdownMenu.style.cssText = 'display: none; position: fixed; background: ' + (isDarkModeCalendar ? 'var(--dark-bg-secondary)' : '#fff') + '; border: 2px solid ' + (isDarkModeCalendar ? 'var(--dark-border)' : '#ccc') + '; border-radius: 0.3em; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 200px; z-index: 10000; padding: 0.4em 0;';
+        bottomCalendarDropdownMenu.style.cssText = 'display: none; position: fixed; border-radius: 0.3em; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 200px; z-index: 10000; padding: 0.4em 0;';
         document.body.appendChild(bottomCalendarDropdownMenu);
       }
+      const applyBottomCalendarDropdownTheme = () => {
+        if (!bottomCalendarDropdownMenu) return;
+        const isDark = document.body.classList.contains('dark-mode');
+        bottomCalendarDropdownMenu.style.background = isDark ? 'var(--dark-bg-secondary)' : '#fff';
+        bottomCalendarDropdownMenu.style.border = `2px solid ${isDark ? 'var(--dark-border)' : '#ccc'}`;
+      };
+      applyBottomCalendarDropdownTheme();
       
       // Build calendar menu function (reuse logic from main dropdown)
       const buildBottomCalendarMenu = () => {
         if (!bottomCalendarDropdownMenu) return;
+        applyBottomCalendarDropdownTheme();
         bottomCalendarDropdownMenu.innerHTML = ''; // Clear existing
+        const isDarkMenu = document.body.classList.contains('dark-mode');
+        const itemBg = isDarkMenu ? 'var(--dark-bg-secondary)' : '#fff';
+        const itemText = isDarkMenu ? 'var(--dark-text-primary)' : '#333';
+        const itemBorder = isDarkMenu ? 'var(--dark-border)' : '#eee';
+        const mutedText = isDarkMenu ? 'var(--dark-text-secondary)' : '#666';
         
         // Header
         const header = document.createElement('div');
         header.className = 'calendar-header';
         header.textContent = 'Visible calendars';
-        header.style.cssText = 'padding: 0.5em 0.6em; color: #666; font-size: 0.85em; border-bottom: 1px solid #eee;';
+        header.style.cssText = `padding: 0.5em 0.6em; color: ${mutedText}; font-size: 0.85em; border-bottom: 1px solid ${itemBorder}; background: ${itemBg};`;
         bottomCalendarDropdownMenu.appendChild(header);
         
         // Visible calendar checkboxes
         (this.state.calendars || []).forEach(name => {
           const row = document.createElement('div');
           row.className = 'calendar-option';
-          row.style.cssText = 'padding: 0.45em 0.6em; display: flex; align-items: center; gap: 0.5em; cursor: pointer;';
+          row.style.cssText = `padding: 0.45em 0.6em; display: flex; align-items: center; gap: 0.5em; cursor: pointer; background: ${itemBg}; color: ${itemText}; border-bottom: 1px solid ${itemBorder};`;
           const cb = document.createElement('input');
           cb.type = 'checkbox';
           cb.checked = this.state.visibleCalendars.includes(name);
@@ -356,7 +369,22 @@ Object.assign(SpiralCalendar.prototype, {
           };
           const label = document.createElement('span');
           label.textContent = name;
-          label.style.cssText = 'flex:1;';
+          const canEditCalendar = !['Home', 'Work', 'Random'].includes(name);
+          label.style.cssText = `flex:1;${canEditCalendar ? ' cursor: pointer;' : ''}`;
+          if (canEditCalendar && typeof this.editCalendar === 'function') {
+            label.title = `Edit calendar "${name}"`;
+            label.addEventListener('click', (e) => {
+              e.stopPropagation();
+              this.playFeedback();
+              bottomCalendarDropdownMenu.style.display = 'none';
+              this.editCalendar(name, () => {
+                buildBottomCalendarMenu();
+                if (typeof this.buildCalendarMenu === 'function') this.buildCalendarMenu();
+                renderEventList();
+                this.drawSpiral();
+              });
+            });
+          }
           row.appendChild(cb);
           row.appendChild(label);
           
@@ -393,7 +421,7 @@ Object.assign(SpiralCalendar.prototype, {
         
         // Add "Add New Calendar" option
         const addNewCalendar = document.createElement('div');
-        addNewCalendar.style.cssText = 'padding: 0.5em 0.6em; cursor: pointer; border-top: 1px solid #eee; color: #333;';
+        addNewCalendar.style.cssText = `padding: 0.5em 0.6em; cursor: pointer; border-top: 1px solid ${itemBorder}; color: ${itemText}; background: ${itemBg};`;
         addNewCalendar.textContent = '+ Add New Calendar';
         addNewCalendar.onclick = (e) => {
           e.stopPropagation();
@@ -458,6 +486,7 @@ Object.assign(SpiralCalendar.prototype, {
         const isVisible = bottomCalendarDropdownMenu.style.display === 'block';
         if (!isVisible) {
           const isMobileDevice = window.innerWidth <= 768;
+          applyBottomCalendarDropdownTheme();
           buildBottomCalendarMenu();
           if (isMobileDevice) {
             bottomCalendarDropdownMenu.style.left = '50%';
@@ -484,6 +513,7 @@ Object.assign(SpiralCalendar.prototype, {
         this.playFeedback();
         const isVisible = bottomCalendarDropdownMenu.style.display === 'block';
         if (!isVisible) {
+          applyBottomCalendarDropdownTheme();
           bottomCalendarDropdownMenu.style.left = '50%';
           bottomCalendarDropdownMenu.style.top = '50%';
           bottomCalendarDropdownMenu.style.transform = 'translate(-50%, -50%)';
@@ -2106,6 +2136,13 @@ Object.assign(SpiralCalendar.prototype, {
     // Make buildCalendarMenu accessible for long press handler on calendar tags
     this.buildCalendarMenu = () => {
       if (!calendarDropdownMenu) return;
+      const isDarkMenu = document.body.classList.contains('dark-mode');
+      const itemBg = isDarkMenu ? 'var(--dark-bg-secondary)' : '#fff';
+      const itemText = isDarkMenu ? 'var(--dark-text-primary)' : '#333';
+      const itemBorder = isDarkMenu ? 'var(--dark-border)' : '#eee';
+      const mutedText = isDarkMenu ? 'var(--dark-text-secondary)' : '#666';
+      calendarDropdownMenu.style.background = itemBg;
+      calendarDropdownMenu.style.borderColor = isDarkMenu ? 'var(--dark-border)' : '#ccc';
       // Remove existing options (keep addNewCalendar)
       const existing = calendarDropdownMenu.querySelectorAll('.calendar-option, .calendar-header');
       existing.forEach(el => el.remove());
@@ -2113,13 +2150,13 @@ Object.assign(SpiralCalendar.prototype, {
       const header = document.createElement('div');
       header.className = 'calendar-header';
       header.textContent = 'Visible calendars';
-      header.style.cssText = 'padding: 0.5em 0.6em; color: #666; font-size: 0.85em; border-bottom: 1px solid #eee;';
+      header.style.cssText = `padding: 0.5em 0.6em; color: ${mutedText}; font-size: 0.85em; border-bottom: 1px solid ${itemBorder}; background: ${itemBg};`;
       calendarDropdownMenu.insertBefore(header, addNewCalendar);
       // Visible calendar checkboxes
       (this.state.calendars || []).forEach(name => {
         const row = document.createElement('div');
         row.className = 'calendar-option';
-        row.style.cssText = 'padding: 0.45em 0.6em; display: flex; align-items: center; gap: 0.5em; cursor: pointer;';
+        row.style.cssText = `padding: 0.45em 0.6em; display: flex; align-items: center; gap: 0.5em; cursor: pointer; background: ${itemBg}; color: ${itemText}; border-bottom: 1px solid ${itemBorder};`;
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.checked = this.state.visibleCalendars.includes(name);
@@ -2141,7 +2178,21 @@ Object.assign(SpiralCalendar.prototype, {
         };
         const label = document.createElement('span');
         label.textContent = name;
-        label.style.cssText = 'flex:1;';
+        const canEditCalendar = !['Home', 'Work', 'Random'].includes(name);
+        label.style.cssText = `flex:1;${canEditCalendar ? ' cursor: pointer;' : ''}`;
+        if (canEditCalendar && typeof this.editCalendar === 'function') {
+          label.title = `Edit calendar "${name}"`;
+          label.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.playFeedback();
+            calendarDropdownMenu.style.display = 'none';
+            this.editCalendar(name, () => {
+              this.buildCalendarMenu();
+              renderEventList();
+              this.drawSpiral();
+            });
+          });
+        }
         row.appendChild(cb);
         row.appendChild(label);
         
@@ -2177,6 +2228,11 @@ Object.assign(SpiralCalendar.prototype, {
         
         calendarDropdownMenu.insertBefore(row, addNewCalendar);
       });
+      if (addNewCalendar) {
+        addNewCalendar.style.borderTop = `1px solid ${itemBorder}`;
+        addNewCalendar.style.background = itemBg;
+        addNewCalendar.style.color = itemText;
+      }
     };
     
     // Initial build of calendar menu
@@ -2480,7 +2536,10 @@ Object.assign(SpiralCalendar.prototype, {
             
             // Apply day/night bias using rejection sampling
             if (biasDay) {
-              const localHour = (candidateStartDate.getUTCHours() + TIMEZONE_OFFSET) + candidateStartDate.getUTCMinutes() / 60;
+              const tzOffsetHours = (typeof this.getTimezoneOffsetHours === 'function')
+                ? this.getTimezoneOffsetHours(candidateStartDate)
+                : (candidateStartDate.getTimezoneOffset() / -60);
+              const localHour = ((candidateStartDate.getUTCHours() + tzOffsetHours) % 24 + 24) % 24 + candidateStartDate.getUTCMinutes() / 60;
               const { sunrise, sunset } = this.getSunTimesForDate(candidateStartDate);
               const isDay = sunrise <= sunset ? (localHour >= sunrise && localHour < sunset)
                                               : (localHour >= sunrise || localHour < sunset); // polar edge-case
@@ -2524,7 +2583,10 @@ Object.assign(SpiralCalendar.prototype, {
               
               // Apply day/night bias in fallback too
               if (biasDay) {
-            const localHour = (startDate.getUTCHours() + TIMEZONE_OFFSET) + startDate.getUTCMinutes() / 60;
+            const tzOffsetHours = (typeof this.getTimezoneOffsetHours === 'function')
+              ? this.getTimezoneOffsetHours(startDate)
+              : (startDate.getTimezoneOffset() / -60);
+            const localHour = ((startDate.getUTCHours() + tzOffsetHours) % 24 + 24) % 24 + startDate.getUTCMinutes() / 60;
                 const { sunrise, sunset } = this.getSunTimesForDate(startDate);
             const isDay = sunrise <= sunset ? (localHour >= sunrise && localHour < sunset)
                                                 : (localHour >= sunrise || localHour < sunset);
@@ -2689,9 +2751,11 @@ Object.assign(SpiralCalendar.prototype, {
       if (eventInputPanel.style.display === 'block') {
         const eventCalendarDropdown = document.getElementById('eventCalendarDropdown');
         const newCalendarDialog = document.getElementById('newCalendarDialog');
+        const editCalendarDialog = document.getElementById('editCalendarDialog');
         if (!eventInputPanel.contains(e.target) && !addEventPanelBtn.contains(e.target) && 
             (!eventCalendarDropdown || !eventCalendarDropdown.contains(e.target)) &&
-            (!newCalendarDialog || !newCalendarDialog.contains(e.target))) {
+            (!newCalendarDialog || !newCalendarDialog.contains(e.target)) &&
+            (!editCalendarDialog || !editCalendarDialog.contains(e.target))) {
           // Restore previous calendar visibility if it was filtered
           if (self._previousVisibleCalendars !== null) {
             self.state.visibleCalendars = [...self._previousVisibleCalendars];

@@ -35,6 +35,10 @@ class SpiralCalendar {
         hourNumbersStartAtOne: false,
         hourNumbersPosition: 2,
         showNightOverlay: true,
+        useLocationTimezone: false,
+        locationTimezoneId: null,
+        nightOverlayLat: LOCATION_COORDS.lat,
+        nightOverlayLng: LOCATION_COORDS.lng,
         showDayOverlay: true,
         colorMode: 'random',
         saturationLevel: 80,
@@ -126,6 +130,10 @@ class SpiralCalendar {
         originalTimeDisplay: null, // Store original time display state before auto-activation
         originalRadiusExponent: null, // Store original radius exponent before auto-activation
         showNightOverlay: this.defaultSettings.showNightOverlay,
+        useLocationTimezone: this.defaultSettings.useLocationTimezone,
+        locationTimezoneId: this.defaultSettings.locationTimezoneId,
+        nightOverlayLat: this.defaultSettings.nightOverlayLat,
+        nightOverlayLng: this.defaultSettings.nightOverlayLng,
         showDayOverlay: this.defaultSettings.showDayOverlay,
         colorMode: this.defaultSettings.colorMode,
         saturationLevel: this.defaultSettings.saturationLevel,
@@ -167,7 +175,10 @@ class SpiralCalendar {
     this.referenceTime = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
 
     // Set initial rotation so the current hour is at the bottom (using UTC)
-    const currentHour = now.getUTCHours() + TIMEZONE_OFFSET + now.getUTCMinutes() / 60;
+    const timezoneOffsetHours = (typeof this.getTimezoneOffsetHours === 'function')
+      ? this.getTimezoneOffsetHours(now)
+      : (now.getTimezoneOffset() / -60);
+    const currentHour = ((now.getUTCHours() + timezoneOffsetHours + now.getUTCMinutes() / 60) % 24 + 24) % 24;
       const initialRotation = (currentHour / CONFIG.SEGMENTS_PER_DAY) * 2 * Math.PI;
       this.state.rotation = initialRotation;
       // Update the rotateSlider UI to match

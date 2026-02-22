@@ -535,8 +535,18 @@ Object.assign(SpiralCalendar.prototype, {
     if (this.autoTimeAlignState.enabled) {
       // Use UTC time consistently (same logic as drawTimeDisplay)
       const now = new Date();
-      return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 
-                                 now.getUTCHours() + TIMEZONE_OFFSET, now.getUTCMinutes(), now.getUTCSeconds()));
+      const tzOffsetHours = (typeof this.getTimezoneOffsetHours === 'function')
+        ? this.getTimezoneOffsetHours(now)
+        : (now.getTimezoneOffset() / -60);
+      const baseUtcMs = Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        now.getUTCHours(),
+        now.getUTCMinutes(),
+        now.getUTCSeconds()
+      );
+      return new Date(baseUtcMs + tzOffsetHours * 60 * 60 * 1000);
     } else {
       // Calculate the time corresponding to the current spiral rotation (using UTC)
       // Same logic as drawTimeDisplay

@@ -960,10 +960,86 @@ setNightOverlayEnabled(enabled) {
   this.saveSettingsToStorage();
 },
 
+getTimeZoneOffsetHoursForZone(date = new Date(), timeZone = null) {
+  try {
+    const tz = (typeof timeZone === 'string' && timeZone.trim()) ? timeZone.trim() : null;
+    if (!tz || typeof Intl === 'undefined' || !Intl.DateTimeFormat) return null;
+    const d = date instanceof Date ? date : new Date(date);
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+      hour12: false
+    }).formatToParts(d);
+    const read = (type) => {
+      const part = parts.find((p) => p.type === type);
+      return part ? parseInt(part.value, 10) : NaN;
+    };
+    const year = read('year');
+    const month = read('month');
+    const day = read('day');
+    const hour = read('hour');
+    const minute = read('minute');
+    const second = read('second');
+    if (![year, month, day, hour, minute, second].every(Number.isFinite)) return null;
+    const asUtcMs = Date.UTC(year, month - 1, day, hour, minute, second);
+    const offsetHours = (asUtcMs - d.getTime()) / (60 * 60 * 1000);
+    return Number.isFinite(offsetHours) ? offsetHours : null;
+  } catch (_) {
+    return null;
+  }
+},
+
+getTimezoneOffsetHours(date = new Date()) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (this.state && this.state.useLocationTimezone && this.state.locationTimezoneId) {
+    const locationOffset = this.getTimeZoneOffsetHoursForZone(d, this.state.locationTimezoneId);
+    if (locationOffset !== null) return locationOffset;
+  }
+  return d.getTimezoneOffset() / -60;
+},
+
+setUseLocationTimezone(enabled) {
+  this.state.useLocationTimezone = !!enabled;
+  this._sunTimesCache = null;
+  if (this.autoTimeAlignState.enabled) {
+    this.updateRotationToCurrentTime();
+  } else {
+    this.drawSpiral();
+  }
+  this.saveSettingsToStorage();
+},
+
+setLocationTimeZoneId(timeZoneId) {
+  const normalized = (typeof timeZoneId === 'string' && timeZoneId.trim())
+    ? timeZoneId.trim()
+    : null;
+  this.state.locationTimezoneId = normalized;
+  this._sunTimesCache = null;
+  if (this.state.useLocationTimezone && this.autoTimeAlignState.enabled) {
+    this.updateRotationToCurrentTime();
+  } else {
+    this.drawSpiral();
+  }
+  this.saveSettingsToStorage();
+},
+
 setNightOverlayLocation(lat, lng) {
-  LOCATION_COORDS.lat = lat;
-  LOCATION_COORDS.lng = lng;
+  const latNum = Number(lat);
+  const lngNum = Number(lng);
+  if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return;
+  LOCATION_COORDS.lat = latNum;
+  LOCATION_COORDS.lng = lngNum;
+  this.state.nightOverlayLat = latNum;
+  this.state.nightOverlayLng = lngNum;
+  this._sunTimesCache = null;
   this.drawSpiral();
+  this.saveSettingsToStorage();
 },
 
 setDayOverlayEnabled(enabled) {
@@ -1078,8 +1154,18 @@ drawTimeDisplay(canvasWidth, canvasHeight) {
     if (this.autoTimeAlignState.enabled) {
       // Use UTC time consistently
       const now = new Date();
-      displayTime = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 
-                                     now.getUTCHours() + TIMEZONE_OFFSET, now.getUTCMinutes(), now.getUTCSeconds()));
+      const tzOffsetHours = (typeof this.getTimezoneOffsetHours === 'function')
+        ? this.getTimezoneOffsetHours(now)
+        : (now.getTimezoneOffset() / -60);
+      const baseUtcMs = Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        now.getUTCHours(),
+        now.getUTCMinutes(),
+        now.getUTCSeconds()
+      );
+      displayTime = new Date(baseUtcMs + tzOffsetHours * 60 * 60 * 1000);
     } else {
       // Calculate the time corresponding to the current spiral rotation (using UTC)
       const rotationInHours = (this.state.rotation / (2 * Math.PI)) * CONFIG.SEGMENTS_PER_DAY;

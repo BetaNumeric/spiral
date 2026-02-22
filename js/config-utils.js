@@ -57,8 +57,14 @@ lng: 8.8017
 };
 
 
-// Automatically calculate timezone offset in hours
+// Legacy static timezone offset (kept for backwards compatibility in code paths
+// that may still reference it).
 const TIMEZONE_OFFSET = new Date().getTimezoneOffset() / -60;
+
+function getDeviceTimezoneOffsetHours(date = new Date()) {
+  const d = date instanceof Date ? date : new Date(date);
+  return d.getTimezoneOffset() / -60;
+}
 
 //Calculate sunrise and sunset times for a given date and location
 
@@ -72,13 +78,19 @@ const [hour, minute] = timePart.split(':').map(Number);
 return new Date(Date.UTC(year, month - 1, day, hour, minute, 0, 0));
 }
 
-function calculateSunTimes(date, coords = LOCATION_COORDS) {
+function calculateSunTimes(date, coords = LOCATION_COORDS, timezoneOffsetHours = null) {
 try {
   const times = SunCalc.getTimes(date, coords.lat, coords.lng);
+  const tzOffset = Number.isFinite(timezoneOffsetHours)
+    ? timezoneOffsetHours
+    : getDeviceTimezoneOffsetHours(date);
   
   // Convert Date objects to hours
-  const sunrise = times.sunrise.getUTCHours() + TIMEZONE_OFFSET + times.sunrise.getUTCMinutes() / 60;
-  const sunset = times.sunset.getUTCHours() + TIMEZONE_OFFSET + times.sunset.getUTCMinutes() / 60;
+  const sunriseRaw = times.sunrise.getUTCHours() + tzOffset + times.sunrise.getUTCMinutes() / 60;
+  const sunsetRaw = times.sunset.getUTCHours() + tzOffset + times.sunset.getUTCMinutes() / 60;
+  const wrap = (h) => ((h % 24) + 24) % 24;
+  const sunrise = wrap(sunriseRaw);
+  const sunset = wrap(sunsetRaw);
   
   return { sunrise, sunset };
 } catch (error) {

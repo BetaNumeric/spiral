@@ -31,7 +31,10 @@ Object.assign(SpiralCalendar.prototype, {
     // Convert UTC event time to local time for the input picker
     const eventTime = new Date(type === 'start' ? event.start : event.end);
     // Apply timezone offset to convert from UTC (display) to local time (picker)
-    const localTime = new Date(eventTime.getTime() - (TIMEZONE_OFFSET * 60 * 60 * 1000));
+    const deviceOffsetHours = (typeof getDeviceTimezoneOffsetHours === 'function')
+      ? getDeviceTimezoneOffsetHours(eventTime)
+      : (eventTime.getTimezoneOffset() / -60);
+    const localTime = new Date(eventTime.getTime() - (deviceOffsetHours * 60 * 60 * 1000));
     input.value = formatDateTimeLocalForInput(localTime);
     
     document.body.appendChild(input);
@@ -422,6 +425,24 @@ Object.assign(SpiralCalendar.prototype, {
     dialog.style.padding = '1em';
     dialog.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
     dialog.style.minWidth = '300px';
+    dialog.style.boxSizing = 'border-box';
+    dialog.style.maxWidth = '92vw';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.textContent = '×';
+    closeBtn.title = 'Close';
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.style.position = 'absolute';
+    closeBtn.style.top = '0.35em';
+    closeBtn.style.right = '0.45em';
+    closeBtn.style.border = 'none';
+    closeBtn.style.background = 'none';
+    closeBtn.style.color = '#888';
+    closeBtn.style.fontSize = '1.3em';
+    closeBtn.style.lineHeight = '1';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.style.padding = '0.1em';
     
     const label = document.createElement('label');
     label.textContent = 'Enter new calendar name:';
@@ -501,6 +522,7 @@ Object.assign(SpiralCalendar.prototype, {
     buttonContainer.appendChild(cancelBtn);
     buttonContainer.appendChild(createBtn);
     
+    dialog.appendChild(closeBtn);
     dialog.appendChild(label);
     dialog.appendChild(input);
     dialog.appendChild(nameError);
@@ -613,9 +635,11 @@ Object.assign(SpiralCalendar.prototype, {
     };
     
     // Event handlers
+    closeBtn.addEventListener('click', cleanup);
     cancelBtn.addEventListener('click', cleanup);
     createBtn.addEventListener('click', handleCreate);
-    backdrop.addEventListener('click', cleanup);
+    // Do not close on backdrop click: some browsers emit a backdrop click
+    // when the native color picker closes, which would dismiss the dialog.
     
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
@@ -627,17 +651,258 @@ Object.assign(SpiralCalendar.prototype, {
       }
     });
     
-    // Click outside to close - enhanced
-    dialog.addEventListener('click', (e) => {
-      if (e.target === dialog) {
-        cleanup();
-      }
-    });
-    
     document.body.appendChild(backdrop);
     document.body.appendChild(dialog);
     
     return null; // Will be handled by callbacks
+  },
+
+  editCalendar(calendarName, onSuccess = null) {
+    if (!calendarName || !Array.isArray(this.state.calendars) || !this.state.calendars.includes(calendarName)) {
+      return null;
+    }
+
+    // Create a custom input dialog with character limit
+    const dialog = document.createElement('div');
+    dialog.id = 'editCalendarDialog';
+    dialog.style.position = 'fixed';
+    dialog.style.top = '50%';
+    dialog.style.left = '50%';
+    dialog.style.transform = 'translate(-50%, -50%)';
+    dialog.style.zIndex = '10000';
+    dialog.style.backgroundColor = '#fff';
+    dialog.style.border = '2px solid #ccc';
+    dialog.style.borderRadius = '0.5em';
+    dialog.style.padding = '1em';
+    dialog.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+    dialog.style.minWidth = '300px';
+    dialog.style.boxSizing = 'border-box';
+    dialog.style.maxWidth = '92vw';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.textContent = '×';
+    closeBtn.title = 'Close';
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.style.position = 'absolute';
+    closeBtn.style.top = '0.35em';
+    closeBtn.style.right = '0.45em';
+    closeBtn.style.border = 'none';
+    closeBtn.style.background = 'none';
+    closeBtn.style.color = '#888';
+    closeBtn.style.fontSize = '1.3em';
+    closeBtn.style.lineHeight = '1';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.style.padding = '0.1em';
+
+    const label = document.createElement('label');
+    label.textContent = 'Edit calendar name:';
+    label.style.display = 'block';
+    label.style.marginBottom = '0.5em';
+    label.style.fontWeight = 'bold';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.maxLength = 20;
+    input.value = calendarName;
+    input.style.width = '100%';
+    input.style.padding = '0.5em';
+    input.style.border = '1px solid #ccc';
+    input.style.borderRadius = '0.3em';
+    input.style.fontSize = '1em';
+    input.style.boxSizing = 'border-box';
+
+    const charCount = document.createElement('div');
+    charCount.style.textAlign = 'right';
+    charCount.style.fontSize = '0.8em';
+    charCount.style.color = '#666';
+    charCount.style.marginTop = '0.2em';
+    charCount.textContent = `${calendarName.length}/20`;
+
+    const nameError = document.createElement('div');
+    nameError.style.fontSize = '0.8em';
+    nameError.style.color = '#c0392b';
+    nameError.style.marginTop = '0.2em';
+    nameError.style.display = 'none';
+
+    const colorLabel = document.createElement('label');
+    colorLabel.textContent = 'Calendar color:';
+    colorLabel.style.display = 'block';
+    colorLabel.style.marginTop = '0.8em';
+    colorLabel.style.marginBottom = '0.3em';
+    colorLabel.style.fontWeight = 'bold';
+
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    const currentColorRaw = (this.state.calendarColors && this.state.calendarColors[calendarName]) || '#4CAF50';
+    const currentColorHex = currentColorRaw.startsWith('#') ? currentColorRaw : this.hslToHex(currentColorRaw);
+    colorInput.value = currentColorHex;
+    colorInput.style.width = '100%';
+    colorInput.style.height = '40px';
+    colorInput.style.border = '1px solid #ccc';
+    colorInput.style.borderRadius = '0.3em';
+    colorInput.style.cursor = 'pointer';
+
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.display = 'flex';
+    buttonContainer.style.gap = '0.5em';
+    buttonContainer.style.marginTop = '1em';
+    buttonContainer.style.justifyContent = 'flex-end';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.padding = '0.5em 1em';
+    cancelBtn.style.border = '1px solid #ccc';
+    cancelBtn.style.borderRadius = '0.3em';
+    cancelBtn.style.backgroundColor = '#f5f5f5';
+    cancelBtn.style.cursor = 'pointer';
+
+    const saveBtn = document.createElement('button');
+    saveBtn.textContent = 'Save';
+    saveBtn.style.padding = '0.5em 1em';
+    saveBtn.style.border = 'none';
+    saveBtn.style.borderRadius = '0.3em';
+    saveBtn.style.backgroundColor = '#4CAF50';
+    saveBtn.style.color = 'white';
+    saveBtn.style.cursor = 'pointer';
+
+    buttonContainer.appendChild(cancelBtn);
+    buttonContainer.appendChild(saveBtn);
+
+    dialog.appendChild(closeBtn);
+    dialog.appendChild(label);
+    dialog.appendChild(input);
+    dialog.appendChild(nameError);
+    dialog.appendChild(charCount);
+    dialog.appendChild(colorLabel);
+    dialog.appendChild(colorInput);
+    dialog.appendChild(buttonContainer);
+
+    const backdrop = document.createElement('div');
+    backdrop.style.position = 'fixed';
+    backdrop.style.top = '0';
+    backdrop.style.left = '0';
+    backdrop.style.width = '100%';
+    backdrop.style.height = '100%';
+    backdrop.style.backgroundColor = 'rgba(0, 0, 0, 0.3)';
+    backdrop.style.zIndex = '9999';
+
+    const cleanup = () => {
+      if (dialog.parentNode) dialog.remove();
+      if (backdrop.parentNode) backdrop.remove();
+    };
+
+    const handleSave = () => {
+      const trimmed = input.value.trim();
+      if (!trimmed) {
+        nameError.textContent = 'Please enter a calendar name.';
+        nameError.style.display = 'block';
+        input.focus();
+        return null;
+      }
+      if (trimmed !== calendarName && this.state.calendars.includes(trimmed)) {
+        nameError.textContent = 'Calendar already exists.';
+        nameError.style.display = 'block';
+        return null;
+      }
+
+      const oldName = calendarName;
+      const newName = trimmed;
+      const renamed = oldName !== newName;
+
+      if (renamed) {
+        this.state.calendars = (this.state.calendars || []).map((n) => (n === oldName ? newName : n));
+        this.state.visibleCalendars = (this.state.visibleCalendars || []).map((n) => (n === oldName ? newName : n));
+        if (this.state.selectedCalendar === oldName) this.state.selectedCalendar = newName;
+        if (this.selectedEventCalendar === oldName) this.selectedEventCalendar = newName;
+        if (typeof this.updateEventCalendarDisplay === 'function') {
+          this.updateEventCalendarDisplay();
+        }
+
+        let changedEventCount = 0;
+        (this.events || []).forEach((ev) => {
+          if ((ev.calendar || 'Home') === oldName) {
+            ev.calendar = newName;
+            ev.lastModified = Date.now();
+            changedEventCount++;
+          }
+        });
+        if (changedEventCount > 0) {
+          this._eventsVersion++;
+          this.saveEventsToStorage();
+        }
+      }
+
+      if (!this.state.calendarColors || typeof this.state.calendarColors !== 'object') {
+        this.state.calendarColors = {};
+      }
+      if (renamed) {
+        delete this.state.calendarColors[oldName];
+      }
+      this.state.calendarColors[newName] = colorInput.value;
+      this.saveSettingsToStorage();
+
+      if (onSuccess) {
+        try {
+          onSuccess(newName);
+        } catch (e) {
+          console.error('Error in editCalendar onSuccess callback:', e);
+        }
+      }
+
+      setTimeout(cleanup, 10);
+      return newName;
+    };
+
+    input.addEventListener('input', () => {
+      charCount.textContent = `${input.value.length}/20`;
+      nameError.style.display = 'none';
+      input.style.borderColor = '#ccc';
+    });
+
+    input.addEventListener('keypress', (e) => {
+      const invalidChars = ['"', "'", '\\', '/'];
+      if (invalidChars.includes(e.key)) {
+        e.preventDefault();
+      }
+    });
+
+    input.addEventListener('paste', () => {
+      setTimeout(() => {
+        let value = input.value;
+        const invalidChars = ['"', "'", '\\', '/'];
+        invalidChars.forEach((ch) => {
+          value = value.split(ch).join('');
+        });
+        if (value.length > 20) value = value.substring(0, 20);
+        input.value = value;
+        charCount.textContent = `${value.length}/20`;
+        nameError.style.display = 'none';
+        input.style.borderColor = '#ccc';
+      }, 0);
+    });
+
+    closeBtn.addEventListener('click', cleanup);
+    cancelBtn.addEventListener('click', cleanup);
+    saveBtn.addEventListener('click', handleSave);
+    // Do not close on backdrop click: some browsers emit a backdrop click
+    // when the native color picker closes, which would dismiss the dialog.
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleSave();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        cleanup();
+      }
+    });
+
+    document.body.appendChild(backdrop);
+    document.body.appendChild(dialog);
+    input.focus();
+    input.select();
+    return null;
   },
 
   openEventCalendarPicker() {

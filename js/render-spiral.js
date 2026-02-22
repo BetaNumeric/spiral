@@ -539,7 +539,10 @@ Object.assign(SpiralCalendar.prototype, {
         // Calculate info for display (reuse segmentId)
         const hoursAhead = segmentId;
         const segmentDate = new Date(this.referenceTime.getTime() + hoursAhead * 60 * 60 * 1000);
-      const startHour = segmentDate.getUTCHours() + TIMEZONE_OFFSET;
+      const tzOffsetHours = (typeof this.getTimezoneOffsetHours === 'function')
+        ? this.getTimezoneOffsetHours(segmentDate)
+        : (segmentDate.getTimezoneOffset() / -60);
+      const startHour = ((segmentDate.getUTCHours() + tzOffsetHours) % 24 + 24) % 24;
         const endHour = (startHour + 1) % 24;
       // Format date using UTC to avoid DST issues
         const weekday = WEEKDAYS_UTC[segmentDate.getUTCDay()];

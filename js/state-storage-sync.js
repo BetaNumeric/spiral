@@ -396,6 +396,10 @@ Object.assign(SpiralCalendar.prototype, {
         hourNumbersStartAtOne: this.state.hourNumbersStartAtOne,
         hourNumbersPosition: this.state.hourNumbersPosition,
         showNightOverlay: this.state.showNightOverlay,
+        useLocationTimezone: this.state.useLocationTimezone,
+        locationTimezoneId: this.state.locationTimezoneId,
+        nightOverlayLat: this.state.nightOverlayLat,
+        nightOverlayLng: this.state.nightOverlayLng,
         showDayOverlay: this.state.showDayOverlay,
         showGradientOverlay: this.state.showGradientOverlay,
         showTimeDisplay: this.state.originalTimeDisplay !== null ? this.state.originalTimeDisplay : this.state.showTimeDisplay,
@@ -534,6 +538,27 @@ Object.assign(SpiralCalendar.prototype, {
           ? Math.max(0, Math.min(100, Math.round(currentSaturation)))
           : fallbackSaturation;
 
+        // Backfill location/timezone settings used by night overlay.
+        if (typeof this.state.useLocationTimezone !== 'boolean') {
+          this.state.useLocationTimezone = !!this.defaultSettings.useLocationTimezone;
+        }
+        if (!(typeof this.state.locationTimezoneId === 'string' && this.state.locationTimezoneId.trim())) {
+          this.state.locationTimezoneId = this.defaultSettings.locationTimezoneId || null;
+        } else {
+          this.state.locationTimezoneId = this.state.locationTimezoneId.trim();
+        }
+        const defaultLat = Number(this.defaultSettings.nightOverlayLat ?? LOCATION_COORDS.lat);
+        const defaultLng = Number(this.defaultSettings.nightOverlayLng ?? LOCATION_COORDS.lng);
+        const loadedLat = Number(this.state.nightOverlayLat);
+        const loadedLng = Number(this.state.nightOverlayLng);
+        this.state.nightOverlayLat = Number.isFinite(loadedLat) ? loadedLat : defaultLat;
+        this.state.nightOverlayLng = Number.isFinite(loadedLng) ? loadedLng : defaultLng;
+        if (Number.isFinite(this.state.nightOverlayLat) && Number.isFinite(this.state.nightOverlayLng)) {
+          LOCATION_COORDS.lat = this.state.nightOverlayLat;
+          LOCATION_COORDS.lng = this.state.nightOverlayLng;
+        }
+        this._sunTimesCache = null;
+
         // Removed toggle: always keep overlap-hiding on.
         this.state.hideDayWhenHourInside = true;
         
@@ -552,6 +577,19 @@ Object.assign(SpiralCalendar.prototype, {
         this.state[key] = this.defaultSettings[key];
       }
     });
+    // Runtime/UI-only defaults not persisted in defaultSettings.
+    this.state.circleMode = false;
+    this.state.detailMode = null;
+    this.animationState.isAnimating = !!this.defaultSettings.animationEnabled;
+    this.animationState.speed = Number(this.defaultSettings.animationSpeed ?? 1.0);
+    if (!this.animationState.isAnimating) {
+      this.stopAnimation();
+    }
+    if (Number.isFinite(Number(this.state.nightOverlayLat)) && Number.isFinite(Number(this.state.nightOverlayLng))) {
+      LOCATION_COORDS.lat = Number(this.state.nightOverlayLat);
+      LOCATION_COORDS.lng = Number(this.state.nightOverlayLng);
+    }
+    this._sunTimesCache = null;
     // Removed toggle: always keep overlap-hiding on.
     this.state.hideDayWhenHourInside = true;
     
@@ -565,6 +603,9 @@ Object.assign(SpiralCalendar.prototype, {
     
     // Sync all UI controls
     this.syncAllUIControls();
+    if (this.animationState.isAnimating) {
+      this.startAnimation();
+    }
     // Apply dark mode class
     try { document.body.classList.toggle('dark-mode', !!this.state.darkMode); } catch(_) {}
     this.updateThemeColor();
@@ -646,6 +687,21 @@ Object.assign(SpiralCalendar.prototype, {
         element.checked = checkbox.value;
       }
     });
+    const useLocationTimezoneToggle = document.getElementById('useLocationTimezoneToggle');
+    if (useLocationTimezoneToggle) {
+      useLocationTimezoneToggle.checked = !!this.state.useLocationTimezone;
+    }
+    const latInput = document.getElementById('latInput');
+    const lngInput = document.getElementById('lngInput');
+    if (latInput && Number.isFinite(Number(this.state.nightOverlayLat))) {
+      latInput.value = Number(this.state.nightOverlayLat).toFixed(4);
+    }
+    if (lngInput && Number.isFinite(Number(this.state.nightOverlayLng))) {
+      lngInput.value = Number(this.state.nightOverlayLng).toFixed(4);
+    }
+    if (typeof window.updateLocationTimezoneInfo === 'function') {
+      window.updateLocationTimezoneInfo();
+    }
 
     // Event color mode composite controls
     const colorModeSelect = document.getElementById('colorModeSelect');
@@ -735,6 +791,23 @@ Object.assign(SpiralCalendar.prototype, {
     if (showSixAmPmLinesToggle) {
       showSixAmPmLinesToggle.checked = this.state.showSixAmPmLines;
     }
+
+    // Sync animation controls
+    const animateToggle = document.getElementById('animateToggle');
+    if (animateToggle) {
+      animateToggle.checked = !!this.animationState.isAnimating;
+    }
+    const speedSlider = document.getElementById('speedSlider');
+    const speedVal = document.getElementById('speedVal');
+    if (speedSlider && speedVal) {
+      const speed = Number(this.animationState.speed ?? 1);
+      speedSlider.value = String(speed);
+      speedVal.textContent = String(speed);
+    }
+    const animationSpeedControls = document.getElementById('animationSpeedControls');
+    if (animationSpeedControls) {
+      animationSpeedControls.style.display = this.animationState.isAnimating ? 'block' : 'none';
+    }
     
     // Sync overlay opacity sliders and show/hide controls
     const nightOverlayOpacitySlider = document.getElementById('nightOverlayOpacitySlider');
@@ -790,7 +863,10 @@ Object.assign(SpiralCalendar.prototype, {
   updateRotationToCurrentTime() {
     const now = new Date();
   // Ensure we're using UTC time consistently
-  const currentHour = now.getUTCHours() + TIMEZONE_OFFSET + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+  const tzOffsetHours = (typeof this.getTimezoneOffsetHours === 'function')
+    ? this.getTimezoneOffsetHours(now)
+    : (now.getTimezoneOffset() / -60);
+  const currentHour = ((now.getUTCHours() + tzOffsetHours + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600) % 24 + 24) % 24;
     const rotation = (currentHour / CONFIG.SEGMENTS_PER_DAY) * 2 * Math.PI;
     this.state.rotation = rotation;
     // Update the rotateSlider UI to match
@@ -1426,7 +1502,11 @@ getInfoCircleRadius(maxRadius) {
   const windowStart = new Date(this.referenceTime.getTime());
   const windowEnd = new Date(this.referenceTime.getTime() + (this.state.days + 1) * 24 * 60 * 60 * 1000 - 1);
   const coordsKey = `${LOCATION_COORDS.lat},${LOCATION_COORDS.lng}`;
+  const timezoneKey = (this.state.useLocationTimezone && this.state.locationTimezoneId)
+    ? `location:${this.state.locationTimezoneId}`
+    : 'device';
   if (this._sunTimesCache && this._sunTimesCache.coordsKey === coordsKey &&
+      this._sunTimesCache.timezoneKey === timezoneKey &&
       this._sunTimesCache.windowStartMs === windowStart.getTime() &&
       this._sunTimesCache.windowEndMs === windowEnd.getTime()) {
     return;
@@ -1437,12 +1517,15 @@ getInfoCircleRadius(maxRadius) {
   for (let d = new Date(startUTC); d.getTime() <= endUTC.getTime(); d = new Date(d.getTime() + 24 * 60 * 60 * 1000)) {
     const key = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
     try {
-      byDateKey.set(key, calculateSunTimes(d));
+      const tzOffset = (typeof this.getTimezoneOffsetHours === 'function')
+        ? this.getTimezoneOffsetHours(d)
+        : (d.getTimezoneOffset() / -60);
+      byDateKey.set(key, calculateSunTimes(d, LOCATION_COORDS, tzOffset));
     } catch (e) {
       byDateKey.set(key, { sunrise: 6, sunset: 18 });
     }
   }
-  this._sunTimesCache = { windowStartMs: windowStart.getTime(), windowEndMs: windowEnd.getTime(), coordsKey, byDateKey };
+  this._sunTimesCache = { windowStartMs: windowStart.getTime(), windowEndMs: windowEnd.getTime(), coordsKey, timezoneKey, byDateKey };
   },
 
   getSunTimesForDate(date) {
@@ -1452,7 +1535,10 @@ getInfoCircleRadius(maxRadius) {
   if (this._sunTimesCache && this._sunTimesCache.byDateKey && this._sunTimesCache.byDateKey.has(key)) {
     return this._sunTimesCache.byDateKey.get(key);
   }
-  return calculateSunTimes(date);
+  const tzOffset = (typeof this.getTimezoneOffsetHours === 'function')
+    ? this.getTimezoneOffsetHours(date)
+    : (date.getTimezoneOffset() / -60);
+  return calculateSunTimes(date, LOCATION_COORDS, tzOffset);
   },
 
   visibleWindowStart() {

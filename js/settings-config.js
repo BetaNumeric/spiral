@@ -37,6 +37,12 @@ const APP_SETTINGS_DEFAULTS = {
 
   // Overlays and colors
   showNightOverlay: true,
+  // Optional: use the selected location's timezone for current-time alignment
+  // and sunrise/sunset calculations.
+  useLocationTimezone: false,
+  locationTimezoneId: null,
+  nightOverlayLat: LOCATION_COORDS.lat,
+  nightOverlayLng: LOCATION_COORDS.lng,
   showDayOverlay: true,
   colorMode: 'random',
   saturationLevel: 80,
@@ -87,7 +93,7 @@ const APP_DEV_OPTIONS_CONFIG = {
     'showDayNumbers', 'dayNumbersControls',
     'timeDisplayToggle',
     'segmentEdgesToggle',
-    'arcLinesToggle',
+    'arcLinesToggle', 'showMonthLinesToggle',
     'overlayStackMode',
     'tooltipToggle',
     'animateToggle',
