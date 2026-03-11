@@ -161,10 +161,6 @@ Object.assign(SpiralCalendar.prototype, {
       const isEventPanel = !isBottomList;
       const isDesktopEventPanel = isEventPanel && !isMobile;
       const gapSize = (isMobile || isEventPanel) ? '0.5em' : '1em'; // Smaller gap for event panel
-      // When using row color style, extend header row to edges by using negative margins to counteract container padding
-      const useRowColor = this.state.eventListColorStyle === 'row';
-      // Use calc(100% + 1em) to extend width beyond container, counteracting both left and right padding
-      const horizontalMargin = (useRowColor && !isEventPanel) ? 'margin-left: -0.5em; margin-right: -0.5em; padding-left: 0.5em; padding-right: 0.5em; width: calc(100% + 1em);' : '';
       // Background color for sticky header - match list container background (non-transparent)
       const isDarkMode = document.body.classList.contains('dark-mode');
       const headerBg = isDarkMode ? 'var(--dark-bg-panel)' : (isEventPanel ? '#dedede' : '#ffffff');
@@ -173,7 +169,7 @@ Object.assign(SpiralCalendar.prototype, {
       const stickyTopOffset = !isEventPanel ? '-0.5em' : '0';
       const stickyTopPadding = !isEventPanel ? '0.3em' : '0';
       // Make header sticky with proper background and z-index, extending upward to cover container padding
-      allLi.style.cssText = `position: sticky; top: ${stickyTopOffset}; z-index: 5; background: ${headerBg}; padding: ${stickyTopPadding} 0 0.2em 0; ${horizontalMargin} border-bottom: 1px solid ${isDarkMode ? 'var(--dark-border)' : '#eee'}; display: flex; justify-content: ${isMobile || isEventPanel ? 'space-between' : 'center'}; align-items: center; gap: ${gapSize}; overflow: hidden; ${!horizontalMargin ? 'max-width: 100%; width: 100%;' : ''} box-sizing: border-box;`;
+      allLi.style.cssText = `position: sticky; top: ${stickyTopOffset}; z-index: 5; background: ${headerBg}; padding: ${stickyTopPadding} 0 0.2em 0; border-bottom: 1px solid ${isDarkMode ? 'var(--dark-border)' : '#eee'}; display: flex; justify-content: ${isMobile || isEventPanel ? 'space-between' : 'center'}; align-items: center; gap: ${gapSize}; overflow: hidden; max-width: 100%; width: 100%; box-sizing: border-box;`;
       
       // Left side with search input and "All:" text (exact same width as event items)
         const leftContent = document.createElement('div');
@@ -566,12 +562,8 @@ Object.assign(SpiralCalendar.prototype, {
         
         // Add All to Calendar button
         const addAllToCalendarBtn = document.createElement('button');
-      // Use row color style logic if enabled, otherwise use dark mode
-      const useRowColorHeader = this.state.eventListColorStyle === 'row';
       const isDarkModeAll = document.body.classList.contains('dark-mode');
-      const allIconSuffix = useRowColorHeader ? 
-        (document.body.classList.contains('dark-mode') ? '_white.png' : '.png') : 
-        (isDarkModeAll ? '_white.png' : '.png');
+      const allIconSuffix = isDarkModeAll ? '_white.png' : '.png';
       addAllToCalendarBtn.innerHTML = `<img src="icons/add_to_calendar${allIconSuffix}" alt="Add to Calendar" style="width: 16px; height: 16px; display: block; margin: 0; vertical-align: middle;">`;
         addAllToCalendarBtn.title = 'Add all events to calendar';
       addAllToCalendarBtn.style.cssText = 'background: none; border: none; cursor: pointer; opacity: 0.7; transition: opacity 0.2s; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; line-height: 0;';
@@ -633,32 +625,34 @@ Object.assign(SpiralCalendar.prototype, {
       // Get event display color
       const isDarkMode = document.body.classList.contains('dark-mode');
       const displayColor = normalizeHexColor(this.getDisplayColorForEvent(ev));
-      
-      // Check which style to use: 'row' for full row background, 'dot' for colored circle
-      // Always use dot style for event panel, respect user preference for bottom list
-      const useRowColor = !isEventPanel && this.state.eventListColorStyle === 'row';
-      
-      // Calculate text color based on background brightness (only needed for row style)
-      let textColor = '#333'; // Default text color
-      let brightness = 128;
-      if (useRowColor) {
+      const selectedEventsHere = this.mouseState.selectedSegment
+        ? this.getAllEventsForSegment(this.mouseState.selectedSegment.day, this.mouseState.selectedSegment.segment)
+        : [];
+      const selectedEventIndex = Math.min(this.mouseState.selectedEventIndex || 0, Math.max(0, selectedEventsHere.length - 1));
+      const selectedEvent = selectedEventsHere[selectedEventIndex] ? selectedEventsHere[selectedEventIndex].event : null;
+      const isSelectedEvent = selectedEvent === ev;
+      const activeEventIds = this._eventListActiveIds || new Set();
+      const eventId = ev.id || ev.start;
+      const isSpiralHighlightedEvent = activeEventIds.has(eventId);
+      const useFullRowHighlight = isSelectedEvent || isSpiralHighlightedEvent;
+      let selectedRowStyle = '';
+      if (useFullRowHighlight) {
         const hex = displayColor.replace('#', '');
         const r = parseInt(hex.substring(0, 2), 16);
         const g = parseInt(hex.substring(2, 4), 16);
         const b = parseInt(hex.substring(4, 6), 16);
-        brightness = (r * 299 + g * 587 + b * 114) / 1000;
-        textColor = brightness > 128 ? '#000' : '#fff';
+        const fillAlpha = isSelectedEvent
+          ? (isDarkMode ? '0.22' : '0.14')
+          : (isDarkMode ? '0.16' : '0.10');
+        const outlineAlpha = isSelectedEvent
+          ? (isDarkMode ? '0.40' : '0.28')
+          : (isDarkMode ? '0.26' : '0.18');
+        const outlineWidth = isSelectedEvent ? 1.5 : 1;
+        selectedRowStyle = `background-color: rgba(${r}, ${g}, ${b}, ${fillAlpha}); box-shadow: inset 0 0 0 ${outlineWidth}px rgba(${r}, ${g}, ${b}, ${outlineAlpha}); border-radius: 0.55em;`;
       }
-      
-      // Set background color and text color on the row (only if using row style)
-      // Use !important to override dark mode CSS that forces transparent backgrounds
-      const rowBackgroundStyle = useRowColor ? `background-color: ${displayColor} !important; color: ${textColor} !important;` : '';
-      // When using row color style, extend to edges by using negative margins to counteract container padding
-      // For bottom list, we need to counteract the 0.5em padding; for event panel, no negative margin needed (panel handles padding)
-      // Use calc(100% + 1em) to extend width beyond container, counteracting both left and right padding
-      const horizontalMargin = (useRowColor && !isEventPanel) ? 'margin-left: -0.5em; margin-right: -0.5em; padding-left: 0.5em; padding-right: 0.5em; width: calc(100% + 1em);' : '';
+      const horizontalMargin = (useFullRowHighlight && !isEventPanel) ? 'margin-left: -0.5em; margin-right: -0.5em; padding-left: 0.5em; padding-right: 0.5em; width: calc(100% + 1em);' : '';
       // Apply scaled padding for proximity-based height scaling
-      li.style.cssText = `padding: ${scaledPadding}em 0; ${horizontalMargin} border-bottom: 1px solid ${useRowColor ? 'rgba(0,0,0,0.1)' : '#eee'}; display: flex; justify-content: ${isMobile || isEventPanel ? 'space-between' : 'center'}; align-items: center; gap: ${gapSize}; overflow: hidden; ${!horizontalMargin ? 'max-width: 100%; width: 100%;' : ''} box-sizing: border-box; transition: padding 0.3s ease; ${rowBackgroundStyle}`;
+      li.style.cssText = `padding: ${scaledPadding}em 0; ${horizontalMargin} border-bottom: 1px solid #eee; display: flex; justify-content: ${isMobile || isEventPanel ? 'space-between' : 'center'}; align-items: center; gap: ${gapSize}; overflow: hidden; ${!horizontalMargin ? 'max-width: 100%; width: 100%;' : ''} box-sizing: border-box; transition: padding 0.3s ease, background-color 0.2s ease, box-shadow 0.2s ease; ${selectedRowStyle}`;
       
       // Left side with color dot and title
         const leftContent = document.createElement('div');
@@ -672,14 +666,10 @@ Object.assign(SpiralCalendar.prototype, {
         const minutes = pad2(eventDate.getUTCMinutes());
         const dateStr = `${hours}:${minutes}`;
       
-      // Add color dot - always show in event panel, only show in bottom list when using dot style
-      const showColorDot = isEventPanel || !useRowColor;
-      if (showColorDot) {
-        const colorDot = document.createElement('span');
-        colorDot.style.cssText = 'display:inline-block;width:14px;height:14px;min-width:14px;max-width:14px;flex-shrink:0;border-radius:50%;margin-right:7px;vertical-align:middle;box-sizing:border-box;';
-        colorDot.style.backgroundColor = displayColor;
-        leftContent.appendChild(colorDot);
-      }
+      const colorDot = document.createElement('span');
+      colorDot.style.cssText = 'display:inline-block;width:14px;height:14px;min-width:14px;max-width:14px;flex-shrink:0;border-radius:50%;margin-right:7px;vertical-align:middle;box-sizing:border-box;';
+      colorDot.style.backgroundColor = displayColor;
+      leftContent.appendChild(colorDot);
       const titleSpan = document.createElement('span');
       titleSpan.style.cssText = 'font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;';
       titleSpan.textContent = ev.title || 'Untitled Event';
@@ -794,8 +784,7 @@ Object.assign(SpiralCalendar.prototype, {
       const dateWidth = (isMobile || isEventPanel) ? (isMobile ? '50px' : 'flex: 0 0 auto; min-width: 40px; max-width: 55px;') : '55px';
         const middleContent = document.createElement('div');
       const dateWidthStyle = (isMobile || isEventPanel) && !isMobile ? dateWidth : `width: ${isMobile ? '50px' : '55px'};`;
-      // Use the calculated text color for time (only if using row style, otherwise use default)
-      const dateTextColor = useRowColor ? textColor : (isDarkMode ? 'var(--dark-text-primary)' : '#666');
+      const dateTextColor = isDarkMode ? 'var(--dark-text-primary)' : '#666';
       middleContent.style.cssText = `color: ${dateTextColor}; font-size: ${isMobile ? '0.85em' : '0.90em'}; white-space: nowrap; ${dateWidthStyle} ${isMobile || isEventPanel ? 'flex-shrink: 1; min-width: 35px;' : 'flex-shrink: 0;'} ${!isMobile && !isEventPanel ? 'max-width: 55px;' : ''} text-align: left; overflow: hidden; text-overflow: ellipsis;`;
         middleContent.textContent = dateStr;
         
@@ -805,12 +794,10 @@ Object.assign(SpiralCalendar.prototype, {
         const rightContent = document.createElement('div');
       rightContent.style.cssText = `display: flex; align-items: center; justify-content: flex-end; gap: ${isMobile ? '3px' : '4px'}; width: ${buttonWidth}; flex-shrink: 0; min-width: ${buttonWidth};`;
 
-        // Add to Calendar button
-        const addToCalendarBtn = document.createElement('button');
+      // Add to Calendar button
+      const addToCalendarBtn = document.createElement('button');
       let iconSrc, iconAlt, titleText;
-      
-      // Use white icon for dark backgrounds, dark icon for light backgrounds (only if using row style)
-      const iconSuffix = useRowColor ? (brightness > 128 ? '.png' : '_white.png') : (isDarkMode ? '_white.png' : '.png');
+      const iconSuffix = isDarkMode ? '_white.png' : '.png';
       
       if (ev.addedToCalendar) {
         // Check if event has been modified since being added to calendar
@@ -1014,12 +1001,11 @@ Object.assign(SpiralCalendar.prototype, {
 
       addToCalendarBtn.onclick = createAddToCalendarHandler(ev);
 
-        // Remove button - adjust color based on background brightness (only if using row style)
+        // Remove button
         const removeBtn = document.createElement('button');
         removeBtn.textContent = '×';
         removeBtn.title = 'Remove event';
-        // Use appropriate color for remove button based on background
-        const removeBtnColor = useRowColor ? (brightness > 128 ? '#b44' : '#ff6b6b') : '#b44';
+        const removeBtnColor = isDarkMode ? '#ff8080' : '#b44';
         removeBtn.style.cssText = `background: none; border: none; color: ${removeBtnColor}; font-size: 1.1em; cursor: pointer; opacity: 0.8; transition: opacity 0.2s; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;`;
         removeBtn.onmouseover = () => removeBtn.style.opacity = '1';
         removeBtn.onmouseout = () => removeBtn.style.opacity = '0.8';
@@ -1260,6 +1246,29 @@ Object.assign(SpiralCalendar.prototype, {
           wrap.appendChild(msg);
           wrap.appendChild(hint);
           li.appendChild(wrap);
+
+          if (!hasSearchQuery) {
+            li.style.cursor = 'pointer';
+            li.tabIndex = 0;
+            li.setAttribute('role', 'button');
+            li.setAttribute('aria-label', 'Add event');
+
+            const openAddEventPanel = () => {
+              const addEventPanelBtn = document.getElementById('addEventPanelBtn');
+              if (!addEventPanelBtn) return;
+              this.playFeedback(0.1, 6);
+              addEventPanelBtn.click();
+            };
+
+            li.addEventListener('click', openAddEventPanel);
+            li.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openAddEventPanel();
+              }
+            });
+          }
+
           return li;
         };
 
@@ -1284,12 +1293,14 @@ Object.assign(SpiralCalendar.prototype, {
       
       // Create a Set of highlighted event IDs (for fast lookup)
       const highlightedEventIds = new Set();
+      const activeEventIds = new Set();
       
       if (currentEvents.length > 0) {
         // Highlight all currently happening events (including overlapping ones)
         currentEvents.forEach(e => {
           const eventId = e.id || e.start;
           highlightedEventIds.add(eventId);
+          activeEventIds.add(eventId);
         });
       } else {
         // No current event, find the next upcoming event
@@ -1299,7 +1310,9 @@ Object.assign(SpiralCalendar.prototype, {
           highlightedEventIds.add(eventId);
         }
       }
-      
+      this._eventListActiveIds = activeEventIds;
+      this._eventListHighlightedIds = highlightedEventIds;
+
       // Calculate height scale for each event - scale all highlighted events (current or next)
       const getEventHeightScale = (event) => {
         // Scale all highlighted events (3.5x size)
@@ -1360,14 +1373,10 @@ Object.assign(SpiralCalendar.prototype, {
         const leftWidth = isDesktopEventPanel ? 'flex: 1 1 0; min-width: 48px; ' : ((isMobile || isEventPanel) ? 'flex: 1; min-width: 60px; ' : 'width: 300px; ');
         leftContent.style.cssText = 'display: flex; align-items: center; ' + leftWidth + 'min-width: ' + (isDesktopEventPanel ? '48px' : ((isMobile || isEventPanel) ? '60px' : '0')) + '; flex-shrink: 1;';
         
-        // When dot style is enabled, add an invisible placeholder dot to align with event color circles
-        const useRowColor = this.state.eventListColorStyle === 'row';
-        if (!useRowColor) {
-          // Add invisible placeholder dot (14px width + 7px margin) to align with event color circles
-          const placeholderDot = document.createElement('span');
-          placeholderDot.style.cssText = 'display:inline-block;width:14px;height:14px;min-width:14px;max-width:14px;flex-shrink:0;margin-right:7px;visibility:hidden;';
-          leftContent.appendChild(placeholderDot);
-        }
+        // Add an invisible placeholder dot to align with event color circles.
+        const placeholderDot = document.createElement('span');
+        placeholderDot.style.cssText = 'display:inline-block;width:14px;height:14px;min-width:14px;max-width:14px;flex-shrink:0;margin-right:7px;visibility:hidden;';
+        leftContent.appendChild(placeholderDot);
         
         const titleSpan = document.createElement('span');
         titleSpan.style.cssText = `font-weight: 600; font-size: ${isMobile ? '0.9em' : '0.95em'}; color: ${isDarkMode ? 'var(--dark-text-primary)' : '#333'};`;

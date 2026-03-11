@@ -160,7 +160,7 @@
     body.dark-mode #bottomEventListItems li { 
       border-bottom-color: var(--dark-border) !important; 
     }
-    /* Allow inline background colors to show through in row color mode */
+    /* Allow inline background colors to show through for highlighted rows */
     body.dark-mode #bottomEventListItems li[style*="background-color"] {
       color: inherit !important;
     }
@@ -909,9 +909,6 @@
           </select>
         </div>
         
-        <label style="display: flex; align-items: center;" data-dev-mode="true"><input type="checkbox" id="eventListColorStyleToggle"> Full row color list</label>
-         
-        
         <label><input type="checkbox" id="staticMode" checked> Static Mode</label>
         <label><input type="checkbox" id="circleMode"> Circle Mode</label>
         <label><input type="checkbox" id="showHourNumbers" checked> Show Hour Numbers</label>
@@ -1161,8 +1158,7 @@
             'overlayStackMode',
             'tooltipToggle',
             'animateToggle',
-            'speedSlider', 'speedVal',
-            'eventListColorStyleToggle'
+            'speedSlider', 'speedVal'
           ];
       const devOnlySectionIds = Array.isArray(devOptionsConfig.devOnlySectionIds)
         ? devOptionsConfig.devOnlySectionIds

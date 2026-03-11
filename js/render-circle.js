@@ -843,6 +843,9 @@ Object.assign(SpiralCalendar.prototype, {
       }
       const totalWidth = prevWidth;
       if (!isFinite(totalWidth) || totalWidth < 0.5) { this.ctx.restore(); return; }
+      const outerEndClipTheta = (!item.isCircleMode && Number.isFinite(item.outerEndClipTheta))
+        ? item.outerEndClipTheta
+        : null;
       // Left-align: begin at anchor and advance along path, with a small pre-offset so text starts earlier
       let theta = baseTheta;
       // Helper to compute arc-length-based theta delta for a given width using mid-curve
@@ -875,6 +878,19 @@ Object.assign(SpiralCalendar.prototype, {
       const preOffsetPx = fontPx * 0.85; // tweakable leading offset
       const preDTheta = stepByArc(theta, preOffsetPx);
       theta = theta + preDTheta;
+      if (outerEndClipTheta !== null && text.length > 0) {
+        const firstCharWidth = advances[0];
+        const firstHalfAdvance = firstCharWidth * 0.5;
+        const firstDThetaHalf = stepByArc(theta, firstHalfAdvance);
+        const firstThetaMid = theta - firstDThetaHalf;
+        const firstDThetaHalf2 = stepByArc(firstThetaMid, firstHalfAdvance);
+        const firstThetaNext = firstThetaMid - firstDThetaHalf2;
+        const firstCharMaxTheta = Math.max(theta, firstThetaNext);
+        if (outerEndClipTheta < firstCharMaxTheta - 1e-5) {
+          this.ctx.restore();
+          return;
+        }
+      }
       for (let i = 0; i < text.length; i++) {
         const ch = text[i];
         const chWidth = advances[i];
@@ -896,7 +912,6 @@ Object.assign(SpiralCalendar.prototype, {
         const tangentAngle = Math.atan2(y2 - y, x2 - x);
         this.ctx.save();
         this.ctx.translate(x, y);
-        // Upright vs tangent orientation
         if (this.state.dayNumbersUpright) {
           if (this.state.staticMode) {
             this.ctx.rotate(Math.PI);
@@ -904,12 +919,10 @@ Object.assign(SpiralCalendar.prototype, {
             this.ctx.rotate(this.state.rotation);
           }
         } else {
-          // Rotate to the actual tangent direction in canvas space
           this.ctx.rotate(tangentAngle);
         }
         this.ctx.fillText(ch, 0, 0);
         this.ctx.restore();
-        // Advance remaining half to end of glyph
         const dThetaHalf2 = stepByArc(thetaMid, halfAdvance);
         theta = thetaMid - dThetaHalf2;
       }
@@ -938,6 +951,22 @@ Object.assign(SpiralCalendar.prototype, {
           this.ctx.fillText(dayNum.text, 0, 0);
           this.ctx.restore();
         };
+        const outerEndClipTheta = (!dayNum.isCircleMode && Number.isFinite(dayNum.outerEndClipTheta))
+          ? dayNum.outerEndClipTheta
+          : null;
+        if (outerEndClipTheta !== null) {
+          this.ctx.save();
+          this.ctx.font = getFontString(dayNum.fontSize);
+          const textWidth = this.ctx.measureText(dayNum.text).width;
+          this.ctx.restore();
+          const radius = Math.max(1, dayNum.centerRadius || 1);
+          const approxHalfThetaSpan = (textWidth * 0.5) / radius;
+          const centerTheta = Number.isFinite(dayNum.centerTheta) ? dayNum.centerTheta : 0;
+          const textOuterTheta = centerTheta + approxHalfThetaSpan;
+          if (outerEndClipTheta < textOuterTheta - 1e-5) {
+            continue;
+          }
+        }
         drawCentered();
         continue;
       }

@@ -1962,9 +1962,9 @@ Object.assign(SpiralCalendar.prototype, {
 
             // Skip day number if hiding outermost due to inside hour numbers
             const skipForHourOverlap = (this.state.hideDayWhenHourInside && this.state.hourNumbersInsideSegment && this.state.showHourNumbers && isOutermostTwoDays);
-            if (!skipForHourOverlap && startTheta === rawStartAngle && endTheta === rawEndAngle) {
+            if (!skipForHourOverlap) {
             const dayNumber = this.getDayNumber(day, segment);
-            const centerTheta = (startTheta + endTheta) / 2;
+            const centerTheta = (rawStartAngle + rawEndAngle) / 2;
             const centerRadius = radiusFunction(centerTheta + Math.PI); // Middle of segment (between inner and outer)
             // Build weekday + day label (e.g., Mon 28)
             // Defaults in case of errors
@@ -2006,7 +2006,7 @@ Object.assign(SpiralCalendar.prototype, {
             }
             
             // Calculate font size based on segment dimensions
-            const segmentAngleSize = endTheta - startTheta;
+            const segmentAngleSize = rawEndAngle - rawStartAngle;
             const innerRadius = radiusFunction(centerTheta);
             const outerRadius = radiusFunction(centerTheta + 2 * Math.PI);
             const radialHeight = outerRadius - innerRadius;
@@ -2025,6 +2025,7 @@ Object.assign(SpiralCalendar.prototype, {
               radiusFunction: radiusFunction,
               centerTheta: centerTheta,
               centerRadius: centerRadius,
+              outerEndClipTheta: endTheta < rawEndAngle - 0.0001 ? endTheta : null,
               onlyNumeric: (!this.state.dayLabelShowWeekday && !includeMonth && !includeYear)
             });
             }

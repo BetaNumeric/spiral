@@ -363,17 +363,6 @@ Object.assign(SpiralCalendar.prototype, {
       });
     }
 
-    const eventListColorStyleToggle = document.getElementById('eventListColorStyleToggle');
-    if (eventListColorStyleToggle) {
-      eventListColorStyleToggle.addEventListener('change', function(e) {
-        self.state.eventListColorStyle = e.target.checked ? 'row' : 'dot';
-        self.saveSettingsToStorage();
-        if (typeof window.renderEventList === 'function') {
-          window.renderEventList();
-        }
-      });
-    }
-
     // Dev mode line toggle handlers
     const showMonthLinesToggle = document.getElementById('showMonthLinesToggle');
     if (showMonthLinesToggle) {

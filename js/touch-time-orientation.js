@@ -1420,6 +1420,10 @@ drawTimeDisplay(canvasWidth, canvasHeight) {
   
 
   
+  const isDefaultTimeDisplayPosition = !timeDisplayCollapsed &&
+    pullUpOffset < 0.5 &&
+    Math.abs(timeDisplayHeight - baseHeight) < 0.5;
+
   // Draw border on top and bottom of the time display only (inside edge to avoid clipping)
   const halfStrokeWidth = this.ctx.lineWidth / 2;
   // Top border
@@ -1427,11 +1431,14 @@ drawTimeDisplay(canvasWidth, canvasHeight) {
   this.ctx.moveTo(halfStrokeWidth, timeDisplayY + halfStrokeWidth);
   this.ctx.lineTo(canvasWidth - halfStrokeWidth, timeDisplayY + halfStrokeWidth);
   this.ctx.stroke();
-  // Bottom border
-  this.ctx.beginPath();
-  this.ctx.moveTo(halfStrokeWidth, timeDisplayY + timeDisplayHeight - halfStrokeWidth);
-  this.ctx.lineTo(canvasWidth - halfStrokeWidth, timeDisplayY + timeDisplayHeight - halfStrokeWidth);
-  this.ctx.stroke();
+  // In the default resting position, keep only the top stroke.
+  if (!isDefaultTimeDisplayPosition) {
+    // Bottom border
+    this.ctx.beginPath();
+    this.ctx.moveTo(halfStrokeWidth, timeDisplayY + timeDisplayHeight - halfStrokeWidth);
+    this.ctx.lineTo(canvasWidth - halfStrokeWidth, timeDisplayY + timeDisplayHeight - halfStrokeWidth);
+    this.ctx.stroke();
+  }
   
   // If collapsed, draw only a small grab-handle indicator and skip text
   if (timeDisplayCollapsed) {

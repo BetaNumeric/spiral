@@ -60,7 +60,6 @@ class SpiralCalendar {
           Home: '#59a7d7',
           Work: '#d57ff5'
         },
-        eventListColorStyle: 'dot',
         showMonthLines: true,
         showMidnightLines: true,
         showNoonLines: false,
@@ -150,7 +149,6 @@ class SpiralCalendar {
         selectedCalendar: this.defaultSettings.selectedCalendar,
         visibleCalendars: this.defaultSettings.visibleCalendars.slice(),
         calendarColors: JSON.parse(JSON.stringify(this.defaultSettings.calendarColors)),
-        eventListColorStyle: this.defaultSettings.eventListColorStyle,
         // Dev mode line toggles
         showMonthLines: this.defaultSettings.showMonthLines,
         showMidnightLines: this.defaultSettings.showMidnightLines,

@@ -68,8 +68,6 @@ const APP_SETTINGS_DEFAULTS = {
     Home: '#59a7d7',
     Work: '#d57ff5'
   },
-  eventListColorStyle: 'dot',
-
   // DEV mode line toggles
   showMonthLines: true,
   showMidnightLines: true,
@@ -100,8 +98,7 @@ const APP_DEV_OPTIONS_CONFIG = {
     'overlayStackMode',
     'tooltipToggle',
     'animateToggle',
-    'speedSlider', 'speedVal',
-    'eventListColorStyleToggle'
+    'speedSlider', 'speedVal'
   ],
 
   // Whole sections hidden when "Dev Options" is OFF.

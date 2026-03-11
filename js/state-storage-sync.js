@@ -425,7 +425,6 @@ Object.assign(SpiralCalendar.prototype, {
         dayLabelMonthOnFirstOnly: this.state.dayLabelMonthOnFirstOnly,
         dayLabelYearOnFirstOnly: this.state.dayLabelYearOnFirstOnly,
         dayLabelUseOrdinal: this.state.dayLabelUseOrdinal,
-        eventListColorStyle: this.state.eventListColorStyle,
         // Dev mode line toggles
         showMonthLines: this.state.showMonthLines,
         showMidnightLines: this.state.showMidnightLines,
@@ -522,11 +521,6 @@ Object.assign(SpiralCalendar.prototype, {
             this.state.calendarColors[calName] = this.hslToHex(`hsl(${hue}, 70%, 60%)`);
           }
         });
-        
-        // Backfill eventListColorStyle if missing from older storage
-        if (!this.state.eventListColorStyle || (this.state.eventListColorStyle !== 'row' && this.state.eventListColorStyle !== 'dot')) {
-          this.state.eventListColorStyle = this.defaultSettings.eventListColorStyle;
-        }
 
         // Backfill saturation level if missing/invalid from older storage.
         const defaultSaturation = Number(this.defaultSettings.saturationLevel ?? 80);
@@ -766,11 +760,6 @@ Object.assign(SpiralCalendar.prototype, {
     const dayLabelYearSubOptions = document.getElementById('dayLabelYearSubOptions');
     if (dayLabelYearSubOptions) dayLabelYearSubOptions.style.display = this.state.dayLabelShowYear ? 'flex' : 'none';
     
-    const eventListColorStyleToggle = document.getElementById('eventListColorStyleToggle');
-    if (eventListColorStyleToggle) {
-      eventListColorStyleToggle.checked = this.state.eventListColorStyle === 'row';
-    }
-
     // Sync dev mode line toggle states
     const showMonthLinesToggle = document.getElementById('showMonthLinesToggle');
     if (showMonthLinesToggle) {
