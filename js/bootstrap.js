@@ -10,6 +10,24 @@ window.addEventListener('beforeunload', () => {
   spiralCalendar.saveSettingsToStorage();
 });
 
+const isEditableTarget = (target) => {
+  if (!(target instanceof Element)) return false;
+  return !!target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""], .visually-hidden-datetime');
+};
+
+// Suppress iOS long-press callout/magnifier outside editable fields.
+document.addEventListener('contextmenu', (e) => {
+  if (!isEditableTarget(e.target)) {
+    e.preventDefault();
+  }
+}, { passive: false });
+
+document.addEventListener('selectstart', (e) => {
+  if (!isEditableTarget(e.target)) {
+    e.preventDefault();
+  }
+}, { passive: false });
+
 // Location controls
 const latInput = document.getElementById('latInput');
 const lngInput = document.getElementById('lngInput');
