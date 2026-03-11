@@ -1116,16 +1116,18 @@ Object.assign(SpiralCalendar.prototype, {
         initialDistance: 0,
         initialDays: 0,
         touches: [],
-        // Three-finger gesture for radius adjustment
+        // Four-finger gesture for radius adjustment
         radiusAdjustActive: false,
         initialRadiusValue: 0,
-        anchorTouchId: null, // Track which touch is the anchor (held down finger)
+        anchorTouchId: null,
         pinchTouchIds: [], // Track which two touches are pinching
-        // Four-finger gesture for days adjustment (two anchor + two pinch)
+        // Three-finger gesture for days adjustment
         daysAdjustActive: false,
         initialDaysValue: 0,
-        anchorTouchIds: [], // Track which two touches are anchors
-        daysPinchTouchIds: [] // Track which two touches are pinching for days
+        anchorTouchIds: [],
+        daysPinchTouchIds: [], // Track which two touches are pinching for days
+        radiusResetAnimationId: null,
+        daysResetAnimationId: null
       };
 
       // Add touch event listeners for pinch-to-zoom

@@ -488,8 +488,16 @@ Object.assign(SpiralCalendar.prototype, {
           hoursToShow.push(hour);
         }
       }
+
+      const revealCount = Number.isFinite(this._startupHourRevealCount)
+        ? Math.max(0, Math.min(hoursToShow.length, this._startupHourRevealCount))
+        : hoursToShow.length;
+      if (revealCount === 0) {
+        this.ctx.restore();
+        return;
+      }
       
-      for (const hour of hoursToShow) {
+      for (const hour of hoursToShow.slice(0, revealCount)) {
         // Center angle of the segment (outermost day)
         // Position offset: 0=start, 1=middle, 2=end
         const hourOffset = this.state.hourNumbersPosition * 0.5 - 0.5;
@@ -530,6 +538,13 @@ Object.assign(SpiralCalendar.prototype, {
         this.ctx.restore();
       }
       this.ctx.restore();
+    },
+
+    getOutsideHourNumberFontSize() {
+      const canvasWidth = this.canvas.clientWidth;
+      const canvasHeight = this.canvas.clientHeight;
+      const minDimension = Math.min(canvasWidth, canvasHeight);
+      return Math.max(1, Math.min(26, minDimension * this.state.spiralScale * 0.082));
     },
 
     drawHourNumberInSegment(startTheta, endTheta, radiusFunction, segment, day, rawStartAngle, rawEndAngle, innerRadius = null, outerRadius = null) {
@@ -585,12 +600,18 @@ Object.assign(SpiralCalendar.prototype, {
         labelRadius = (computedInner + computedOuter) / 2;
       }
 
-      // Compute dynamic font size based on segment geometry (similar to day numbers)
-      const centerRadius = (computedInner + computedOuter) / 2;
-      const radialHeight = computedOuter - computedInner;
-      const arcWidth = centerRadius * segmentAngle;
-      const maxDimension = Math.min(radialHeight, arcWidth) * 0.4;
-      const fontSize = Math.max(1, Math.min(24, maxDimension));
+      const useOutsideLabelSizing = this.state.hourNumbersOutward && !this.state.hourNumbersInsideSegment;
+      let fontSize;
+      if (useOutsideLabelSizing) {
+        fontSize = this.getOutsideHourNumberFontSize();
+      } else {
+        // Keep inside-segment numbers constrained by the segment geometry.
+        const centerRadius = (computedInner + computedOuter) / 2;
+        const radialHeight = computedOuter - computedInner;
+        const arcWidth = centerRadius * segmentAngle;
+        const maxDimension = Math.min(radialHeight, arcWidth) * 0.4;
+        fontSize = Math.max(1, Math.min(24, maxDimension));
+      }
 
       const angle = -centerTheta + CONFIG.INITIAL_ROTATION_OFFSET;
       const x = labelRadius * Math.cos(angle);
@@ -770,12 +791,9 @@ Object.assign(SpiralCalendar.prototype, {
         displayNumber = 24;
       }
 
-      
-      // Calculate dynamic font size based on spiral scale
-      const canvasWidth = this.canvas.clientWidth;
-      const canvasHeight = this.canvas.clientHeight;
-      const minDimension = Math.min(canvasWidth, canvasHeight);
-      const fontSize = Math.max(1, Math.min(24, minDimension * this.state.spiralScale * 0.075));
+      const fontSize = (this.state.hourNumbersOutward && !this.state.hourNumbersInsideSegment)
+        ? this.getOutsideHourNumberFontSize()
+        : Math.max(1, Math.min(24, Math.min(this.canvas.clientWidth, this.canvas.clientHeight) * this.state.spiralScale * 0.075));
       
       // Set text properties (same as regular hour numbers)
       this.ctx.textAlign = 'center';
@@ -1541,14 +1559,14 @@ Object.assign(SpiralCalendar.prototype, {
 
         // --- GRADIENT OVERLAY LOGIC FOR CIRCLE MODE ---
         if (this.state.showGradientOverlay) {
-          // In circle mode, use day index to determine darkness (later days = more inward = darker)
-          // Normalize by total days visible
-          const normalizedDay = day / (this.state.days - 1);
-          
-          // Calculate darkness: 0 (white/no darkening) at outer edge, increasing toward center
-          // Use configurable maximum opacity
+          // Match spiral mode: derive darkness from the segment's rendered radial position
+          // so the outermost currently visible ring stays light as the user scrolls.
+          const avgRadius = (innerRadius + outerRadius) / 2;
+          const normalizedRadius = Math.max(0, Math.min(1, 1 - (avgRadius / maxRadius)));
+
+          // Calculate darkness: 0 at outer edge, increasing toward center
           const maxDarkness = this.state.gradientOverlayOpacity;
-          const darkness = normalizedDay * maxDarkness;
+          const darkness = normalizedRadius * maxDarkness;
           
           const gradientOverlayColor = `rgba(0, 0, 0, ${darkness})`;
           

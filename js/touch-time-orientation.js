@@ -105,6 +105,95 @@ Object.assign(SpiralCalendar.prototype, {
     return true;
   },
 
+  syncSelectedSegmentToCurrentDays() {
+    if (this.mouseState.selectedSegmentId === null) return;
+
+    const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
+    if (this.mouseState.selectedSegmentId < totalVisibleSegments) {
+      const absPos = totalVisibleSegments - this.mouseState.selectedSegmentId - 1;
+      const newDay = Math.floor(absPos / CONFIG.SEGMENTS_PER_DAY);
+      const newSegment = absPos % CONFIG.SEGMENTS_PER_DAY;
+      this.mouseState.selectedSegment = { day: newDay, segment: newSegment };
+    } else {
+      this.mouseState.selectedSegment = null;
+      this.mouseState.selectedSegmentId = null;
+    }
+  },
+
+  setTemporaryTouchDays(value) {
+    this.state.days = Math.round(value);
+    this.syncSelectedSegmentToCurrentDays();
+  },
+
+  cancelTouchResetAnimation(kind, snapToSlider = false) {
+    if (!this.touchState) return;
+
+    const frameKey = kind === 'days' ? 'daysResetAnimationId' : 'radiusResetAnimationId';
+    if (this.touchState[frameKey]) {
+      cancelAnimationFrame(this.touchState[frameKey]);
+      this.touchState[frameKey] = null;
+    }
+
+    if (!snapToSlider) return;
+
+    if (kind === 'days') {
+      const daysSlider = document.getElementById('daysSlider');
+      if (daysSlider) {
+        this.setTemporaryTouchDays(parseInt(daysSlider.value, 10));
+      }
+    } else {
+      const radiusSlider = document.getElementById('radiusSlider');
+      if (radiusSlider) {
+        this.state.radiusExponent = parseFloat(radiusSlider.value);
+      }
+    }
+    this.drawSpiral();
+  },
+
+  animateTouchSettingBack(kind, duration = 180) {
+    if (!this.touchState) return;
+
+    const isDays = kind === 'days';
+    const frameKey = isDays ? 'daysResetAnimationId' : 'radiusResetAnimationId';
+    const slider = document.getElementById(isDays ? 'daysSlider' : 'radiusSlider');
+    if (!slider) return;
+
+    const targetValue = isDays ? parseInt(slider.value, 10) : parseFloat(slider.value);
+    const startValue = isDays ? this.state.days : this.state.radiusExponent;
+    const applyValue = isDays
+      ? (value) => this.setTemporaryTouchDays(value)
+      : (value) => { this.state.radiusExponent = Math.round(value * 100) / 100; };
+    const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
+    this.cancelTouchResetAnimation(kind, false);
+
+    if (!Number.isFinite(targetValue) || Math.abs(startValue - targetValue) < 0.001) {
+      if (Number.isFinite(targetValue)) {
+        applyValue(targetValue);
+      }
+      this.drawSpiral();
+      return;
+    }
+
+    const startTime = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - startTime) / duration);
+      const value = startValue + (targetValue - startValue) * easeOutCubic(t);
+      applyValue(value);
+      this.drawSpiral();
+
+      if (t < 1) {
+        this.touchState[frameKey] = requestAnimationFrame(step);
+      } else {
+        applyValue(targetValue);
+        this.touchState[frameKey] = null;
+        this.drawSpiral();
+      }
+    };
+
+    this.touchState[frameKey] = requestAnimationFrame(step);
+  },
+
   handleTouchStart(e) {
     // If page zoom is active, allow browser pinch zoom and ignore canvas gesture
     if (this.pageZoomActive) return;
@@ -150,6 +239,7 @@ Object.assign(SpiralCalendar.prototype, {
     if (e.touches.length === 4) {
       // Four-finger gesture: two anchor + two-finger pinch for radius adjustment
       e.preventDefault();
+      this.cancelTouchResetAnimation('radius', true);
       this.touchState.radiusAdjustActive = true;
       // First two touches are anchors, third and fourth are pinch
       this.touchState.anchorTouchIds = [e.touches[0].identifier, e.touches[1].identifier];
@@ -165,6 +255,7 @@ Object.assign(SpiralCalendar.prototype, {
     } else if (e.touches.length === 3) {
       // Three-finger gesture: one anchor + two-finger pinch for days adjustment
       e.preventDefault();
+      this.cancelTouchResetAnimation('days', true);
       this.touchState.daysAdjustActive = true;
       // First touch is anchor, second and third are pinch
       this.touchState.anchorTouchId = e.touches[0].identifier;
@@ -365,9 +456,8 @@ Object.assign(SpiralCalendar.prototype, {
         // Pinch apart (distanceRatio > 1): increase radius
         // Pinch together (distanceRatio < 1): decrease radius
         const radiusSlider = document.getElementById('radiusSlider');
-        const radiusVal = document.getElementById('radiusVal');
         
-        if (radiusSlider && radiusVal) {
+        if (radiusSlider) {
           const min = parseFloat(radiusSlider.min);
           const max = parseFloat(radiusSlider.max);
           const minValue = 1;
@@ -393,14 +483,9 @@ Object.assign(SpiralCalendar.prototype, {
           
           // Clamp to bounds
           newValue = Math.max(min, Math.min(max, newValue));
-          
-          // Update slider and state
-          radiusSlider.value = newValue;
+
           this.state.radiusExponent = newValue;
-          radiusVal.textContent = newValue % 1 === 0 ? newValue.toString() : newValue.toFixed(2);
-          
           this.drawSpiral();
-          this.saveSettingsToStorage();
         }
       }
       return;
@@ -423,9 +508,8 @@ Object.assign(SpiralCalendar.prototype, {
         // Pinch apart (distanceRatio > 1): increase days
         // Pinch together (distanceRatio < 1): decrease days
         const daysSlider = document.getElementById('daysSlider');
-        const daysVal = document.getElementById('daysVal');
         
-        if (daysSlider && daysVal) {
+        if (daysSlider) {
           const min = parseInt(daysSlider.min);
           const max = parseInt(daysSlider.max);
           const initialValue = this.touchState.initialDaysValue;
@@ -438,30 +522,9 @@ Object.assign(SpiralCalendar.prototype, {
           
           // Clamp to bounds
           newValue = Math.max(min, Math.min(max, newValue));
-          
-          // Update slider and state
-          daysSlider.value = newValue;
-          this.state.days = newValue;
-          daysVal.textContent = newValue.toString();
-          
-          // Handle onChange callback to preserve selected segment if applicable
-          // If a segment is selected, preserve its segmentId from the outside
-          if (this.mouseState.selectedSegmentId !== null) {
-            const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-            if (this.mouseState.selectedSegmentId < totalVisibleSegments) {
-              const absPos = totalVisibleSegments - this.mouseState.selectedSegmentId - 1;
-              const newDay = Math.floor(absPos / CONFIG.SEGMENTS_PER_DAY);
-              const newSegment = absPos % CONFIG.SEGMENTS_PER_DAY;
-              this.mouseState.selectedSegment = { day: newDay, segment: newSegment };
-            } else {
-              // If the segmentId is now out of range, deselect
-              this.mouseState.selectedSegment = null;
-              this.mouseState.selectedSegmentId = null;
-            }
-          }
-          
+
+          this.setTemporaryTouchDays(newValue);
           this.drawSpiral();
-          this.saveSettingsToStorage();
         }
       }
       return;
@@ -804,21 +867,23 @@ Object.assign(SpiralCalendar.prototype, {
       return;
     }
     
-    // Reset four-finger days adjust if we no longer have 4 touches
+    // End the four-finger radius gesture and return to the saved slider value.
     if (e.touches.length < 4) {
-      if (this.touchState.daysAdjustActive) {
-        this.touchState.daysAdjustActive = false;
+      if (this.touchState.radiusAdjustActive) {
+        this.touchState.radiusAdjustActive = false;
         this.touchState.anchorTouchIds = [];
-        this.touchState.daysPinchTouchIds = [];
+        this.touchState.pinchTouchIds = [];
+        this.animateTouchSettingBack('radius');
       }
     }
     
-    // Reset three-finger radius adjust if we no longer have 3 touches
+    // End the three-finger days gesture and return to the saved slider value.
     if (e.touches.length < 3) {
-      if (this.touchState.radiusAdjustActive) {
-        this.touchState.radiusAdjustActive = false;
+      if (this.touchState.daysAdjustActive) {
+        this.touchState.daysAdjustActive = false;
         this.touchState.anchorTouchId = null;
-        this.touchState.pinchTouchIds = [];
+        this.touchState.daysPinchTouchIds = [];
+        this.animateTouchSettingBack('days');
       }
     }
     

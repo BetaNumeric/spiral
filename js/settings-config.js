@@ -86,6 +86,9 @@ const APP_DEV_OPTIONS_CONFIG = {
   // Elements hidden when "Dev Options" is OFF.
   advancedOptionIds: [
     'circleMode',
+    'daysSlider', 'daysVal',
+    'scaleSlider', 'scaleVal',
+    'radiusSlider', 'radiusVal',
     'rotateSlider', 'rotateVal',
     'rotateMaxSlider', 'rotateMaxVal',
     'showMidnightLinesToggle','showNoonLinesToggle','showSixAmPmLinesToggle',

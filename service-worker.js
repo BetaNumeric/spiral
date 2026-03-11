@@ -12,6 +12,7 @@ const ASSETS = [
   './a2hs.js',
   './js/app-version.js',
   './js/config-utils.js',
+  './js/suncalc.min.js',
   './js/settings-config.js',
   './js/core.js',
   './js/core-methods.js',

@@ -290,6 +290,15 @@ class SpiralCalendar {
         animationId: null
       };
 
+      this.startupAnimationState = {
+        active: true,
+        started: false,
+        animationId: null,
+        progress: 0,
+        resumeContinuousAnimation: false,
+        revealedHourSegmentKeys: []
+      };
+
       // Auto time align state
       this.autoTimeAlignState = {
       enabled: true,

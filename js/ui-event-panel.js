@@ -126,6 +126,10 @@ Object.assign(SpiralCalendar.prototype, {
         colorBox.style.background = eventColor.value;
       }
     };
+    const normalizeHexColor = (value, fallback = '#888888') => {
+      const color = typeof value === 'string' ? value.trim() : '';
+      return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color) ? color : fallback;
+    };
 
     if (eventStartBox) eventStartBox.addEventListener('click', (e) => {
       e.preventDefault(); e.stopPropagation();
@@ -628,7 +632,7 @@ Object.assign(SpiralCalendar.prototype, {
       
       // Get event display color
       const isDarkMode = document.body.classList.contains('dark-mode');
-      const displayColor = this.getDisplayColorForEvent(ev);
+      const displayColor = normalizeHexColor(this.getDisplayColorForEvent(ev));
       
       // Check which style to use: 'row' for full row background, 'dot' for colored circle
       // Always use dot style for event panel, respect user preference for bottom list
@@ -670,8 +674,16 @@ Object.assign(SpiralCalendar.prototype, {
       
       // Add color dot - always show in event panel, only show in bottom list when using dot style
       const showColorDot = isEventPanel || !useRowColor;
-      const colorDot = showColorDot ? `<span style="display:inline-block;width:14px;height:14px;min-width:14px;max-width:14px;flex-shrink:0;border-radius:50%;background:${displayColor};margin-right:7px;vertical-align:middle;box-sizing:border-box;"></span>` : '';
-      leftContent.innerHTML = `${colorDot}<span style="font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;">${ev.title}</span>`;
+      if (showColorDot) {
+        const colorDot = document.createElement('span');
+        colorDot.style.cssText = 'display:inline-block;width:14px;height:14px;min-width:14px;max-width:14px;flex-shrink:0;border-radius:50%;margin-right:7px;vertical-align:middle;box-sizing:border-box;';
+        colorDot.style.backgroundColor = displayColor;
+        leftContent.appendChild(colorDot);
+      }
+      const titleSpan = document.createElement('span');
+      titleSpan.style.cssText = 'font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;';
+      titleSpan.textContent = ev.title || 'Untitled Event';
+      leftContent.appendChild(titleSpan);
       
       // Calendar column (smaller on mobile to fit narrow screens, but can shrink if needed)
       // For event panel, use responsive widths; for bottom list on desktop, use fixed widths
@@ -686,7 +698,7 @@ Object.assign(SpiralCalendar.prototype, {
       let calBorderColor = isDarkMode ? 'var(--dark-border)' : '#ddd';
       
       if (ev.calendar && this.state.calendarColors && this.state.calendarColors[ev.calendar]) {
-        calBgColor = this.state.calendarColors[ev.calendar];
+        calBgColor = normalizeHexColor(this.state.calendarColors[ev.calendar], calBgColor);
         // Determine text color based on background brightness
         // Convert hex to RGB and calculate brightness
         const hex = calBgColor.replace('#', '');
@@ -899,7 +911,7 @@ Object.assign(SpiralCalendar.prototype, {
           const calendarButtonText = 'Open Calendar App';
 
           dialog.innerHTML = `
-            <h4 style="margin: 0 0 0.8em 0; color: #333;">Add "${event.title}" to Calendar</h4>
+            <h4 id="calendarDialogTitle" style="margin: 0 0 0.8em 0; color: #333;"></h4>
             <div style="display: flex; gap: 0.5em; justify-content: center; flex-direction: column;">
               <button id="downloadICS" style="padding: 0.4em 1em; background: #4CAF50; color: white; border: none; border-radius: 0.3em; cursor: pointer;">Download .ics file</button>
                 <button id="openCalendar" style="padding: 0.4em 1em; background: #2196F3; color: white; border: none; border-radius: 0.3em; cursor: pointer;">${calendarButtonText}</button>
@@ -907,6 +919,10 @@ Object.assign(SpiralCalendar.prototype, {
             </div>
             <button id="cancelCalendar" style="margin-top: 0.8em; padding: 0.3em 1em; background: #666; color: white; border: none; border-radius: 0.3em; cursor: pointer;">Cancel</button>
           `;
+          const calendarDialogTitle = dialog.querySelector('#calendarDialogTitle');
+          if (calendarDialogTitle) {
+            calendarDialogTitle.textContent = `Add "${event.title || 'Untitled Event'}" to Calendar`;
+          }
 
           document.body.appendChild(dialog);
 
@@ -1618,9 +1634,9 @@ Object.assign(SpiralCalendar.prototype, {
       icsContent += 'CALSCALE:GREGORIAN\r\n';
       icsContent += 'METHOD:PUBLISH\r\n';
 
-      this.events.forEach((event, index) => {
+      this.events.forEach((event) => {
         icsContent += 'BEGIN:VEVENT\r\n';
-        icsContent += `UID:spiral-${Date.now()}-${index}\r\n`;
+        icsContent += `UID:${generateEventUID(event)}\r\n`;
         icsContent += `DTSTAMP:${formatIcsDateUTC(new Date())}\r\n`;
         icsContent += `DTSTART:${formatIcsDateUTC(event.start)}\r\n`;
         icsContent += `DTEND:${formatIcsDateUTC(event.end)}\r\n`;
@@ -1802,6 +1818,7 @@ Object.assign(SpiralCalendar.prototype, {
           const colonIndex = line.indexOf(':');
           if (colonIndex > 0) {
             const key = line.substring(0, colonIndex);
+            const propertyKey = key.split(';')[0].toUpperCase();
             let value = line.substring(colonIndex + 1);
             
             // Handle line folding (continued lines)
@@ -1810,7 +1827,10 @@ Object.assign(SpiralCalendar.prototype, {
               value += lines[i].substring(1);
             }
             
-            switch (key) {
+            switch (propertyKey) {
+              case 'UID':
+                currentEvent.persistentUID = value.trim();
+                break;
               case 'SUMMARY':
                 currentEvent.title = unescapeICS(value);
                 break;
@@ -1837,6 +1857,7 @@ Object.assign(SpiralCalendar.prototype, {
                 }
                 break;
               case 'COLOR':
+              case 'X-SPIRAL-COLOR':
                 // Accept hex, rgb(), or hsl(); if hsl, convert to hex for consistency
                 {
                   const raw = value.trim();
@@ -1861,6 +1882,167 @@ Object.assign(SpiralCalendar.prototype, {
       
       return events;
     };
+    const toValidDate = (value) => {
+      const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+      return Number.isFinite(date.getTime()) ? date : null;
+    };
+    const normalizeImportedColor = (value, calendar, startDate) => {
+      if (typeof value === 'string') {
+        const raw = value.trim();
+        if (raw) {
+          if (/^hsl/i.test(raw)) {
+            try {
+              return normalizeHexColor(this.hslToHex(raw));
+            } catch (_) {}
+          }
+          const normalizedHex = normalizeHexColor(raw, '');
+          if (normalizedHex) {
+            return normalizedHex;
+          }
+        }
+      }
+      const fallbackColor = this.generateRandomColor(calendar || 'Home', startDate || new Date());
+      return normalizeHexColor(
+        fallbackColor.startsWith('#') ? fallbackColor : this.hslToHex(fallbackColor)
+      );
+    };
+    const normalizeImportedEvent = (event) => {
+      if (!event || typeof event !== 'object') return null;
+      const start = toValidDate(event.start);
+      const end = toValidDate(event.end);
+      if (!start || !end || end <= start) return null;
+
+      const calendar = (typeof event.calendar === 'string' && event.calendar.trim())
+        ? event.calendar.trim()
+        : 'Home';
+      const title = (typeof event.title === 'string' && event.title.trim())
+        ? event.title.trim()
+        : 'Untitled Event';
+      const description = typeof event.description === 'string'
+        ? event.description
+        : '';
+      const persistentUID = (typeof event.persistentUID === 'string' && event.persistentUID.trim())
+        ? event.persistentUID.trim()
+        : '';
+
+      const normalized = {
+        ...event,
+        title,
+        description,
+        start,
+        end,
+        calendar,
+        color: normalizeImportedColor(event.color, calendar, start),
+        addedToCalendar: !!event.addedToCalendar,
+        lastModified: Number.isFinite(Number(event.lastModified))
+          ? Number(event.lastModified)
+          : Date.now(),
+        lastAddedToCalendar: Number.isFinite(Number(event.lastAddedToCalendar))
+          ? Number(event.lastAddedToCalendar)
+          : null,
+        persistentUID
+      };
+
+      if (!normalized.persistentUID) {
+        normalized.persistentUID = generateEventUID(normalized);
+      }
+
+      return normalized;
+    };
+    const getEventMergeSignature = (event) => {
+      const startMs = event && event.start instanceof Date ? event.start.getTime() : new Date(event.start).getTime();
+      const endMs = event && event.end instanceof Date ? event.end.getTime() : new Date(event.end).getTime();
+      return [
+        event && event.calendar ? event.calendar : 'Home',
+        event && event.title ? event.title : '',
+        event && event.description ? event.description : '',
+        startMs,
+        endMs
+      ].join('||');
+    };
+    const isSameEventContent = (a, b) => {
+      return (
+        (a.title || '') === (b.title || '') &&
+        (a.description || '') === (b.description || '') &&
+        (a.calendar || 'Home') === (b.calendar || 'Home') &&
+        normalizeHexColor(a.color || '') === normalizeHexColor(b.color || '') &&
+        new Date(a.start).getTime() === new Date(b.start).getTime() &&
+        new Date(a.end).getTime() === new Date(b.end).getTime()
+      );
+    };
+    const mergeImportedEvents = (incomingEvents) => {
+      const existingById = new Map();
+      const existingBySignature = new Map();
+      this.events.forEach((event) => {
+        const eventId = (typeof event.persistentUID === 'string' && event.persistentUID.trim())
+          ? event.persistentUID.trim()
+          : generateEventUID(event);
+        event.persistentUID = eventId;
+        existingById.set(eventId, event);
+        existingBySignature.set(getEventMergeSignature(event), event);
+      });
+
+      let added = 0;
+      let updated = 0;
+      let skipped = 0;
+
+      incomingEvents.forEach((incoming) => {
+        const incomingId = (typeof incoming.persistentUID === 'string' && incoming.persistentUID.trim())
+          ? incoming.persistentUID.trim()
+          : generateEventUID(incoming);
+        incoming.persistentUID = incomingId;
+
+        const signature = getEventMergeSignature(incoming);
+        const existing = existingById.get(incomingId) || existingBySignature.get(signature);
+
+        if (!existing) {
+          this.events.push(incoming);
+          existingById.set(incomingId, incoming);
+          existingBySignature.set(signature, incoming);
+          added++;
+          return;
+        }
+
+        if (isSameEventContent(existing, incoming)) {
+          existingById.set(incomingId, existing);
+          existingBySignature.set(signature, existing);
+          skipped++;
+          return;
+        }
+
+        const preservedPersistentUID = existing.persistentUID || incomingId;
+        const preservedAddedToCalendar = !!existing.addedToCalendar;
+        const preservedLastAddedToCalendar = Number.isFinite(Number(existing.lastAddedToCalendar))
+          ? Number(existing.lastAddedToCalendar)
+          : null;
+
+        Object.assign(existing, incoming);
+        existing.persistentUID = preservedPersistentUID;
+        existing.addedToCalendar = preservedAddedToCalendar;
+        existing.lastAddedToCalendar = preservedLastAddedToCalendar;
+        existing.lastModified = Date.now();
+
+        existingById.set(existing.persistentUID, existing);
+        existingById.set(incomingId, existing);
+        existingBySignature.set(getEventMergeSignature(existing), existing);
+        updated++;
+      });
+
+      return { added, updated, skipped };
+    };
+    const formatImportMessage = (sourceLabel, totalImported, mergeResult, missingCalendars, invalidCount) => {
+      const parts = [
+        `Processed ${totalImported} event${totalImported !== 1 ? 's' : ''} from ${sourceLabel}.`,
+        `Added ${mergeResult.added}, updated ${mergeResult.updated}, skipped ${mergeResult.skipped}.`
+      ];
+      if (invalidCount > 0) {
+        parts.push(`Ignored ${invalidCount} invalid event${invalidCount !== 1 ? 's' : ''}.`);
+      }
+      if (missingCalendars.size > 0) {
+        parts.push(`Created ${missingCalendars.size} new calendar(s): ${Array.from(missingCalendars).join(', ')}.`);
+      }
+      return parts.join(' ');
+    };
     importEventsFile.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -1874,13 +2056,11 @@ Object.assign(SpiralCalendar.prototype, {
           try {
             const imported = JSON.parse(content);
             if (Array.isArray(imported)) {
-              // Validate and convert date fields
-              const newEvents = imported.map(ev => ({
-                ...ev,
-                start: new Date(ev.start),
-                end: new Date(ev.end)
-              }));
-              
+              const newEvents = imported
+                .map((ev) => normalizeImportedEvent(ev))
+                .filter(Boolean);
+              const invalidCount = imported.length - newEvents.length;
+               
               // Auto-create missing calendars
               const missingCalendars = new Set();
               newEvents.forEach(event => {
@@ -1900,21 +2080,26 @@ Object.assign(SpiralCalendar.prototype, {
               
               if (missingCalendars.size > 0) {
                 this.saveSettingsToStorage();
+                if (typeof this.buildCalendarMenu === 'function') {
+                  this.buildCalendarMenu();
+                }
               }
-              
-              // Append imported events to existing events instead of replacing them
-              this.events = [...this.events, ...newEvents];
-              this._eventsVersion++; // Trigger layout cache rebuild
-              // Save events to localStorage
-              this.saveEventsToStorage();
-              this.drawSpiral();
-              renderEventList();
-              
-              let message = `Successfully imported ${newEvents.length} events from JSON file.`;
-              if (missingCalendars.size > 0) {
-                message += ` Created ${missingCalendars.size} new calendar(s): ${Array.from(missingCalendars).join(', ')}.`;
+
+              if (newEvents.length === 0) {
+                alert(`No valid events found in JSON file.${invalidCount > 0 ? ` Ignored ${invalidCount} invalid event${invalidCount === 1 ? '' : 's'}.` : ''}`);
+                e.target.value = '';
+                return;
               }
-              alert(message);
+
+              const mergeResult = mergeImportedEvents(newEvents);
+              if (mergeResult.added > 0 || mergeResult.updated > 0) {
+                this._eventsVersion++; // Trigger layout cache rebuild
+                this.saveEventsToStorage();
+                this.drawSpiral();
+                renderEventList();
+              }
+
+              alert(formatImportMessage('JSON file', newEvents.length, mergeResult, missingCalendars, invalidCount));
               // Clear the file input so the same file can be imported again
               e.target.value = '';
               return;
@@ -1925,7 +2110,9 @@ Object.assign(SpiralCalendar.prototype, {
           
           // Try to parse as ICS
           if (content.includes('BEGIN:VCALENDAR') && content.includes('BEGIN:VEVENT')) {
-            const importedEvents = parseICSContent(content);
+            const importedEvents = parseICSContent(content)
+              .map((ev) => normalizeImportedEvent(ev))
+              .filter(Boolean);
             if (importedEvents.length > 0) {
               // Auto-create missing calendars
               const missingCalendars = new Set();
@@ -1946,21 +2133,20 @@ Object.assign(SpiralCalendar.prototype, {
               
               if (missingCalendars.size > 0) {
                 this.saveSettingsToStorage();
+                if (typeof this.buildCalendarMenu === 'function') {
+                  this.buildCalendarMenu();
+                }
               }
-              
-              // Append imported events to existing events instead of replacing them
-              this.events = [...this.events, ...importedEvents];
-              this._eventsVersion++; // Trigger layout cache rebuild
-              // Save events to localStorage
-              this.saveEventsToStorage();
-              this.drawSpiral();
-              renderEventList();
-              
-              let message = `Successfully imported ${importedEvents.length} events from calendar file.`;
-              if (missingCalendars.size > 0) {
-                message += ` Created ${missingCalendars.size} new calendar(s): ${Array.from(missingCalendars).join(', ')}.`;
+
+              const mergeResult = mergeImportedEvents(importedEvents);
+              if (mergeResult.added > 0 || mergeResult.updated > 0) {
+                this._eventsVersion++; // Trigger layout cache rebuild
+                this.saveEventsToStorage();
+                this.drawSpiral();
+                renderEventList();
               }
-              alert(message);
+
+              alert(formatImportMessage('calendar file', importedEvents.length, mergeResult, missingCalendars, 0));
               // Clear the file input so the same file can be imported again
               e.target.value = '';
         } else {

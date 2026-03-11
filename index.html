@@ -8,8 +8,8 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#ffffff">
 
-  <!-- SunCalc library for sunrise/sunset calculations -->
-  <script src="https://cdn.jsdelivr.net/npm/suncalc@1.9.0/suncalc.min.js"></script>
+  <!-- Vendored locally so sunrise/sunset works offline -->
+  <script src="js/suncalc.min.js"></script>
 
   <style>
     /* Basic reset and layout */
@@ -697,7 +697,7 @@
       </div>
       
       <label style="display: block; margin-top: 0.85em; width: 100%; position: relative; overflow: hidden;">
-        <span id="colorBox" style="display: block; width: 100%; height: 2.2em; border-radius: 0.3em; border: 1px solid #ccc; background: #fff; vertical-align: middle; cursor: pointer;"></span>
+        <span id="colorBox" style="display: block; width: 100%; height: 2.2em; border-radius: 0.3em; border: 1px solid #ccc; background: #fff; cursor: pointer;"></span>
         <input type="color" id="eventColor" style="opacity: 0; position: absolute; top: 0; left: 0; width: 100%; height: 2.2em; cursor: pointer;">
       </label>
 
@@ -1151,7 +1151,7 @@
       const advancedOptions = Array.isArray(devOptionsConfig.advancedOptionIds)
         ? devOptionsConfig.advancedOptionIds
         : [
-            'rotateSlider', 'rotateVal',
+            'rotateSlider', 'daysSlider', 'rotateVal', 'scaleSlider', 'radiusSlider', 
             'rotateMaxSlider', 'rotateMaxVal',
             'showHourNumbers', 'hourNumbersControls',
             'showDayNumbers', 'dayNumbersControls',

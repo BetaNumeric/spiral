@@ -1,5 +1,54 @@
 // Core Helpers and Layout Methods
 Object.assign(SpiralCalendar.prototype, {
+    startStartupAnimation() {
+      if (!this.startupAnimationState || this.startupAnimationState.started) return;
+
+      const startup = this.startupAnimationState;
+      startup.started = true;
+      startup.resumeContinuousAnimation = !!this.animationState.isAnimating;
+
+      const prefersReducedMotion = typeof window !== 'undefined' &&
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      if (prefersReducedMotion || this.state.circleMode) {
+        startup.active = false;
+        startup.progress = 1;
+        startup.revealedHourSegmentKeys = [];
+        this.drawSpiral();
+        if (startup.resumeContinuousAnimation) {
+          this.startAnimation();
+        }
+        return;
+      }
+
+      const durationMs = 1200;
+      const startTs = performance.now();
+
+      const step = (now) => {
+        const progress = Math.max(0, Math.min(1, (now - startTs) / durationMs));
+        startup.progress = progress;
+        this.drawSpiral();
+
+        if (progress < 1) {
+          startup.animationId = requestAnimationFrame(step);
+        } else {
+          startup.animationId = null;
+          startup.active = false;
+          startup.progress = 1;
+          startup.revealedHourSegmentKeys = [];
+          this.drawSpiral();
+          if (startup.resumeContinuousAnimation) {
+            this.startAnimation();
+          }
+        }
+      };
+
+      startup.progress = 0;
+      startup.revealedHourSegmentKeys = [];
+      startup.animationId = requestAnimationFrame(step);
+    },
+
     ensureLayoutCache() {
       const windowStartMs = this.referenceTime.getTime();
       const windowEndMs = this.referenceTime.getTime() + this.state.days * 24 * 60 * 60 * 1000;
@@ -46,10 +95,7 @@ Object.assign(SpiralCalendar.prototype, {
     // Sync all UI controls with loaded settings
     this.syncAllUIControls();
     
-    // Start animation if it was enabled in saved settings
-    if (this.animationState.isAnimating) {
-      this.startAnimation();
-    }
+    this.startStartupAnimation();
     },
 
     setupCache() {
@@ -567,7 +613,7 @@ Object.assign(SpiralCalendar.prototype, {
       this.timeDisplayState.currentHeight = collapsed ? base : minH;
     }
     if (this.timeDisplayState.animId) cancelAnimationFrame(this.timeDisplayState.animId);
-    const durationMs = 180;
+    const durationMs = 1800;
     const startH = this.timeDisplayState.currentHeight;
     const endH = this.timeDisplayState.targetHeight;
     const startTs = performance.now();

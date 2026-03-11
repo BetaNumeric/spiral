@@ -482,8 +482,8 @@ Object.assign(SpiralCalendar.prototype, {
           if (key === 'circleMode') {
             // Skip circleMode - always start in spiral mode
             return;
-          } else if (key === 'spiralScale') {
-            // Skip spiralScale - always use default value, don't load from storage
+          } else if (key === 'spiralScale' || key === 'days' || key === 'radiusExponent') {
+            // Keep size-related sliders on the configured defaults after reload.
             return;
           } else if (key === 'deviceOrientationEnabled' || key === 'betaThreshold' || key === 'gammaThreshold') {
             // Legacy settings keys from removed device-orientation feature

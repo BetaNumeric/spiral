@@ -1457,6 +1457,13 @@ Object.assign(SpiralCalendar.prototype, {
     drawSpiral() {
       const canvasWidth = this.canvas.clientWidth;
       const canvasHeight = this.canvas.clientHeight;
+      const startup = this.startupAnimationState;
+      const useStartupDrawIn = !!(startup && startup.active && !this.state.circleMode);
+      let startupHourRevealCount = 24;
+      let startupHourRevealOriginTheta = -this.state.rotation;
+      const startupRevealedHourSegmentKeys = (startup && Array.isArray(startup.revealedHourSegmentKeys))
+        ? startup.revealedHourSegmentKeys
+        : null;
       
       // Clear and prepare canvas
       this.ctx.clearRect(0, 0, canvasWidth, canvasHeight);
@@ -1586,7 +1593,21 @@ Object.assign(SpiralCalendar.prototype, {
         }
         
         // Set up drawing parameters for spiral mode
-        const visibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
+        const normalVisibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
+        let visibilityRange = normalVisibilityRange;
+        if (useStartupDrawIn) {
+          const progress = Math.max(0, Math.min(1, startup.progress || 0));
+          const collapsedTheta = -this.state.rotation;
+          startupHourRevealOriginTheta = collapsedTheta;
+          const visibleRotations = Math.max(1, this.state.days - 1);
+          const revealStartProgress = Math.max(0, 1 - (1 / visibleRotations));
+          const revealProgress = Math.max(0, Math.min(1, (progress - revealStartProgress) / Math.max(0.0001, 1 - revealStartProgress)));
+          startupHourRevealCount = Math.max(0, Math.min(24, Math.floor(revealProgress * 24)));
+          visibilityRange = {
+            min: collapsedTheta + (normalVisibilityRange.min - collapsedTheta) * progress,
+            max: collapsedTheta + (normalVisibilityRange.max - collapsedTheta) * progress
+          };
+        }
         const radiusFunction = this.createRadiusFunction(maxRadius, thetaMax, this.state.radiusExponent, this.state.rotation);
         const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
       // Draw all segments within the visible range
@@ -1637,6 +1658,8 @@ Object.assign(SpiralCalendar.prototype, {
         return {
           ...segment,
           visibility,
+          rawStartAngle,
+          rawEndAngle,
           segmentKey: `${segment.day}-${segment.segment}`
         };
       });
@@ -1649,55 +1672,99 @@ Object.assign(SpiralCalendar.prototype, {
         return b.visibility - a.visibility; // Then by visibility
       });
       
-      // Take segments based on position-adjusted threshold, up to 24 total
       const segmentsToShowNumbers = [];
-      for (const segment of segmentsWithVisibility) {
-        if (segmentsToShowNumbers.length >= 24) break;
-        
-        let shouldShow = false;
-        if (this.state.hourNumbersPosition === 2 || this.state.hourNumbersPosition === 0) {
-          // +0.5 position: Different thresholds based on positioning
-          if (this.state.hourNumbersInsideSegment) {
-            // Inside segment center: 66% threshold (two thirds)
-            shouldShow = segment.visibility >= 0.66;
-          } else {
-            // Outside segment: 33% threshold (one third)
-            shouldShow = segment.visibility >= 0.33;
+      if (useStartupDrawIn) {
+        const startupMinVisibility = this.state.hourNumbersInsideSegment ? 0.45 : 0.25;
+        const wrapAngleDistance = (theta) => {
+          let delta = theta - startupHourRevealOriginTheta;
+          while (delta <= -Math.PI) delta += 2 * Math.PI;
+          while (delta > Math.PI) delta -= 2 * Math.PI;
+          return Math.abs(delta);
+        };
+
+        const startupCandidates = segmentsWithVisibility
+          .filter((segment) => segment.visibility >= startupMinVisibility)
+          .sort((a, b) => {
+            if (Math.abs(a.segmentRadius - b.segmentRadius) > 0.001) {
+              return b.segmentRadius - a.segmentRadius;
+            }
+            const aCenter = (a.rawStartAngle + a.rawEndAngle) / 2;
+            const bCenter = (b.rawStartAngle + b.rawEndAngle) / 2;
+            const distanceDelta = wrapAngleDistance(aCenter) - wrapAngleDistance(bCenter);
+            if (Math.abs(distanceDelta) > 0.0001) {
+              return distanceDelta;
+            }
+            if (a.day !== b.day) return a.day - b.day;
+            return a.segment - b.segment;
+          });
+
+        if (startupRevealedHourSegmentKeys) {
+          for (const candidate of startupCandidates) {
+            if (startupRevealedHourSegmentKeys.length >= startupHourRevealCount) break;
+            if (!startupRevealedHourSegmentKeys.includes(candidate.segmentKey)) {
+              startupRevealedHourSegmentKeys.push(candidate.segmentKey);
+            }
           }
-        } else if (this.state.hourNumbersPosition === 1) {
-          if (this.state.hourNumbersInsideSegment) {
-            // Inside segment center: 17% threshold (two thirds minus 0.5)
-            shouldShow = segment.visibility >= 0.17;
-          } else {
-            // Outside segment: 83% threshold with shifted visibility range
-            const rawStartAngle = segment.day * 2 * Math.PI + segment.segment * segmentAngle;
-            const rawEndAngle = rawStartAngle + segmentAngle;
-            
-            // Shift visibility range by half a segment for middle position
-            const shiftedVisibilityRange = {
-              min: visibilityRange.min - (segmentAngle * 0.5),
-              max: visibilityRange.max - (segmentAngle * 0.5)
-            };
-            
-            const startTheta = Math.max(rawStartAngle, shiftedVisibilityRange.min);
-            const endTheta = Math.min(rawEndAngle, shiftedVisibilityRange.max);
-            const shiftedVisibility = endTheta > startTheta ? (endTheta - startTheta) / (rawEndAngle - rawStartAngle) : 0;
-            
-            shouldShow = shiftedVisibility >= 0.17;
+
+          const revealedSet = new Set(startupRevealedHourSegmentKeys.slice(0, startupHourRevealCount));
+          for (const segment of segmentsWithVisibility) {
+            if (revealedSet.has(segment.segmentKey)) {
+              segmentsToShowNumbers.push(segment);
+            }
           }
+        } else {
+          segmentsToShowNumbers.push(...startupCandidates.slice(0, startupHourRevealCount));
         }
- 
-        if (shouldShow) {
-          segmentsToShowNumbers.push(segment);
-        }
-      }
-      
-      // If we don't have 24 segments at threshold, fill with the most visible remaining segments
-      if (segmentsToShowNumbers.length < 24) {
+      } else {
+        // Take segments based on position-adjusted threshold, up to 24 total
         for (const segment of segmentsWithVisibility) {
           if (segmentsToShowNumbers.length >= 24) break;
-          if (!segmentsToShowNumbers.some(s => s.segmentKey === segment.segmentKey) && segment.visibility > 0) {
+          
+          let shouldShow = false;
+          if (this.state.hourNumbersPosition === 2 || this.state.hourNumbersPosition === 0) {
+            // +0.5 position: Different thresholds based on positioning
+            if (this.state.hourNumbersInsideSegment) {
+              // Inside segment center: 66% threshold (two thirds)
+              shouldShow = segment.visibility >= 0.66;
+            } else {
+              // Outside segment: 33% threshold (one third)
+              shouldShow = segment.visibility >= 0.33;
+            }
+          } else if (this.state.hourNumbersPosition === 1) {
+            if (this.state.hourNumbersInsideSegment) {
+              // Inside segment center: 17% threshold (two thirds minus 0.5)
+              shouldShow = segment.visibility >= 0.17;
+            } else {
+              // Outside segment: 83% threshold with shifted visibility range
+              const rawStartAngle = segment.day * 2 * Math.PI + segment.segment * segmentAngle;
+              const rawEndAngle = rawStartAngle + segmentAngle;
+              
+              // Shift visibility range by half a segment for middle position
+              const shiftedVisibilityRange = {
+                min: visibilityRange.min - (segmentAngle * 0.5),
+                max: visibilityRange.max - (segmentAngle * 0.5)
+              };
+              
+              const startTheta = Math.max(rawStartAngle, shiftedVisibilityRange.min);
+              const endTheta = Math.min(rawEndAngle, shiftedVisibilityRange.max);
+              const shiftedVisibility = endTheta > startTheta ? (endTheta - startTheta) / (rawEndAngle - rawStartAngle) : 0;
+              
+              shouldShow = shiftedVisibility >= 0.17;
+            }
+          }
+   
+          if (shouldShow) {
             segmentsToShowNumbers.push(segment);
+          }
+        }
+        
+        // If we don't have 24 segments at threshold, fill with the most visible remaining segments
+        if (segmentsToShowNumbers.length < 24) {
+          for (const segment of segmentsWithVisibility) {
+            if (segmentsToShowNumbers.length >= 24) break;
+            if (!segmentsToShowNumbers.some(s => s.segmentKey === segment.segmentKey) && segment.visibility > 0) {
+              segmentsToShowNumbers.push(segment);
+            }
           }
         }
       }
@@ -2130,6 +2197,7 @@ Object.assign(SpiralCalendar.prototype, {
       }
 
       // Draw hour labels outside the spiral
+      this._startupHourRevealCount = useStartupDrawIn ? startupHourRevealCount : null;
       if (this.state.showHourNumbers) {
         this.drawHourLabels(maxRadius);
       }
@@ -2143,6 +2211,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (this.state.showHourNumbers && (this.state.hourNumbersOutward || this.state.hourNumbersInsideSegment)) {
         this.drawHourNumbersInSegments();
       }
+      this._startupHourRevealCount = null;
       this.drawDayNumbers();
       
       // Draw month lines on top of all segments
