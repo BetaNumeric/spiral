@@ -39,7 +39,7 @@ const APP_SETTINGS_DEFAULTS = {
   showNightOverlay: true,
   // Optional: use the selected location's timezone for current-time alignment
   // and sunrise/sunset calculations.
-  useLocationTimezone: false,
+  useLocationTimezone: true,
   locationTimezoneId: null,
   nightOverlayLat: LOCATION_COORDS.lat,
   nightOverlayLng: LOCATION_COORDS.lng,

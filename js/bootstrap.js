@@ -17,8 +17,10 @@ const setLocationBtn = document.getElementById('setLocationBtn');
 const geoLocationBtn = document.getElementById('geoLocationBtn');
 const locationSearch = document.getElementById('locationSearch');
 const locationSearchBtn = document.getElementById('locationSearchBtn');
+const locationSearchSuggestions = document.getElementById('locationSearchSuggestions');
 const useLocationTimezoneToggle = document.getElementById('useLocationTimezoneToggle');
 const locationTimezoneInfo = document.getElementById('locationTimezoneInfo');
+const locationCurrentInfo = document.getElementById('locationCurrentInfo');
 const nightOverlayToggle = document.getElementById('nightOverlayToggle');
 const locationControls = document.getElementById('locationControls');
 
@@ -63,6 +65,25 @@ const updateLocationTimezoneInfo = () => {
 };
 window.updateLocationTimezoneInfo = updateLocationTimezoneInfo;
 
+const formatCoordinateLabel = (lat, lng) => {
+  const latNum = Number(lat);
+  const lngNum = Number(lng);
+  if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return 'Unknown';
+  return `${latNum.toFixed(4)}, ${lngNum.toFixed(4)}`;
+};
+
+const compactLocationLabel = (label, fallbackLat = LOCATION_COORDS.lat, fallbackLng = LOCATION_COORDS.lng) => {
+  if (typeof label !== 'string') return formatCoordinateLabel(fallbackLat, fallbackLng);
+  const parts = label.split(',').map(part => part.trim()).filter(Boolean);
+  if (!parts.length) return formatCoordinateLabel(fallbackLat, fallbackLng);
+  return parts.slice(0, 3).join(', ');
+};
+
+const updateLocationCurrentInfo = (label = null, lat = LOCATION_COORDS.lat, lng = LOCATION_COORDS.lng) => {
+  if (!locationCurrentInfo) return;
+  locationCurrentInfo.textContent = `Location: ${compactLocationLabel(label, lat, lng)}`;
+};
+
 const extractTimezoneId = (payload) => {
   if (!payload || typeof payload !== 'object') return null;
   if (typeof payload.timezone === 'string' && payload.timezone.trim()) {
@@ -81,28 +102,53 @@ const extractTimezoneId = (payload) => {
   return null;
 };
 
-async function resolveTimezoneIdForCoordinates(lat, lng) {
+const extractLocationLabel = (payload, lat, lng) => {
+  if (!payload || typeof payload !== 'object') {
+    return formatCoordinateLabel(lat, lng);
+  }
+  const candidates = [
+    payload.city,
+    payload.locality,
+    payload.principalSubdivision,
+    payload.countryName
+  ];
+  const parts = [];
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string') continue;
+    const trimmed = candidate.trim();
+    if (!trimmed || parts.includes(trimmed)) continue;
+    parts.push(trimmed);
+  }
+  return parts.length ? parts.join(', ') : formatCoordinateLabel(lat, lng);
+};
+
+async function resolveLocationMetadataForCoordinates(lat, lng) {
   const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lng)}&localityLanguage=en`;
   const res = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error('Timezone lookup failed');
   const data = await res.json();
-  return extractTimezoneId(data);
+  return {
+    timezoneId: extractTimezoneId(data),
+    label: extractLocationLabel(data, lat, lng)
+  };
 }
 
-async function updateLocationTimezoneFromCoordinates(lat, lng) {
+async function updateLocationTimezoneFromCoordinates(lat, lng, preferredLabel = null) {
   try {
-    const tzId = await resolveTimezoneIdForCoordinates(lat, lng);
-    if (tzId && typeof spiralCalendar.setLocationTimeZoneId === 'function') {
-      spiralCalendar.setLocationTimeZoneId(tzId);
+    const metadata = await resolveLocationMetadataForCoordinates(lat, lng);
+    if (metadata.timezoneId && typeof spiralCalendar.setLocationTimeZoneId === 'function') {
+      spiralCalendar.setLocationTimeZoneId(metadata.timezoneId);
     }
+    updateLocationCurrentInfo(preferredLabel || metadata.label, lat, lng);
   } catch (_) {
     // Keep existing timezone id if lookup fails.
+    updateLocationCurrentInfo(preferredLabel, lat, lng);
   } finally {
     updateLocationTimezoneInfo();
   }
 }
 
-async function applyLocation(lat, lng) {
+async function applyLocation(lat, lng, label = null) {
   if (!latInput || !lngInput) return;
   const latNum = Number(lat);
   const lngNum = Number(lng);
@@ -110,7 +156,8 @@ async function applyLocation(lat, lng) {
   latInput.value = latNum.toFixed(4);
   lngInput.value = lngNum.toFixed(4);
   spiralCalendar.setNightOverlayLocation(latNum, lngNum);
-  await updateLocationTimezoneFromCoordinates(latNum, lngNum);
+  updateLocationCurrentInfo(label, latNum, lngNum);
+  await updateLocationTimezoneFromCoordinates(latNum, lngNum, label);
 }
 
 if (setLocationBtn && latInput && lngInput) {
@@ -186,29 +233,94 @@ if (latInput && lngInput && typeof LOCATION_COORDS === 'object' && LOCATION_COOR
   latInput.value = Number(LOCATION_COORDS.lat).toFixed(4);
   lngInput.value = Number(LOCATION_COORDS.lng).toFixed(4);
 }
+updateLocationCurrentInfo(null, LOCATION_COORDS.lat, LOCATION_COORDS.lng);
 
 // Simple geocoding using OpenStreetMap Nominatim (no API key, rate-limited)
-async function geocodeQuery(query) {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`;
+async function geocodeQuery(query, limit = 1) {
+  const safeLimit = Math.max(1, Math.min(5, Number(limit) || 1));
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=${safeLimit}&addressdetails=0&q=${encodeURIComponent(query)}`;
   const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
   if (!res.ok) throw new Error('Geocoding failed');
   const data = await res.json();
-  return Array.isArray(data) && data.length ? data[0] : null;
+  return Array.isArray(data) ? data : [];
 }
 
-if (locationSearch && locationSearchBtn) {
+if (locationSearch && locationSearchBtn && locationSearchSuggestions) {
+  let locationSuggestionTimer = null;
+  let suggestionRequestToken = 0;
+  let currentSuggestions = [];
+
+  const hideLocationSuggestions = () => {
+    suggestionRequestToken += 1;
+    if (locationSuggestionTimer) {
+      clearTimeout(locationSuggestionTimer);
+      locationSuggestionTimer = null;
+    }
+    currentSuggestions = [];
+    locationSearchSuggestions.innerHTML = '';
+    locationSearchSuggestions.style.display = 'none';
+  };
+
+  const showLocationSuggestions = (results) => {
+    currentSuggestions = Array.isArray(results) ? results : [];
+    if (!currentSuggestions.length) {
+      hideLocationSuggestions();
+      return;
+    }
+
+    locationSearchSuggestions.innerHTML = '';
+    currentSuggestions.forEach((result, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('role', 'option');
+      button.id = `locationSuggestion-${index}`;
+      button.textContent = compactLocationLabel(result.display_name, result.lat, result.lon);
+      button.addEventListener('mousedown', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        locationSearch.value = button.textContent;
+        hideLocationSuggestions();
+        await applyLocation(result.lat, result.lon, result.display_name || button.textContent);
+      });
+      locationSearchSuggestions.appendChild(button);
+    });
+    locationSearchSuggestions.style.display = 'block';
+  };
+
+  const loadLocationSuggestions = async (query) => {
+    const q = (query || '').trim();
+    if (q.length < 2) {
+      hideLocationSuggestions();
+      return;
+    }
+
+    const requestToken = ++suggestionRequestToken;
+    try {
+      const results = await geocodeQuery(q, 5);
+      if (requestToken !== suggestionRequestToken) return;
+      showLocationSuggestions(results);
+    } catch (_) {
+      if (requestToken !== suggestionRequestToken) return;
+      hideLocationSuggestions();
+    }
+  };
+
   const triggerSearch = async () => {
     const q = (locationSearch.value || '').trim();
     if (!q) return;
+    hideLocationSuggestions();
     locationSearchBtn.disabled = true;
     const prev = locationSearchBtn.innerHTML;
     locationSearchBtn.innerHTML = `<img src="${getLocationIcon('wait')}" alt="Loading" style="width: 16px; height: 16px;">`;
     try {
-      const result = await geocodeQuery(q);
+      const results = await geocodeQuery(q, 1);
+      const result = Array.isArray(results) && results.length ? results[0] : null;
       if (!result) {
         alert('No results found for that location.');
       } else {
-        await applyLocation(result.lat, result.lon);
+        const locationLabel = compactLocationLabel(result.display_name, result.lat, result.lon);
+        locationSearch.value = locationLabel;
+        await applyLocation(result.lat, result.lon, result.display_name || locationLabel);
       }
     } catch (e) {
       alert('Could not search location. Please try again.');
@@ -217,11 +329,38 @@ if (locationSearch && locationSearchBtn) {
       locationSearchBtn.innerHTML = prev;
     }
   };
+
   locationSearchBtn.addEventListener('click', triggerSearch);
+  locationSearch.addEventListener('input', () => {
+    if (locationSuggestionTimer) clearTimeout(locationSuggestionTimer);
+    locationSuggestionTimer = setTimeout(() => {
+      void loadLocationSuggestions(locationSearch.value || '');
+    }, 250);
+  });
+  locationSearch.addEventListener('blur', () => {
+    setTimeout(() => hideLocationSuggestions(), 150);
+  });
   locationSearch.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      hideLocationSuggestions();
+      return;
+    }
     if (e.key === 'Enter') {
       e.preventDefault();
+      if (currentSuggestions.length > 0) {
+        const topResult = currentSuggestions[0];
+        const locationLabel = compactLocationLabel(topResult.display_name, topResult.lat, topResult.lon);
+        locationSearch.value = locationLabel;
+        hideLocationSuggestions();
+        void applyLocation(topResult.lat, topResult.lon, topResult.display_name || locationLabel);
+        return;
+      }
       triggerSearch();
+    }
+  });
+  document.addEventListener('mousedown', (e) => {
+    if (!locationSearchSuggestions.contains(e.target) && e.target !== locationSearch) {
+      hideLocationSuggestions();
     }
   });
 }

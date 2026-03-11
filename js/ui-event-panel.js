@@ -2979,8 +2979,11 @@ Object.assign(SpiralCalendar.prototype, {
       // Handle settings panel
       const settingsPanel = document.getElementById('settingsPanel');
       const settingsPanelBtn = document.getElementById('settingsPanelBtn');
+      const locationSearchSuggestions = document.getElementById('locationSearchSuggestions');
       if (settingsPanel && settingsPanel.style.display === 'block') {
-        if (!settingsPanel.contains(e.target) && !settingsPanelBtn.contains(e.target)) {
+        if (!settingsPanel.contains(e.target) &&
+            !settingsPanelBtn.contains(e.target) &&
+            (!locationSearchSuggestions || !locationSearchSuggestions.contains(e.target))) {
           settingsPanel.style.display = 'none';
           // Show the button again when closing via outside click
           settingsPanelBtn.style.display = 'grid';

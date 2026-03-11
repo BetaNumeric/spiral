@@ -129,6 +129,51 @@
     body.dark-mode #locationTimezoneInfo {
       color: var(--dark-text-secondary) !important;
     }
+    body.dark-mode #locationCurrentInfo {
+      color: var(--dark-text-secondary) !important;
+    }
+    #locationSearchSuggestions {
+      display: none;
+      margin-top: 0.25em;
+      border: 1px solid #ccc;
+      border-radius: 0.4em;
+      background: rgba(255, 255, 255, 0.98);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+      overflow: hidden;
+    }
+    #locationSearchSuggestions button {
+      width: 100%;
+      border: 0;
+      border-top: 1px solid #eee;
+      background: transparent;
+      color: #333;
+      text-align: left;
+      padding: 0.55em 0.7em;
+      font-size: 0.82em;
+      line-height: 1.35;
+      cursor: pointer;
+    }
+    #locationSearchSuggestions button:first-child {
+      border-top: 0;
+    }
+    #locationSearchSuggestions button:hover,
+    #locationSearchSuggestions button:focus-visible {
+      background: rgba(0, 0, 0, 0.05);
+      outline: none;
+    }
+    body.dark-mode #locationSearchSuggestions {
+      border-color: var(--dark-border);
+      background: rgba(24, 24, 24, 0.98);
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+    }
+    body.dark-mode #locationSearchSuggestions button {
+      border-top-color: var(--dark-border);
+      color: var(--dark-text-primary);
+    }
+    body.dark-mode #locationSearchSuggestions button:hover,
+    body.dark-mode #locationSearchSuggestions button:focus-visible {
+      background: rgba(255, 255, 255, 0.08);
+    }
     
     /* Dark mode panel opening buttons */
     body.dark-mode #addEventPanelBtn { 
@@ -315,6 +360,16 @@
       -moz-user-select: text;
       -ms-user-select: text;
       user-select: text;
+    }
+    input[type="text"],
+    input[type="number"],
+    input[type="datetime-local"],
+    input[type="email"],
+    input[type="search"],
+    input[type="url"],
+    input[type="tel"],
+    textarea {
+      font-size: 16px !important;
     }
 
     /* Settings panel styling */
@@ -1040,6 +1095,7 @@
             <button id="locationSearchBtn" title="Search" style="padding: 0.2em 0.6em; font-size: 0.9em;"></button>
             <button id="geoLocationBtn" title="Use device location" style="padding: 0.2em 0.6em; font-size: 0.9em;"></button>
           </div>
+          <div id="locationSearchSuggestions" role="listbox" aria-label="Location suggestions"></div>
           <div style="display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; gap: 0.4em; align-items: center;">
             <input type="number" id="latInput" step="0.0001" placeholder="Lat" value="53.0793" style="width:100%; padding: 0.2em 0.5em; height: 2em;">
             <input type="number" id="lngInput" step="0.0001" placeholder="Lng" value="8.8017" style="width:100%; padding: 0.2em 0.5em; height: 2em;">
@@ -1050,6 +1106,7 @@
             <span>Use location timezone</span>
           </label>
           <div id="locationTimezoneInfo" style="margin-top: 0.2em; font-size: 0.8em; color: #666; min-height: 1.2em;">Timezone: Device</div>
+          <div id="locationCurrentInfo" style="margin-top: 0.1em; font-size: 0.78em; color: #666; min-height: 1.2em;">Location: 53.0793, 8.8017</div>
         </div>
         
         <!-- Event Input section removed from here -->

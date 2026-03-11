@@ -80,15 +80,34 @@ return new Date(Date.UTC(year, month - 1, day, hour, minute, 0, 0));
 
 function calculateSunTimes(date, coords = LOCATION_COORDS, timezoneOffsetHours = null) {
 try {
-  const times = SunCalc.getTimes(date, coords.lat, coords.lng);
   const tzOffset = Number.isFinite(timezoneOffsetHours)
     ? timezoneOffsetHours
     : getDeviceTimezoneOffsetHours(date);
+  const times = SunCalc.getTimes(date, coords.lat, coords.lng);
+  const hasValidSunrise = times.sunrise instanceof Date && Number.isFinite(times.sunrise.getTime());
+  const hasValidSunset = times.sunset instanceof Date && Number.isFinite(times.sunset.getTime());
+  const wrap = (h) => ((h % 24) + 24) % 24;
+
+  if (!hasValidSunrise || !hasValidSunset) {
+    // Polar day/night: SunCalc yields invalid sunrise/sunset dates.
+    // Sample local noon to determine whether the sun stays above or below the horizon all day.
+    const baseUtcMidnight = new Date(Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate(),
+      0, 0, 0, 0
+    ));
+    const localNoonUtc = new Date(baseUtcMidnight.getTime() + (12 - tzOffset) * 60 * 60 * 1000);
+    const noonAltitude = SunCalc.getPosition(localNoonUtc, coords.lat, coords.lng).altitude;
+    if (Number.isFinite(noonAltitude) && noonAltitude > 0) {
+      return { sunrise: 0, sunset: 24 };
+    }
+    return { sunrise: 0, sunset: 0 };
+  }
   
   // Convert Date objects to hours
   const sunriseRaw = times.sunrise.getUTCHours() + tzOffset + times.sunrise.getUTCMinutes() / 60;
   const sunsetRaw = times.sunset.getUTCHours() + tzOffset + times.sunset.getUTCMinutes() / 60;
-  const wrap = (h) => ((h % 24) + 24) % 24;
   const sunrise = wrap(sunriseRaw);
   const sunset = wrap(sunsetRaw);
   

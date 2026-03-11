@@ -35,7 +35,7 @@ class SpiralCalendar {
         hourNumbersStartAtOne: false,
         hourNumbersPosition: 2,
         showNightOverlay: true,
-        useLocationTimezone: false,
+        useLocationTimezone: true,
         locationTimezoneId: null,
         nightOverlayLat: LOCATION_COORDS.lat,
         nightOverlayLng: LOCATION_COORDS.lng,
