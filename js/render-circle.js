@@ -127,10 +127,10 @@ Object.assign(SpiralCalendar.prototype, {
     const segmentColor = this.cache.colors[colorIndex];
     
     const eventInfo = this.getEventColorForSegment(day, segment);
-    const virtualEventActive = this.virtualEvent && this.virtualEvent.segmentId === segmentId;
+    const draftEventActive = this.draftEvent && this.draftEvent.segmentId === segmentId;
     
-    if (virtualEventActive) {
-      return this.virtualEvent.color;
+    if (draftEventActive) {
+      return this.draftEvent.color;
     } else if (eventInfo) {
       return eventInfo.color;
     } else if (segmentColor === CONFIG.BLANK_COLOR) {
@@ -1046,7 +1046,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (!this.state.showTooltip || !this.mouseState.hoveredEvent || isMobileDevice()) return;
       
       // Don't show tooltip if event detail window is open
-      if (this.state.detailMode !== null) return;
+      if (this.state.detailViewDay !== null) return;
       
       const { segment, events } = this.mouseState.hoveredEvent;
       const { x, y } = this.mouseState.tooltipPosition;

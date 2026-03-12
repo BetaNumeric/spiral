@@ -124,7 +124,7 @@ class SpiralCalendar {
         showEverySixthHour: this.defaultSettings.showEverySixthHour,
         hourNumbersStartAtOne: this.defaultSettings.hourNumbersStartAtOne,
         hourNumbersPosition: this.defaultSettings.hourNumbersPosition,
-        detailMode: null, // Never persist this
+        detailViewDay: null, // Never persist this
         circleMode: false, // Always start in spiral mode, not persisted
         autoInsideSegmentNumbers: false, // Auto-activated inside segment numbers when zooming past limit
         pastLimitScrollCount: 0, // Count of scroll steps past the limit
@@ -242,8 +242,8 @@ class SpiralCalendar {
         colorRing: null
       };
       
-      // Store virtual event for blank segments being edited
-      this.virtualEvent = null;
+      // Store draft event for blank segments being edited
+      this.draftEvent = null;
       
       // Study session data collection (simplified)
       this.studySession = {
@@ -340,7 +340,7 @@ class SpiralCalendar {
       this.eventListSearchQuery = ''; // Search query for filtering events
       this._shouldUpdateEventList = false; // Flag to control event list updates
       this._previousVisibleCalendars = null; // Store previous calendar visibility before filtering
-      this._eventCircleHasChanges = false; // Track if current event in circle has unsaved changes
+      this._detailViewHasChanges = false; // Track if current detail view has unsaved changes
 
       // Cached calculations
       this.cache = {

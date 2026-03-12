@@ -535,56 +535,33 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     drawDetailView(maxRadius) {
-      const canvasWidth = this.canvas.clientWidth;
-      const canvasHeight = this.canvas.clientHeight;
+      const detailLayout = this.getDetailViewLayout(maxRadius);
+      const {
+        centerX,
+        centerY,
+        outerRadius,
+        circleRadius,
+        baseFontSize,
+        smallFontSize,
+        titleFontSize,
+        titleY,
+        dateTimeY,
+        descriptionY,
+        buttonY
+      } = detailLayout;
     
     // Clear previous button info to prevent stale references
     this.deleteButtonInfo = null;
     this.addButtonInfo = null;
       
-      // Draw white circle in center
-    const { centerX, centerY } = this.calculateCenter(canvasWidth, canvasHeight);
-      // Calculate the radius at the start of the visible segments
-      // This ensures the circle covers the inner area and leaves outermost segments visible
-      const { thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
-      const visibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
-      const radiusFunction = this.createRadiusFunction(maxRadius, thetaMax, this.state.radiusExponent, this.state.rotation);
-      // Align circle with the selected segment
-      let circleRadius;
-      if (this.mouseState.selectedSegment) {
-        const segment = this.mouseState.selectedSegment;
-        if (this.state.circleMode) {
-          // All segments of a day share the same radius in circle mode
-          const day = segment.day;
-          const { thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
-          const radiusFunction = this.createRadiusFunction(maxRadius, thetaMax, this.state.radiusExponent, this.state.rotation);
-          circleRadius = radiusFunction(day * 2 * Math.PI);
-        } else {
-          // Spiral mode: use the segment's theta
-          const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
-          const segmentTheta = segment.day * 2 * Math.PI + (segment.segment + 1) * segmentAngle;
-          circleRadius = radiusFunction(segmentTheta);
-        }
-      } else {
-        // fallback
-        circleRadius = radiusFunction(visibilityRange.max);
-      }
-      
       this.ctx.save();
+      const detailEventState = this.mouseState.selectedSegment
+        ? this.getDetailViewEventState({ ensureDraft: true })
+        : null;
       
       // Draw the colored outer ring and white inner circle first (before content)
       if (this.mouseState.selectedSegment) {
         const segment = this.mouseState.selectedSegment;
-        // Calculate segmentId (distance from outside) - needed for virtual event check
-        const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-        const segmentId = totalVisibleSegments - (segment.day * CONFIG.SEGMENTS_PER_DAY + segment.segment) - 1;
-        
-        // Check if there's an event for this segment
-        const eventInfo = this.getEventColorForSegment(segment.day, segment.segment);
-        
-        // Determine if a virtual event is active for this segment
-        const virtualEventActive = this.virtualEvent && this.virtualEvent.segmentId === segmentId;
-        
         // Determine the color for the outer ring
         const outerRingColor = this.calculateSelectedSegmentColor(segment.day, segment.segment);
         
@@ -594,46 +571,30 @@ Object.assign(SpiralCalendar.prototype, {
         // Draw the colored outer circle (full size)
         this.ctx.fillStyle = outerRingColor;
         this.ctx.beginPath();
-        this.ctx.arc(centerX, centerY, circleRadius, 0, 2 * Math.PI);
+        this.ctx.arc(centerX, centerY, outerRadius, 0, 2 * Math.PI);
         this.ctx.fill();
-        
-        // Calculate inner circle radius (smaller than outer, narrower ring)
-        const innerRadius = circleRadius * 0.90; // 90% of outer radius (narrower ring)
         
         // Draw the white inner circle
         this.ctx.fillStyle = '#fff';
         this.ctx.beginPath();
-        this.ctx.arc(centerX, centerY, innerRadius, 0, 2 * Math.PI);
+        this.ctx.arc(centerX, centerY, circleRadius, 0, 2 * Math.PI);
         this.ctx.fill();
         
         // Store the clickable area for the color ring
-        let colorRingEvent = null;
-        if (virtualEventActive) {
-          colorRingEvent = this.virtualEvent;
-        } else if (eventInfo) {
-          // Get the selected event for this segment
-          const allEventsForSegment = this.getAllEventsForSegment(segment.day, segment.segment);
-          const selectedEventIndex = this.mouseState.selectedEventIndex;
-          const eventIndex = selectedEventIndex < allEventsForSegment.length ? selectedEventIndex : 0;
-          colorRingEvent = allEventsForSegment[eventIndex]?.event || null;
-        }
         this.canvasClickAreas.colorRing = {
           centerX: centerX,
           centerY: centerY,
-          outerRadius: circleRadius,
-          innerRadius: innerRadius,
-          event: colorRingEvent
+          outerRadius: outerRadius,
+          innerRadius: circleRadius,
+          event: detailEventState ? detailEventState.detailEvent : null
         };
-        
-        // Update circleRadius for inner content positioning
-        circleRadius = innerRadius;
       } else {
         // Fallback: draw a simple white circle if no segment is selected
         this.ctx.fillStyle = 'white';
         this.ctx.strokeStyle = '#444';
         this.ctx.lineWidth = 2;
         this.ctx.beginPath();
-        this.ctx.arc(centerX, centerY, circleRadius, 0, 2 * Math.PI);
+        this.ctx.arc(centerX, centerY, outerRadius, 0, 2 * Math.PI);
         this.ctx.fill();
         this.ctx.stroke();
       }
@@ -644,130 +605,46 @@ Object.assign(SpiralCalendar.prototype, {
       const persistentColorPicker = document.getElementById('persistentColorPicker');
       if (persistentStartInput && persistentEndInput && persistentColorPicker && 
           !this.editingState.isEditingTitle && !this.editingState.isEditingDescription) {
-        const canvasRect = this.canvas.getBoundingClientRect();
-        const safeTop = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('padding-top')) || 0;
-        const baseFontSize = Math.max(1, circleRadius * 0.1);
-        const inputWidth = circleRadius * 1.2;
-        const inputHeight = baseFontSize * 1.2;
-        const dateTimeY = centerY - circleRadius * 0.32;
-        const startInputLeft = centerX - inputWidth / 2;
-        const startInputTop = canvasRect.top + (dateTimeY - inputHeight * 0.8) + safeTop;
-        const endInputTop = canvasRect.top + (dateTimeY + inputHeight * 0.6) + safeTop;
-        const colorInputLeft = centerX - inputWidth / 2;
-        const colorInputTop = endInputTop + inputHeight + 10;
-        persistentStartInput.style.left = `${startInputLeft}px`;
-        persistentStartInput.style.top = `${startInputTop}px`;
-        persistentStartInput.style.width = `${inputWidth}px`;
-        persistentStartInput.style.height = `${inputHeight}px`;
-        persistentStartInput.style.fontSize = `${baseFontSize * 0.7}px`;
-        persistentEndInput.style.left = `${startInputLeft}px`;
-        persistentEndInput.style.top = `${endInputTop}px`;
-        persistentEndInput.style.width = `${inputWidth}px`;
-        persistentEndInput.style.height = `${inputHeight}px`;
-        persistentEndInput.style.fontSize = `${baseFontSize * 0.7}px`;
-        persistentColorPicker.style.left = `${colorInputLeft}px`;
-        persistentColorPicker.style.top = `${colorInputTop}px`;
-        persistentColorPicker.style.width = `${inputWidth}px`;
-        persistentColorPicker.style.height = `${inputHeight}px`;
+        const inputLayout = this.getDetailViewInputLayout(detailLayout);
+        persistentStartInput.style.left = `${inputLayout.inputLeft}px`;
+        persistentStartInput.style.top = `${inputLayout.startInputTop}px`;
+        persistentStartInput.style.width = `${inputLayout.inputWidth}px`;
+        persistentStartInput.style.height = `${inputLayout.inputHeight}px`;
+        persistentStartInput.style.fontSize = `${inputLayout.fontSize}px`;
+        persistentEndInput.style.left = `${inputLayout.inputLeft}px`;
+        persistentEndInput.style.top = `${inputLayout.endInputTop}px`;
+        persistentEndInput.style.width = `${inputLayout.inputWidth}px`;
+        persistentEndInput.style.height = `${inputLayout.inputHeight}px`;
+        persistentEndInput.style.fontSize = `${inputLayout.fontSize}px`;
+        persistentColorPicker.style.left = `${inputLayout.inputLeft}px`;
+        persistentColorPicker.style.top = `${inputLayout.colorInputTop}px`;
+        persistentColorPicker.style.width = `${inputLayout.inputWidth}px`;
+        persistentColorPicker.style.height = `${inputLayout.inputHeight}px`;
       }
 
       // Draw segment information
       if (this.mouseState.selectedSegment) {
-        const segment = this.mouseState.selectedSegment;
-        // Calculate segmentId (distance from outside)
-        const totalVisibleSegments = (this.state.days -1) * CONFIG.SEGMENTS_PER_DAY;
-        const segmentId = totalVisibleSegments - (segment.day * CONFIG.SEGMENTS_PER_DAY + segment.segment) - 1;
-        const colorIndex = ((segmentId % this.cache.colors.length) + this.cache.colors.length) % this.cache.colors.length;
-        const segmentColor = this.cache.colors[colorIndex];
-        
-        // Check if there's an event for this segment
-        const eventInfo = this.getEventColorForSegment(segment.day, segment.segment);
-        
-        // Determine stroke color
-        let strokeColor;
-        if (eventInfo) {
-          strokeColor = eventInfo.color;
-        } else if (segmentColor === CONFIG.BLANK_COLOR) {
-          strokeColor = '#000'; // Black stroke for blank segments
-        } else {
-          strokeColor = segmentColor;
+        if (!detailEventState || !detailEventState.detailEvent) {
+          this.ctx.restore();
+          return;
         }
-        
-
-        
-        // Calculate info for display (reuse segmentId)
-        const hoursAhead = segmentId;
-        const segmentDate = new Date(this.referenceTime.getTime() + hoursAhead * 60 * 60 * 1000);
-      const tzOffsetHours = (typeof this.getTimezoneOffsetHours === 'function')
-        ? this.getTimezoneOffsetHours(segmentDate)
-        : (segmentDate.getTimezoneOffset() / -60);
-      const startHour = ((segmentDate.getUTCHours() + tzOffsetHours) % 24 + 24) % 24;
-        const endHour = (startHour + 1) % 24;
-      // Format date using UTC to avoid DST issues
-        const weekday = WEEKDAYS_UTC[segmentDate.getUTCDay()];
-        const month = MONTHS_LONG_UTC[segmentDate.getUTCMonth()];
-      const day = segmentDate.getUTCDate();
-      const year = segmentDate.getUTCFullYear();
+        const {
+          selectedEventCount,
+          activeEventIndex,
+          detailEvent,
+          isDraftEventActive
+        } = detailEventState;
         
         // Draw text on top of the circle
         this.ctx.fillStyle = '#000';
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         
-        // Scale font sizes with circle size
-        let titleFontSize = Math.max(1, circleRadius * 0.12);
-        const baseFontSize = Math.max(1, circleRadius * 0.1);
-        const smallFontSize = Math.max(1, circleRadius * 0.08);
-        
         const smallLineHeight = smallFontSize;
-        
-        // Static, symmetric layout (no dynamic pushing):
-        const edgePadding = baseFontSize * 0.8;
-        const topY = centerY - circleRadius;
-        const bottomY = centerY + circleRadius;
-        // Title a bit lower than top edge
-        let titleY = topY + edgePadding * 3 + titleFontSize / 2;
-        // Date boxes exactly centered
-        const dateTimeY = centerY;
-        // Description midway between title and date boxes
-        const descriptionY = (titleY + dateTimeY) / 2;
-        // Buttons a bit higher than bottom edge
-        const buttonY = bottomY - edgePadding * 3;
-        
-        // --- Unified event model for rendering ---
-        const showVirtualEvent = this.virtualEvent && this.virtualEvent.segmentId === segmentId;
-          const allEventsForSegment = this.getAllEventsForSegment(segment.day, segment.segment);
-          const selectedEventIndex = this.mouseState.selectedEventIndex;
-          const eventIndex = selectedEventIndex < allEventsForSegment.length ? selectedEventIndex : 0;
-        const selectedEvent = allEventsForSegment[eventIndex]?.event || null;
-        const isVirtual = !selectedEvent || showVirtualEvent;
-
-        // Ensure virtual event exists if needed
-        if (isVirtual && (!this.virtualEvent || this.virtualEvent.segmentId !== segmentId)) {
-          const segmentDate = new Date(this.referenceTime.getTime() + segmentId * 60 * 60 * 1000);
-          const segmentHourStart = new Date(segmentDate);
-          segmentHourStart.setUTCMinutes(0, 0, 0);
-          const segmentHourEnd = new Date(segmentHourStart);
-          segmentHourEnd.setUTCHours(segmentHourStart.getUTCHours() + 1);
-          const randomColor = this.generateRandomColor('Home', segmentHourStart);
-          this.virtualEvent = {
-            title: '',
-            description: '',
-            start: new Date(segmentHourStart),
-            end: new Date(segmentHourEnd),
-            color: randomColor.startsWith('#') ? randomColor : this.hslToHex(randomColor),
-            calendar: 'Home',
-            isVirtual: true,
-            segmentId: segmentId
-          };
-          this.drawSpiral();
-        }
-
-        const currentEvent = isVirtual ? this.virtualEvent : selectedEvent;
 
         // Event counter for real events with multiples
-        if (!isVirtual && allEventsForSegment.length > 1) {
-          const eventCounterText = `Event ${eventIndex + 1} of ${allEventsForSegment.length}`;
+        if (!isDraftEventActive && selectedEventCount > 1) {
+          const eventCounterText = `Event ${activeEventIndex + 1} of ${selectedEventCount}`;
             this.ctx.fillStyle = '#666';
             this.ctx.font = getFontString(smallFontSize);
             this.ctx.textAlign = 'center';
@@ -777,39 +654,38 @@ Object.assign(SpiralCalendar.prototype, {
           }
           
         // Draw title (fitted) and set click area
-        const displayTitle = isVirtual ? (currentEvent.title || 'Click to add title...') : currentEvent.title;
+        const displayTitle = isDraftEventActive ? (detailEvent.title || 'Click to add title...') : detailEvent.title;
         if (!this.hideTitleWhileEditing) {
-          const color = isVirtual && !currentEvent.title ? '#999' : '#000';
+          const color = isDraftEventActive && !detailEvent.title ? '#999' : '#000';
           const { width: fittedWidth, height: fittedHeight } = this.drawTitleFitted(displayTitle, centerX, titleY, circleRadius, titleFontSize, color, true);
           this.titleClickArea = {
             x: centerX - fittedWidth / 2,
             y: titleY - fittedHeight / 2,
             width: fittedWidth,
             height: fittedHeight,
-            event: currentEvent,
+            event: detailEvent,
             centerY: titleY
           };
         }
 
         // Description height and static date/time Y (center)
-            const maxWidth = circleRadius * 1.6;
-        const actualTextHeight = this.calculateTextHeight(currentEvent.description, maxWidth, smallFontSize);
-        const dynamicDateTimeY = dateTimeY;
-        this.drawDateTimeAndColorBoxes(currentEvent, centerX, dateTimeY, baseFontSize, circleRadius, buttonY);
+        const maxWidth = circleRadius * 1.6;
+        const actualTextHeight = this.calculateTextHeight(detailEvent.description, maxWidth, smallFontSize);
+        this.drawDateTimeAndColorBoxes(detailEvent, centerX, dateTimeY, baseFontSize, circleRadius, buttonY);
 
         // Description click area (static spacing between title and date boxes for empty)
           this.descClickArea = {
-          ...this.buildDescriptionClickArea(centerX, descriptionY, circleRadius, baseFontSize, titleY, titleFontSize, dateTimeY, actualTextHeight, !!currentEvent.description),
-          event: currentEvent,
+          ...this.buildDescriptionClickArea(centerX, descriptionY, circleRadius, baseFontSize, titleY, titleFontSize, dateTimeY, actualTextHeight, !!detailEvent.description),
+          event: detailEvent,
           centerY: descriptionY
         };
 
         // Draw description or placeholder
           if (!this.hideDescriptionWhileEditing) {
               this.ctx.font = getFontString(smallFontSize);
-          if (currentEvent.description) {
+          if (detailEvent.description) {
             this.ctx.fillStyle = '#000';
-            const wrappedText = this.wrapText(currentEvent.description, maxWidth);
+            const wrappedText = this.wrapText(detailEvent.description, maxWidth);
               let lineY = descriptionY - (wrappedText.length - 1) * smallLineHeight / 2;
               for (const line of wrappedText) {
                 this.ctx.fillText(line, centerX, lineY);
@@ -825,8 +701,8 @@ Object.assign(SpiralCalendar.prototype, {
           this.ctx.fillStyle = 'rgba(0, 0, 0, 0.00)';
           this.ctx.fillRect(this.descClickArea.x, this.descClickArea.y, this.descClickArea.width, this.descClickArea.height);
           
-        // Buttons: virtual => single "Add Event"; real => "+ New" and "Delete"
-        if (isVirtual) {
+        // Buttons: draft => single "Add Event"; real => "+ New" and "Delete"
+        if (isDraftEventActive) {
           const buttonWidth = baseFontSize * 5.5;
           const buttonHeight = baseFontSize * 2.5;
           const buttonRadius = buttonHeight / 2;
@@ -837,7 +713,7 @@ Object.assign(SpiralCalendar.prototype, {
             y: deleteButtonY,
             width: buttonWidth,
             height: buttonHeight,
-            event: currentEvent,
+            event: detailEvent,
             isAddButton: true
           };
           // Hover effect for single center button
@@ -865,13 +741,13 @@ Object.assign(SpiralCalendar.prototype, {
             y: deleteButtonY,
             width: buttonWidth,
             height: buttonHeight,
-            event: currentEvent,
+            event: detailEvent,
             isAddButton: true,
             isAddAnotherButton: true
           };
           // Hover effect for "+ New" or "Done" button
           const isHoverAdd = this.mouseState.lastMouseX && this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: addButtonX, y: deleteButtonY, width: buttonWidth, height: buttonHeight });
-          const buttonText = this._eventCircleHasChanges ? 'Done' : '+ New';
+          const buttonText = this._detailViewHasChanges ? 'Done' : '+ New';
           //this.ctx.fillStyle = isHoverAdd ? '#43A047' : '#4CAF50';
           this.ctx.fillStyle = isHoverAdd ? '#666666' : '#888888';
           this.ctx.beginPath();
@@ -888,7 +764,7 @@ Object.assign(SpiralCalendar.prototype, {
             y: deleteButtonY,
             width: buttonWidth,
             height: buttonHeight,
-            event: currentEvent
+            event: detailEvent
           };
           // Hover effect for delete button
           const isHoverDelete = this.mouseState.lastMouseX && this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: deleteButtonX, y: deleteButtonY, width: buttonWidth, height: buttonHeight });
@@ -912,36 +788,11 @@ Object.assign(SpiralCalendar.prototype, {
       if (existingEditor) {
         existingEditor.remove();
       }
-      // Calculate the exact position and size to match the original title
-      const canvasWidth = this.canvas.clientWidth;
-      const canvasHeight = this.canvas.clientHeight;
-    const { centerX, centerY } = this.calculateCenter(canvasWidth, canvasHeight);
+      const detailLayout = this.getDetailViewLayout();
+      const { centerX, circleRadius, titleY } = detailLayout;
       // Get the same font size as used in drawDetailView
       let titleFontSize = this.titleClickArea ? this.titleClickArea.height : 16;
-      
-      // Get circle radius to use same positioning as display
-      let circleRadius;
-      if (this.mouseState.selectedSegment) {
-        const segment = this.mouseState.selectedSegment;
-        if (this.state.circleMode) {
-          const day = segment.day;
-          const { thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
-          const radiusFunction = this.createRadiusFunction(Math.min(canvasWidth, canvasHeight) * this.state.spiralScale, thetaMax, this.state.radiusExponent, this.state.rotation);
-          circleRadius = radiusFunction(day * 2 * Math.PI);
-        } else {
-          const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
-          const segmentTheta = segment.day * 2 * Math.PI + (segment.segment + 1) * segmentAngle;
-          const { thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
-          const radiusFunction = this.createRadiusFunction(Math.min(canvasWidth, canvasHeight) * this.state.spiralScale, thetaMax, this.state.radiusExponent, this.state.rotation);
-          circleRadius = radiusFunction(segmentTheta);
-        }
-      } else {
-        const { thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
-        const radiusFunction = this.createRadiusFunction(Math.min(canvasWidth, canvasHeight) * this.state.spiralScale, thetaMax, this.state.radiusExponent, this.state.rotation);
-        const visibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
-        circleRadius = radiusFunction(visibilityRange.max);
-      }
-      
+
       // Apply the same dynamic font sizing logic as in drawDetailView
       let maxTitleWidth = circleRadius * 1.4;
       this.ctx.font = getFontString(titleFontSize, 'bold ');
@@ -951,8 +802,7 @@ Object.assign(SpiralCalendar.prototype, {
         const scaleFactor = maxTitleWidth / titleMetrics.width;
         titleFontSize = Math.max(1, Math.floor(titleFontSize * scaleFactor));
       }
-      
-      const titleY = centerY - circleRadius * 0.55;
+
       // Use the same font size and width as the title in the circle
       this.ctx.font = getFontString(titleFontSize, 'bold ');
       const textMetrics = this.ctx.measureText(event.title);
@@ -1064,7 +914,7 @@ Object.assign(SpiralCalendar.prototype, {
         event.title = newTitle;
         event.lastModified = Date.now();
         // Mark that changes have been made
-        this._eventCircleHasChanges = true;
+        this._detailViewHasChanges = true;
         input.remove();
         this.hideTitleWhileEditing = false;
         this.drawSpiral();
@@ -1111,7 +961,7 @@ Object.assign(SpiralCalendar.prototype, {
       // Update state tracking
       this.persistentInputsState.currentEventId = eventId;
       this.persistentInputsState.inputsCreated = true;
-      this._eventCircleHasChanges = false; // Reset changes when opening event circle
+      this._detailViewHasChanges = false; // Reset changes when opening detail view
 
       // Format datetime for input
       const formatLocalDateTime = (date) => {
@@ -1226,7 +1076,7 @@ Object.assign(SpiralCalendar.prototype, {
           event.lastModified = Date.now();
           
           // Mark that changes have been made
-          this._eventCircleHasChanges = true;
+          this._detailViewHasChanges = true;
           
           this.drawSpiral(); // Redraw to update any event visualization
           // Save events to localStorage
@@ -1246,7 +1096,7 @@ Object.assign(SpiralCalendar.prototype, {
         event.color = colorInput.value;
         event.lastModified = Date.now();
         // Mark that changes have been made
-        this._eventCircleHasChanges = true;
+        this._detailViewHasChanges = true;
         this.drawSpiral(); // Redraw to update event visualization
         // Save events to localStorage
         this.saveEventsToStorage();
@@ -1273,35 +1123,8 @@ Object.assign(SpiralCalendar.prototype, {
       if (existingStartEditor) existingStartEditor.remove();
       if (existingEndEditor) existingEndEditor.remove();
 
-      // Calculate the exact position and size to match the original date/time
-      const canvasWidth = this.canvas.clientWidth;
-      const canvasHeight = this.canvas.clientHeight;
-    const { centerX, centerY } = this.calculateCenter(canvasWidth, canvasHeight);
-      
-      // Get circle radius and font size (same as display calculation)
-      let circleRadius;
-      if (this.mouseState.selectedSegment) {
-        const segment = this.mouseState.selectedSegment;
-        if (this.state.circleMode) {
-          const day = segment.day;
-          const { thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
-          const radiusFunction = this.createRadiusFunction(Math.min(canvasWidth, canvasHeight) * this.state.spiralScale, thetaMax, this.state.radiusExponent, this.state.rotation);
-          circleRadius = radiusFunction(day * 2 * Math.PI);
-        } else {
-          const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
-          const segmentTheta = segment.day * 2 * Math.PI + (segment.segment + 1) * segmentAngle;
-          const { thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
-          const radiusFunction = this.createRadiusFunction(Math.min(canvasWidth, canvasHeight) * this.state.spiralScale, thetaMax, this.state.radiusExponent, this.state.rotation);
-          circleRadius = radiusFunction(segmentTheta);
-        }
-      } else {
-        const { thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
-        const radiusFunction = this.createRadiusFunction(Math.min(canvasWidth, canvasHeight) * this.state.spiralScale, thetaMax, this.state.radiusExponent, this.state.rotation);
-        const visibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
-        circleRadius = radiusFunction(visibilityRange.max);
-      }
-      
-      const baseFontSize = Math.max(1, circleRadius * 0.1);
+      const detailLayout = this.getDetailViewLayout();
+      const { centerX, centerY, circleRadius, baseFontSize } = detailLayout;
       const dateTimeY = centerY - circleRadius * 0.15;
       
       // Create start time input
@@ -1449,33 +1272,9 @@ Object.assign(SpiralCalendar.prototype, {
       if (existingEditor) {
         existingEditor.remove();
       }
-      // Calculate the exact position and size to match the original description area
-      const canvasWidth = this.canvas.clientWidth;
-      const canvasHeight = this.canvas.clientHeight;
-    const { centerX, centerY } = this.calculateCenter(canvasWidth, canvasHeight);
-      // Calculate the same font size as used in drawDetailView
-      let circleRadius;
-      if (this.mouseState.selectedSegment) {
-        const segment = this.mouseState.selectedSegment;
-        if (this.state.circleMode) {
-          const day = segment.day;
-          const { thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
-          const radiusFunction = this.createRadiusFunction(Math.min(canvasWidth, canvasHeight) * this.state.spiralScale, thetaMax, this.state.radiusExponent, this.state.rotation);
-          circleRadius = radiusFunction(day * 2 * Math.PI);
-        } else {
-          const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
-          const segmentTheta = segment.day * 2 * Math.PI + (segment.segment + 1) * segmentAngle;
-          const { thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
-          const radiusFunction = this.createRadiusFunction(Math.min(canvasWidth, canvasHeight) * this.state.spiralScale, thetaMax, this.state.radiusExponent, this.state.rotation);
-          circleRadius = radiusFunction(segmentTheta);
-        }
-      } else {
-        const { thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
-        const radiusFunction = this.createRadiusFunction(Math.min(canvasWidth, canvasHeight) * this.state.spiralScale, thetaMax, this.state.radiusExponent, this.state.rotation);
-        const visibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
-        circleRadius = radiusFunction(visibilityRange.max);
-      }
-      let smallFontSize = Math.max(1, circleRadius * 0.08); // Same calculation as in drawDetailView
+      const detailLayout = this.getDetailViewLayout();
+      const { centerX, centerY, circleRadius } = detailLayout;
+      let smallFontSize = detailLayout.smallFontSize;
       // iOS Safari zooms in when font size is below 16px, so ensure minimum size
       if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) {
         smallFontSize = Math.max(smallFontSize, 16);
@@ -1584,7 +1383,7 @@ Object.assign(SpiralCalendar.prototype, {
         event.description = newDescription;
         event.lastModified = Date.now();
         // Mark that changes have been made
-        this._eventCircleHasChanges = true;
+        this._detailViewHasChanges = true;
         textarea.remove();
         this.hideDescriptionWhileEditing = false;
         this.drawSpiral();
@@ -1708,7 +1507,7 @@ Object.assign(SpiralCalendar.prototype, {
       this.arcLines = [];
       
       // Clear delete button info if no event is being displayed
-      if (this.state.detailMode === null) {
+      if (this.state.detailViewDay === null) {
         this.deleteButtonInfo = null;
         this.addButtonInfo = null;
         this.titleClickArea = null;
@@ -1720,7 +1519,7 @@ Object.assign(SpiralCalendar.prototype, {
         this.canvasClickAreas.colorBox = null;
         this.canvasClickAreas.colorRing = null;
         
-        // Remove persistent datetime inputs and color picker only when closing detail mode
+        // Remove persistent datetime inputs and color picker only when closing detail view
         const persistentStartInput = document.getElementById('persistentStartDateTime');
         const persistentEndInput = document.getElementById('persistentEndDateTime');
         const persistentColorPicker = document.getElementById('persistentColorPicker');
@@ -2453,8 +2252,8 @@ Object.assign(SpiralCalendar.prototype, {
       // Draw tooltip on top of everything (not affected by transforms)
       this.drawTooltip();
       
-      // Draw detail view if in detail mode (after all other drawing)
-      if (this.state.detailMode !== null && !this.mouseState.isHandleDragging) {
+      // Draw detail view if in detail view (after all other drawing)
+      if (this.state.detailViewDay !== null && !this.mouseState.isHandleDragging) {
         this.drawDetailView(maxRadius);
       }
     

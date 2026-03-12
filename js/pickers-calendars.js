@@ -79,10 +79,10 @@ Object.assign(SpiralCalendar.prototype, {
         }
         event.lastModified = Date.now();
         // Mark that changes have been made
-        this._eventCircleHasChanges = true;
-        // If this is a virtual event, make sure it's still the active one
-        if (event.isVirtual && this.virtualEvent && this.virtualEvent.segmentId === event.segmentId) {
-          this.virtualEvent = event; // Update the stored virtual event
+        this._detailViewHasChanges = true;
+        // If this is a draft event, make sure it's still the active one
+        if (event.isDraft && this.draftEvent && this.draftEvent.segmentId === event.segmentId) {
+          this.draftEvent = event; // Update the stored draft event
         }
         this.drawSpiral();
         // Save events to localStorage
@@ -175,7 +175,7 @@ Object.assign(SpiralCalendar.prototype, {
       const allEvents = this.getAllEventsForSegment(newDay, targetSegment);
       const eventIdx = allEvents.findIndex(ei => ei.event === ev);
       this.mouseState.selectedEventIndex = eventIdx >= 0 ? eventIdx : 0;
-      this.state.detailMode = newDay;
+      this.state.detailViewDay = newDay;
 
       // Disable auto align and sync UI
       if (this.autoTimeAlignState && this.autoTimeAlignState.enabled) {
@@ -285,10 +285,10 @@ Object.assign(SpiralCalendar.prototype, {
       calendarEvent.color = input.value;
       calendarEvent.lastModified = Date.now();
       // Mark that changes have been made
-      this._eventCircleHasChanges = true;
-      // If this is a virtual event, make sure it's still the active one
-      if (calendarEvent.isVirtual && this.virtualEvent && this.virtualEvent.segmentId === calendarEvent.segmentId) {
-        this.virtualEvent = calendarEvent; // Update the stored virtual event
+      this._detailViewHasChanges = true;
+      // If this is a draft event, make sure it's still the active one
+      if (calendarEvent.isDraft && this.draftEvent && this.draftEvent.segmentId === calendarEvent.segmentId) {
+        this.draftEvent = calendarEvent; // Update the stored draft event
       }
       this.drawSpiral();
       // Save events to localStorage
@@ -1097,7 +1097,7 @@ Object.assign(SpiralCalendar.prototype, {
           } catch (_) {}
           event.lastModified = Date.now();
           // Mark that changes have been made
-          this._eventCircleHasChanges = true;
+          this._detailViewHasChanges = true;
           this.saveEventsToStorage();
           this.drawSpiral();
           // Update event list to show new icon state (with delay to ensure properties are saved)
@@ -1155,11 +1155,11 @@ Object.assign(SpiralCalendar.prototype, {
 
           event.lastModified = Date.now();
           // Mark that changes have been made
-          this._eventCircleHasChanges = true;
+          this._detailViewHasChanges = true;
           
-          // If this is a virtual event, make sure it's still the active one
-          if (this.mouseState.virtualEvent && this.mouseState.virtualEvent === event) {
-            this.mouseState.virtualEvent.calendar = newCalendarName;
+          // If this is a draft event, make sure it's still the active one
+          if (this.draftEvent && this.draftEvent === event) {
+            this.draftEvent.calendar = newCalendarName;
           }
           
           this.saveEventsToStorage();

@@ -1117,7 +1117,7 @@ Object.assign(SpiralCalendar.prototype, {
           const allEvents = this.getAllEventsForSegment(newDay, targetSegment);
           const eventIdx = allEvents.findIndex(ei => ei.event === ev);
           this.mouseState.selectedEventIndex = eventIdx >= 0 ? eventIdx : 0;
-          this.state.detailMode = newDay;
+          this.state.detailViewDay = newDay;
           
           // --- rotation already updated above ---
           

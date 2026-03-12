@@ -98,7 +98,7 @@ Object.assign(SpiralCalendar.prototype, {
       }
     }
 
-    this._eventCircleHasChanges = true;
+    this._detailViewHasChanges = true;
     this._eventsVersion++;
     this.ensureLayoutCache();
     this.drawSpiral();
@@ -285,7 +285,7 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   activatePendingJoystick(pointerId, originX, originY) {
-    if (!this.touchState || !this.state.enableLongPressJoystick || this.state.detailMode !== null) return;
+    if (!this.touchState || !this.state.enableLongPressJoystick || this.state.detailViewDay !== null) return;
 
     this.resetPendingTouchJoystick();
     this.touchState.joystickActive = true;
@@ -446,7 +446,7 @@ Object.assign(SpiralCalendar.prototype, {
     // Check time display swipe/tap area first (single touch)
     if (e.touches.length === 1 && this.state.showTimeDisplay) {
       const { touchX, touchY, canvasX, canvasY } = this._touchToCanvasPoint(e.touches[0]);
-      const touchesHandleInDetailMode = this.state.detailMode !== null && !!this.getHandleAtCanvasPoint(canvasX, canvasY, 14);
+      const touchesHandleInDetailMode = this.state.detailViewDay !== null && !!this.getHandleAtCanvasPoint(canvasX, canvasY, 14);
       const canvasWidth = this.canvas.clientWidth;
       const canvasHeight = this.canvas.clientHeight;
       const tdHeight = (this.timeDisplayState && this.timeDisplayState.collapsed) ? (this.timeDisplayState.collapseHeight || 12) : CONFIG.TIME_DISPLAY_HEIGHT;
@@ -523,8 +523,8 @@ Object.assign(SpiralCalendar.prototype, {
     } else if (e.touches.length === 1) {
       const { touchX, touchY, canvasX, canvasY } = this._touchToCanvasPoint(e.touches[0]);
 
-      // In detail mode, allow direct touch-drag of start/end event handles.
-      if (this.state.detailMode !== null && this.mouseState.selectedSegment) {
+      // In detail view, allow direct touch-drag of start/end event handles.
+      if (this.state.detailViewDay !== null && this.mouseState.selectedSegment) {
         const touchedHandle = this.getHandleAtCanvasPoint(canvasX, canvasY, 14);
         if (touchedHandle) {
           const seg = this.mouseState.selectedSegment;
@@ -555,7 +555,7 @@ Object.assign(SpiralCalendar.prototype, {
 
             this.touchState.isActive = false;
             this.stopInertia();
-            this._eventCircleHasChanges = true;
+            this._detailViewHasChanges = true;
             this.drawSpiral();
             e.preventDefault();
             return;
@@ -563,8 +563,8 @@ Object.assign(SpiralCalendar.prototype, {
         }
       }
 
-      // If in detail mode and tapping on info circle date boxes, open picker immediately (mobile reliability)
-      if (this.state.detailMode !== null && this.canvasClickAreas) {
+      // If in detail view and tapping on detail circle date boxes, open picker immediately (mobile reliability)
+      if (this.state.detailViewDay !== null && this.canvasClickAreas) {
         if (this.canvasClickAreas.startDateBox) {
           const box = this.canvasClickAreas.startDateBox;
           if (touchX >= box.x && touchX <= box.x + box.width &&
@@ -587,8 +587,8 @@ Object.assign(SpiralCalendar.prototype, {
         }
       }
 
-      // Single-finger interactions (only if not in detail mode)
-      if (this.state.detailMode === null) {
+      // Single-finger interactions (only if not in detail view)
+      if (this.state.detailViewDay === null) {
         if (!this.startPendingTouchJoystick(e.touches[0])) {
           this.beginSingleTouchRotationDrag(e.touches[0]);
         }
@@ -788,8 +788,8 @@ Object.assign(SpiralCalendar.prototype, {
           
       this.state.rotation += rotationSteps * 2 * Math.PI;
       
-      // Check if we're in detail mode and hit the outer limit
-      if (this.state.detailMode !== null && this.mouseState.selectedSegment) {
+      // Check if we're in detail view and hit the outer limit
+      if (this.state.detailViewDay !== null && this.mouseState.selectedSegment) {
         // Calculate what the rotation would be without clamping
         const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
         const segment = this.mouseState.selectedSegment;
@@ -1221,7 +1221,7 @@ Object.assign(SpiralCalendar.prototype, {
         this._lastMoveTs = undefined;
       }
       
-      // Handle touch click for time display and info circle date boxes (mobile devices)
+      // Handle touch click for time display and detail circle date boxes (mobile devices)
       if (!this.mouseState.wasDragging && !this.mouseState.hasMovedDuringDrag) {
         // Don't handle tap if we just finished dragging the time display
         if (this.timeDisplayState && this.timeDisplayState.justFinishedDrag) {
@@ -1255,8 +1255,8 @@ Object.assign(SpiralCalendar.prototype, {
           }
         }
 
-        // If in detail mode, also treat taps on the canvas-drawn date boxes like clicks
-        if (this.state.detailMode !== null && this.canvasClickAreas) {
+        // If in detail view, also treat taps on the canvas-drawn date boxes like clicks
+        if (this.state.detailViewDay !== null && this.canvasClickAreas) {
           if (this.canvasClickAreas.startDateBox) {
             const box = this.canvasClickAreas.startDateBox;
             if (touchX >= box.x && touchX <= box.x + box.width &&
@@ -1863,7 +1863,7 @@ drawTimeDisplay(canvasWidth, canvasHeight) {
 },
 
 clampRotationToEventWindow() {
-  if (this.state.detailMode !== null && this.mouseState.selectedSegment) {
+  if (this.state.detailViewDay !== null && this.mouseState.selectedSegment) {
     // Use the same totalVisibleSegments as everywhere else
     const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
     const segment = this.mouseState.selectedSegment;

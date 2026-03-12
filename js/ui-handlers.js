@@ -998,8 +998,8 @@ Object.assign(SpiralCalendar.prototype, {
         // Mark that this is a manual rotation, so event list should update
         this._shouldUpdateEventList = true;
         
-        // Check if we're in detail mode and hit the outer limit
-        if (this.state.detailMode !== null && this.mouseState.selectedSegment) {
+        // Check if we're in the detail view and hit the outer limit
+        if (this.state.detailViewDay !== null && this.mouseState.selectedSegment) {
           // Calculate what the rotation would be without clamping
           const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
           const segment = this.mouseState.selectedSegment;

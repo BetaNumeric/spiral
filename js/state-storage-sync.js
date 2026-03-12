@@ -576,7 +576,7 @@ Object.assign(SpiralCalendar.prototype, {
     });
     // Runtime/UI-only defaults not persisted in defaultSettings.
     this.state.circleMode = false;
-    this.state.detailMode = null;
+    this.state.detailViewDay = null;
     this.animationState.isAnimating = !!this.defaultSettings.animationEnabled;
     this.animationState.speed = Number(this.defaultSettings.animationSpeed ?? 1.0);
     if (!this.animationState.isAnimating) {
@@ -945,12 +945,10 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   _getSelectedEventForHandleEditing() {
-    if (this.state.detailMode === null || !this.mouseState.selectedSegment) return null;
-    const seg = this.mouseState.selectedSegment;
-    const eventsHere = this.getAllEventsForSegment(seg.day, seg.segment);
-    if (!eventsHere || eventsHere.length === 0) return null;
-    const idx = Math.min(this.mouseState.selectedEventIndex || 0, eventsHere.length - 1);
-    return eventsHere[idx] && eventsHere[idx].event ? eventsHere[idx].event : null;
+    if (this.state.detailViewDay === null) return null;
+    const detailEventState = this.getDetailViewEventState();
+    if (!detailEventState || detailEventState.isDraftEventActive) return null;
+    return detailEventState.activePersistedEvent;
   },
 
   _normalizeHandleDate(date, isEnd) {
@@ -1124,7 +1122,7 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   drawSelectedEventHandles() {
-    if (this.state.detailMode === null || !this.mouseState.selectedSegment) return;
+    if (this.state.detailViewDay === null || !this.mouseState.selectedSegment) return;
 
     this.handleHandles = null;
 
@@ -1183,25 +1181,161 @@ Object.assign(SpiralCalendar.prototype, {
     };
   },
 
-getInfoCircleRadius(maxRadius) {
-  if (!this.mouseState.selectedSegment) return 0;
-  
-  const canvasWidth = this.canvas.clientWidth;
-  const canvasHeight = this.canvas.clientHeight;
-  const { thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
-  const radiusFunction = this.createRadiusFunction(maxRadius, thetaMax, this.state.radiusExponent, this.state.rotation);
-  
-  const segment = this.mouseState.selectedSegment;
-  if (this.state.circleMode) {
-    // All segments of a day share the same radius in circle mode
-    const day = segment.day;
-    return radiusFunction(day * 2 * Math.PI);
-  } else {
-    // Spiral mode: use the segment's theta
-    const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
-    const segmentTheta = segment.day * 2 * Math.PI + (segment.segment + 1) * segmentAngle;
-    return radiusFunction(segmentTheta);
+  getDetailViewMetrics(maxRadius = null) {
+    const canvasWidth = this.canvas.clientWidth;
+    const canvasHeight = this.canvas.clientHeight;
+    const resolvedMaxRadius = Number.isFinite(maxRadius)
+      ? maxRadius
+      : Math.min(canvasWidth, canvasHeight) * this.state.spiralScale;
+    const { centerX, centerY } = this.calculateCenter(canvasWidth, canvasHeight);
+    const { thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
+    const visibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
+    const radiusFunction = this.createRadiusFunction(
+      resolvedMaxRadius,
+      thetaMax,
+      this.state.radiusExponent,
+      this.state.rotation
+    );
+
+    let outerRadius = radiusFunction(visibilityRange.max);
+    if (this.mouseState.selectedSegment) {
+      const segment = this.mouseState.selectedSegment;
+      if (this.state.circleMode) {
+        outerRadius = radiusFunction(segment.day * 2 * Math.PI);
+      } else {
+        const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
+        const segmentTheta = segment.day * 2 * Math.PI + (segment.segment + 1) * segmentAngle;
+        outerRadius = radiusFunction(segmentTheta);
+      }
     }
+
+    return {
+      canvasWidth,
+      canvasHeight,
+      centerX,
+      centerY,
+      maxRadius: resolvedMaxRadius,
+      thetaMax,
+      visibilityRange,
+      radiusFunction,
+      outerRadius,
+      contentRadius: this.mouseState.selectedSegment ? outerRadius * 0.90 : outerRadius
+    };
+  },
+
+  getDetailViewLayout(maxRadius = null) {
+    const metrics = this.getDetailViewMetrics(maxRadius);
+    const circleRadius = metrics.contentRadius;
+    const titleFontSize = Math.max(1, circleRadius * 0.12);
+    const baseFontSize = Math.max(1, circleRadius * 0.1);
+    const smallFontSize = Math.max(1, circleRadius * 0.08);
+    const edgePadding = baseFontSize * 0.8;
+    const topY = metrics.centerY - circleRadius;
+    const bottomY = metrics.centerY + circleRadius;
+    const titleY = topY + edgePadding * 3 + titleFontSize / 2;
+    const dateTimeY = metrics.centerY;
+    const descriptionY = (titleY + dateTimeY) / 2;
+    const buttonY = bottomY - edgePadding * 3;
+
+    return {
+      ...metrics,
+      circleRadius,
+      titleFontSize,
+      baseFontSize,
+      smallFontSize,
+      edgePadding,
+      topY,
+      bottomY,
+      titleY,
+      dateTimeY,
+      descriptionY,
+      buttonY
+    };
+  },
+
+  getDetailViewInputLayout(detailLayout, canvasRect = null) {
+    const rect = canvasRect || this.canvas.getBoundingClientRect();
+    const safeTop = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('padding-top')) || 0;
+    const inputWidth = detailLayout.circleRadius * 1.2;
+    const inputHeight = detailLayout.baseFontSize * 1.2;
+    const inputLeft = detailLayout.centerX - inputWidth / 2;
+    const startInputTop = rect.top + (detailLayout.dateTimeY - inputHeight * 0.8) + safeTop;
+    const endInputTop = rect.top + (detailLayout.dateTimeY + inputHeight * 0.6) + safeTop;
+
+    return {
+      safeTop,
+      inputWidth,
+      inputHeight,
+      inputLeft,
+      startInputTop,
+      endInputTop,
+      colorInputTop: endInputTop + inputHeight + 10,
+      fontSize: detailLayout.baseFontSize * 0.7
+    };
+  },
+
+  getSelectedSegmentId(segment = this.mouseState.selectedSegment) {
+    if (!segment) return null;
+    const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
+    return totalVisibleSegments - (segment.day * CONFIG.SEGMENTS_PER_DAY + segment.segment) - 1;
+  },
+
+  createDraftEventForSegmentId(segmentId) {
+    if (segmentId === null || segmentId === undefined) return null;
+    const segmentDate = new Date(this.referenceTime.getTime() + segmentId * 60 * 60 * 1000);
+    const segmentStart = new Date(segmentDate);
+    segmentStart.setUTCMinutes(0, 0, 0);
+    const segmentEnd = new Date(segmentStart);
+    segmentEnd.setUTCHours(segmentStart.getUTCHours() + 1);
+    const randomColor = this.generateRandomColor('Home', segmentStart);
+
+    return {
+      title: '',
+      description: '',
+      start: new Date(segmentStart),
+      end: new Date(segmentEnd),
+      color: randomColor.startsWith('#') ? randomColor : this.hslToHex(randomColor),
+      calendar: 'Home',
+      isDraft: true,
+      segmentId
+    };
+  },
+
+  getDetailViewEventState(options = {}) {
+    const { ensureDraft = false } = options;
+    const selectedSegment = this.mouseState.selectedSegment;
+    const selectedSegmentId = this.getSelectedSegmentId(selectedSegment);
+    if (!selectedSegment || selectedSegmentId === null) return null;
+
+    const segmentEventEntries = this.getAllEventsForSegment(selectedSegment.day, selectedSegment.segment) || [];
+    const selectedEventCount = segmentEventEntries.length;
+    const activeEventIndex = Math.min(
+      this.mouseState.selectedEventIndex || 0,
+      Math.max(0, selectedEventCount - 1)
+    );
+    const activePersistedEvent = segmentEventEntries[activeEventIndex]?.event || null;
+
+    if (ensureDraft && !activePersistedEvent && (!this.draftEvent || this.draftEvent.segmentId !== selectedSegmentId)) {
+      this.draftEvent = this.createDraftEventForSegmentId(selectedSegmentId);
+    }
+
+    const draftEvent = this.draftEvent && this.draftEvent.segmentId === selectedSegmentId
+      ? this.draftEvent
+      : null;
+    const isDraftEventActive = !!draftEvent && (!activePersistedEvent || draftEvent.segmentId === selectedSegmentId);
+    const detailEvent = isDraftEventActive ? draftEvent : activePersistedEvent;
+
+    return {
+      selectedSegment,
+      selectedSegmentId,
+      segmentEventEntries,
+      selectedEventCount,
+      activeEventIndex,
+      activePersistedEvent,
+      draftEvent,
+      isDraftEventActive,
+      detailEvent
+    };
   },
 
   restoreOriginalSpiralScale() {
