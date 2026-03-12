@@ -287,11 +287,6 @@ Object.assign(SpiralCalendar.prototype, {
   activatePendingJoystick(pointerId, originX, originY) {
     if (!this.touchState || !this.state.enableLongPressJoystick || this.state.detailMode !== null) return;
 
-    const canvasHeight = this.canvas.clientHeight;
-    const baseOffset = 54;
-    const bottomPadding = 46;
-    const baseY = Math.min(canvasHeight - bottomPadding, originY + baseOffset);
-
     this.resetPendingTouchJoystick();
     this.touchState.joystickActive = true;
     this.touchState.joystickConsumedTouch = true;
@@ -299,7 +294,7 @@ Object.assign(SpiralCalendar.prototype, {
     this.touchState.joystickOriginX = originX;
     this.touchState.joystickOriginY = originY;
     this.touchState.joystickBaseX = originX;
-    this.touchState.joystickBaseY = baseY;
+    this.touchState.joystickBaseY = originY;
     this.touchState.joystickDx = 0;
     this.touchState.joystickDy = 0;
     this.touchState.joystickDayAccumulator = 0;
