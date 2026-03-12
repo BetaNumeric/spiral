@@ -254,9 +254,11 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
   drawEventSegments() {
+    this._pendingSpiralOverlapEdges = [];
+    this._pendingSpiralOverlapEdgeKeys = new Set();
     for (const eventSegment of this.eventSegments) {
       if (eventSegment.isCircleMode) {
-        // Circle mode event (no stroke to avoid arc lines on overlaps)
+        // Circle mode event fill; seam and divider edges are drawn separately.
         this.drawCircleSegment(
           eventSegment.innerRadius,
           eventSegment.outerRadius,
@@ -270,13 +272,74 @@ Object.assign(SpiralCalendar.prototype, {
           false,
           true, // isEventSubSegment = true
           false, false, false, // isNoonSegment, isSixAMSegment, isSixPMSegment
-          null, null // day, segment
+          null, null, // day, segment
+          null,
+          null,
+          true
         );
+        const startAngle = -eventSegment.timeStartTheta + CONFIG.INITIAL_ROTATION_OFFSET;
+        const endAngle = -eventSegment.timeEndTheta + CONFIG.INITIAL_ROTATION_OFFSET;
+        if (this.state.showEventBoundaryStrokes && this.state.showAllEventBoundaryStrokes && !this.state.showArcLines) {
+          this.ctx.save();
+          this.ctx.strokeStyle = '#000';
+          this.ctx.lineWidth = CONFIG.STROKE_WIDTH;
+          this.ctx.beginPath();
+          this.ctx.arc(0, 0, eventSegment.innerRadius, startAngle, endAngle, true);
+          this.ctx.stroke();
+          this.ctx.beginPath();
+          this.ctx.arc(0, 0, eventSegment.outerRadius, startAngle, endAngle, true);
+          this.ctx.stroke();
+          this.ctx.restore();
+        }
+        if (eventSegment.coverStartEdge) {
+          this.drawCircleRadialEdge(startAngle, eventSegment.edgeInnerRadius, eventSegment.edgeOuterRadius, eventSegment.color, CONFIG.EVENT_EDGE_STROKE_WIDTH);
+        }
+        if (eventSegment.coverEndEdge) {
+          this.drawCircleRadialEdge(endAngle, eventSegment.edgeInnerRadius, eventSegment.edgeOuterRadius, eventSegment.color, CONFIG.EVENT_EDGE_STROKE_WIDTH);
+        }
+        if (this.state.showEventBoundaryStrokes && eventSegment.drawStartEdge) {
+          this.queuePendingSpiralOverlapEdge(
+            eventSegment.edgeInnerRadius * Math.cos(startAngle),
+            eventSegment.edgeInnerRadius * Math.sin(startAngle),
+            eventSegment.edgeOuterRadius * Math.cos(startAngle),
+            eventSegment.edgeOuterRadius * Math.sin(startAngle)
+          );
+        }
+        if (this.state.showEventBoundaryStrokes && eventSegment.drawEndEdge) {
+          this.queuePendingSpiralOverlapEdge(
+            eventSegment.edgeInnerRadius * Math.cos(endAngle),
+            eventSegment.edgeInnerRadius * Math.sin(endAngle),
+            eventSegment.edgeOuterRadius * Math.cos(endAngle),
+            eventSegment.edgeOuterRadius * Math.sin(endAngle)
+          );
+        }
+        if (this.state.showEventBoundaryStrokes && eventSegment.dividerStroke) {
+          this.ctx.save();
+          this.ctx.strokeStyle = '#000';
+          this.ctx.lineWidth = CONFIG.STROKE_WIDTH;
+          this.ctx.lineCap = 'square';
+          this.ctx.beginPath();
+          this.ctx.arc(0, 0, eventSegment.innerRadius, startAngle, endAngle, true);
+          this.ctx.stroke();
+          this.ctx.restore();
+        }
       } else {
         // Spiral mode event: custom draw to avoid outer-arc switching glitches
         this.drawEventSpiralSubsegment(eventSegment);
         }
-      }
+    }
+    this.drawPendingSpiralOverlapEdges();
+    },
+
+    drawCircleRadialEdge(angle, innerRadius, outerRadius, color, lineWidth) {
+      this.ctx.save();
+      this.ctx.strokeStyle = color;
+      this.ctx.lineWidth = lineWidth;
+      this.ctx.beginPath();
+      this.ctx.moveTo(innerRadius * Math.cos(angle), innerRadius * Math.sin(angle));
+      this.ctx.lineTo(outerRadius * Math.cos(angle), outerRadius * Math.sin(angle));
+      this.ctx.stroke();
+      this.ctx.restore();
     },
 
     drawMidnightLines() {
@@ -1060,6 +1123,11 @@ Object.assign(SpiralCalendar.prototype, {
 
     drawCircleModeSegments(maxRadius) {
       const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
+      const {
+        isEventOverlappedAtUtc,
+        isEventTouchingAtStartUtc,
+        isEventTouchingAtEndUtc
+      } = this.createVisibleEventBoundaryLookup();
       
       // Use the same visibility logic as spiral mode
       const { thetaMax } = this.calculateTransforms(this.canvas.clientWidth, this.canvas.clientHeight);
@@ -1211,6 +1279,8 @@ Object.assign(SpiralCalendar.prototype, {
           // Get base color for this segment.
           const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
           const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
+          const segmentHourStartMs = this.referenceTime.getTime() + segmentId * 60 * 60 * 1000;
+          const segmentHourEndMs = segmentHourStartMs + 60 * 60 * 1000;
           const colorIndex = ((segmentId % this.cache.colors.length) + this.cache.colors.length) % this.cache.colors.length;
           const color = this.cache.colors[colorIndex];
           const isMidnightSegment = segment === 23;
@@ -1331,7 +1401,7 @@ Object.assign(SpiralCalendar.prototype, {
           if (allEvents.length > 0) {
             // Use cached layout for speed
             this.ensureLayoutCache();
-            const { eventToLane, eventToComponent, componentLaneCount } = this.layoutCache;
+            const { eventToLane } = this.layoutCache;
             // Compute lane assignment inside the hour for non-overlapping sharing within same lane
             const { lanes: hourLanes, numLanes: hourLaneCount } = this.computeEventLanes(allEvents);
 
@@ -1395,22 +1465,49 @@ Object.assign(SpiralCalendar.prototype, {
                     const eventData = allEvents[i];
                     const subStart = aMin / 60;
                     const subEnd = bMin / 60;
+                    const subStartUtcMs = segmentHourStartMs + aMin * 60 * 1000;
+                    const subEndUtcMs = segmentHourStartMs + bMin * 60 * 1000;
+                    const coverChronologicalStartHourJoin = aMin === 0 && eventData.startUtcMs < segmentHourStartMs;
+                    const coverChronologicalEndHourJoin = bMin === 60 && eventData.endUtcMs > segmentHourEndMs;
+                    const continuesAcrossSubStart = eventData.startUtcMs < subStartUtcMs;
+                    const continuesAcrossSubEnd = eventData.endUtcMs > subEndUtcMs;
+                    const hasActualEventStartHere = eventData.startUtcMs >= subStartUtcMs && eventData.startUtcMs < subEndUtcMs;
+                    const hasActualEventEndHere = eventData.endUtcMs > subStartUtcMs && eventData.endUtcMs <= subEndUtcMs;
                     const eventSliceStart = (rank === 0) ? 0 : (rank / m);
                     const eventSliceEnd = 1;
                     const totalRadialHeight = outerRadius - innerRadius;
                     const sliceInnerRadius = innerRadius + (eventSliceStart * totalRadialHeight);
                     const sliceOuterRadius = innerRadius + (eventSliceEnd * totalRadialHeight);
+                    const edgeInnerRadius = innerRadius + ((rank / m) * totalRadialHeight);
+                    const edgeOuterRadius = innerRadius + (((rank + 1) / m) * totalRadialHeight);
                     const segmentAngleSize = segmentEndAngle - segmentStartAngle;
-                    let timeStartAngle = segmentStartAngle + (1 - subEnd) * segmentAngleSize;
-                    let timeEndAngle = segmentStartAngle + (1 - subStart) * segmentAngleSize;
-                    timeStartAngle = Math.max(timeStartAngle, segmentStart);
-                    timeEndAngle = Math.min(timeEndAngle, segmentEnd);
+                    const rawTimeStartAngle = segmentStartAngle + (1 - subEnd) * segmentAngleSize;
+                    const rawTimeEndAngle = segmentStartAngle + (1 - subStart) * segmentAngleSize;
+                    const canDrawStartEdge = rawTimeStartAngle >= segmentStart && rawTimeStartAngle <= segmentEnd;
+                    const canDrawEndEdge = rawTimeEndAngle >= segmentStart && rawTimeEndAngle <= segmentEnd;
+                    let timeStartAngle = Math.max(rawTimeStartAngle, segmentStart);
+                    let timeEndAngle = Math.min(rawTimeEndAngle, segmentEnd);
                     if (timeEndAngle > timeStartAngle) {
                       this.eventSegments.push({
                         timeStartTheta: timeStartAngle,
                         timeEndTheta: timeEndAngle,
                         eventSliceStart,
                         eventSliceEnd,
+                        dividerStroke: active.length > 1 && eventSliceStart > 0,
+                        coverStartEdge: (coverChronologicalEndHourJoin || (!hasActualEventEndHere && continuesAcrossSubEnd)) && canDrawStartEdge,
+                        coverEndEdge: (coverChronologicalStartHourJoin || (!hasActualEventStartHere && continuesAcrossSubStart)) && canDrawEndEdge,
+                        drawStartEdge: canDrawStartEdge && hasActualEventEndHere && (
+                          this.state.showAllEventBoundaryStrokes ||
+                          (active.length > 1 && isEventOverlappedAtUtc(eventData.event, subEndUtcMs - 1)) ||
+                          isEventTouchingAtEndUtc(eventData.event, subEndUtcMs)
+                        ),
+                        drawEndEdge: canDrawEndEdge && hasActualEventStartHere && (
+                          this.state.showAllEventBoundaryStrokes ||
+                          (active.length > 1 && isEventOverlappedAtUtc(eventData.event, subStartUtcMs + 1)) ||
+                          isEventTouchingAtStartUtc(eventData.event, subStartUtcMs)
+                        ),
+                        edgeInnerRadius,
+                        edgeOuterRadius,
                         innerRadius: sliceInnerRadius,
                         outerRadius: sliceOuterRadius,
                         color: eventData.color,
@@ -1455,6 +1552,12 @@ Object.assign(SpiralCalendar.prototype, {
               const eventData = allEvents[i];
               const minuteStart = eventData.startMinute / 60;
               const minuteEnd = eventData.endMinute / 60;
+              const eventStartUtcMs = segmentHourStartMs + eventData.startMinute * 60 * 1000;
+              const eventEndUtcMs = segmentHourStartMs + eventData.endMinute * 60 * 1000;
+              const coverChronologicalStartHourJoin = eventData.startMinute === 0 && eventData.startUtcMs < segmentHourStartMs;
+              const coverChronologicalEndHourJoin = eventData.endMinute === 60 && eventData.endUtcMs > segmentHourEndMs;
+              const hasActualEventStartHere = eventData.startUtcMs >= eventStartUtcMs && eventData.startUtcMs < eventEndUtcMs;
+              const hasActualEventEndHere = eventData.endUtcMs > eventStartUtcMs && eventData.endUtcMs <= eventEndUtcMs;
               
                 // Group-local slice for this event (circle mode)
                 const eventSliceStart = eventSliceStartArr[i];
@@ -1464,11 +1567,17 @@ Object.assign(SpiralCalendar.prototype, {
               const totalRadialHeight = outerRadius - innerRadius;
               const sliceInnerRadius = innerRadius + (eventSliceStart * totalRadialHeight);
               const sliceOuterRadius = innerRadius + (eventSliceEnd * totalRadialHeight);
+              const edgeInnerRadius = sliceInnerRadius;
+              const edgeOuterRadius = sliceOuterRadius;
               
             // Use the full segment's angular range for partial event overlay
             const segmentAngleSize = segmentEndAngle - segmentStartAngle;
-            let timeStartAngle = segmentStartAngle + (1 - minuteEnd) * segmentAngleSize;
-            let timeEndAngle = segmentStartAngle + (1 - minuteStart) * segmentAngleSize;
+            const rawTimeStartAngle = segmentStartAngle + (1 - minuteEnd) * segmentAngleSize;
+            const rawTimeEndAngle = segmentStartAngle + (1 - minuteStart) * segmentAngleSize;
+            const canDrawStartEdge = rawTimeStartAngle >= segmentStart && rawTimeStartAngle <= segmentEnd;
+            const canDrawEndEdge = rawTimeEndAngle >= segmentStart && rawTimeEndAngle <= segmentEnd;
+            let timeStartAngle = rawTimeStartAngle;
+            let timeEndAngle = rawTimeEndAngle;
             // Clamp event arc to visible segment range
             timeStartAngle = Math.max(timeStartAngle, segmentStart);
             timeEndAngle = Math.min(timeEndAngle, segmentEnd);
@@ -1479,6 +1588,21 @@ Object.assign(SpiralCalendar.prototype, {
                 timeEndTheta: timeEndAngle,
                 eventSliceStart: eventSliceStart,
                 eventSliceEnd: eventSliceEnd,
+                dividerStroke: eventSliceStart > 0,
+                coverStartEdge: coverChronologicalEndHourJoin && canDrawStartEdge,
+                coverEndEdge: coverChronologicalStartHourJoin && canDrawEndEdge,
+                drawStartEdge: canDrawStartEdge && hasActualEventEndHere && (
+                  this.state.showAllEventBoundaryStrokes ||
+                  ((eventSliceStart > 0 || eventSliceEnd < 1) && isEventOverlappedAtUtc(eventData.event, eventEndUtcMs - 1)) ||
+                  isEventTouchingAtEndUtc(eventData.event, eventEndUtcMs)
+                ),
+                drawEndEdge: canDrawEndEdge && hasActualEventStartHere && (
+                  this.state.showAllEventBoundaryStrokes ||
+                  ((eventSliceStart > 0 || eventSliceEnd < 1) && isEventOverlappedAtUtc(eventData.event, eventStartUtcMs + 1)) ||
+                  isEventTouchingAtStartUtc(eventData.event, eventStartUtcMs)
+                ),
+                edgeInnerRadius: edgeInnerRadius,
+                edgeOuterRadius: edgeOuterRadius,
                 innerRadius: sliceInnerRadius,
                 outerRadius: sliceOuterRadius,
                 color: eventData.color,
@@ -1618,7 +1742,7 @@ Object.assign(SpiralCalendar.prototype, {
       }
     },
 
-  drawCircleSegment(innerRadius, outerRadius, startTheta, endTheta, color, isMidnightSegment, isAfterMidnightSegment, isHovered, isSelected, rawStartAngle = null, rawEndAngle = null, isFirstDayOfMonth = false, drawStroke = true, isEventSubSegment = false, isNoonSegment = false, isSixAMSegment = false, isSixPMSegment = false, day = null, segment = null) {
+  drawCircleSegment(innerRadius, outerRadius, startTheta, endTheta, color, isMidnightSegment, isAfterMidnightSegment, isHovered, isSelected, rawStartAngle = null, rawEndAngle = null, isFirstDayOfMonth = false, drawStroke = true, isEventSubSegment = false, isNoonSegment = false, isSixAMSegment = false, isSixPMSegment = false, day = null, segment = null, eventStrokeColor = null, eventStrokeWidth = null, suppressEventEdges = false) {
       this.ctx.save();
       this.ctx.beginPath();
       
@@ -1641,7 +1765,7 @@ Object.assign(SpiralCalendar.prototype, {
     
     // Draw straight edge lines (radial lines)
     // Always draw for event sub-segments; for normal segments respect showSegmentEdges
-    if (isEventSubSegment || (drawStroke && this.state.showSegmentEdges)) {
+    if ((!isEventSubSegment && drawStroke && this.state.showSegmentEdges) || (isEventSubSegment && !suppressEventEdges)) {
       this.ctx.beginPath();
       // Radial line from inner to outer radius at start angle
       this.ctx.moveTo(innerRadius * Math.cos(startAngle), innerRadius * Math.sin(startAngle));
@@ -1649,9 +1773,11 @@ Object.assign(SpiralCalendar.prototype, {
       // Radial line from inner to outer radius at end angle
       this.ctx.moveTo(innerRadius * Math.cos(endAngle), innerRadius * Math.sin(endAngle));
       this.ctx.lineTo(outerRadius * Math.cos(endAngle), outerRadius * Math.sin(endAngle));
-      this.ctx.strokeStyle = isEventSubSegment ? color : CONFIG.STROKE_COLOR;
+      this.ctx.strokeStyle = (isEventSubSegment && eventStrokeColor) ? eventStrokeColor : (isEventSubSegment ? color : CONFIG.STROKE_COLOR);
       
-      this.ctx.lineWidth = isEventSubSegment ? CONFIG.EVENT_EDGE_STROKE_WIDTH : CONFIG.STROKE_WIDTH/5;
+      this.ctx.lineWidth = (isEventSubSegment && eventStrokeWidth !== null && eventStrokeWidth !== undefined)
+        ? eventStrokeWidth
+        : (isEventSubSegment ? CONFIG.EVENT_EDGE_STROKE_WIDTH : CONFIG.STROKE_WIDTH);
       this.ctx.stroke();
     }
     

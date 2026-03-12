@@ -53,6 +53,8 @@ const APP_SETTINGS_DEFAULTS = {
   showSegmentEdges: false,
   showArcLines: true,
   overlayStackMode: true,
+  showEventBoundaryStrokes: true,
+  showAllEventBoundaryStrokes: false,
 
   // UX
   audioFeedbackEnabled: true,
@@ -98,6 +100,8 @@ const APP_DEV_OPTIONS_CONFIG = {
     'segmentEdgesToggle',
     'arcLinesToggle', 'showMonthLinesToggle',
     'overlayStackMode',
+    'eventBoundaryStrokesToggle',
+    'eventBoundaryStrokeControls',
     'tooltipToggle',
     'animateToggle',
     'speedSlider', 'speedVal'

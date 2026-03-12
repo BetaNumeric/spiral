@@ -414,6 +414,30 @@ Object.assign(SpiralCalendar.prototype, {
       });
     }
 
+    const eventBoundaryStrokesToggle = document.getElementById('eventBoundaryStrokesToggle');
+    const eventBoundaryStrokeControls = document.getElementById('eventBoundaryStrokeControls');
+    if (eventBoundaryStrokesToggle) {
+      eventBoundaryStrokesToggle.addEventListener('change', function(e) {
+        self.state.showEventBoundaryStrokes = e.target.checked;
+        if (eventBoundaryStrokeControls) {
+          eventBoundaryStrokeControls.style.display = self.state.showEventBoundaryStrokes ? 'block' : 'none';
+        }
+        self.drawSpiral();
+        self.saveSettingsToStorage();
+      });
+    }
+    if (eventBoundaryStrokeControls) {
+      eventBoundaryStrokeControls.style.display = this.state.showEventBoundaryStrokes ? 'block' : 'none';
+    }
+    const eventBoundaryAllEdgesToggle = document.getElementById('eventBoundaryAllEdgesToggle');
+    if (eventBoundaryAllEdgesToggle) {
+      eventBoundaryAllEdgesToggle.addEventListener('change', function(e) {
+        self.state.showAllEventBoundaryStrokes = e.target.checked;
+        self.drawSpiral();
+        self.saveSettingsToStorage();
+      });
+    }
+
     // Event color mode controls
     const colorModeSelect = document.getElementById('colorModeSelect');
     const colorModeButtons = Array.from(document.querySelectorAll('#colorModeButtons .palette-mode-btn'));

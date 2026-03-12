@@ -406,6 +406,8 @@ Object.assign(SpiralCalendar.prototype, {
         showSegmentEdges: this.state.showSegmentEdges,
         showArcLines: this.state.showArcLines,
         overlayStackMode: this.state.overlayStackMode,
+        showEventBoundaryStrokes: this.state.showEventBoundaryStrokes,
+        showAllEventBoundaryStrokes: this.state.showAllEventBoundaryStrokes,
         audioFeedbackEnabled: this.state.audioFeedbackEnabled,
         darkMode: this.state.darkMode,
         calendars: this.state.calendars,
@@ -674,6 +676,8 @@ Object.assign(SpiralCalendar.prototype, {
       { id: 'segmentEdgesToggle', value: this.state.showSegmentEdges },
       { id: 'arcLinesToggle', value: this.state.showArcLines },
       { id: 'overlayStackMode', value: this.state.overlayStackMode },
+      { id: 'eventBoundaryStrokesToggle', value: this.state.showEventBoundaryStrokes },
+      { id: 'eventBoundaryAllEdgesToggle', value: this.state.showAllEventBoundaryStrokes },
       { id: 'longPressJoystickToggle', value: this.state.enableLongPressJoystick },
     ];
     
@@ -786,6 +790,19 @@ Object.assign(SpiralCalendar.prototype, {
     const longPressJoystickToggle = document.getElementById('longPressJoystickToggle');
     if (longPressJoystickToggle) {
       longPressJoystickToggle.checked = this.state.enableLongPressJoystick;
+    }
+
+    const eventBoundaryStrokesToggle = document.getElementById('eventBoundaryStrokesToggle');
+    if (eventBoundaryStrokesToggle) {
+      eventBoundaryStrokesToggle.checked = this.state.showEventBoundaryStrokes;
+    }
+    const eventBoundaryStrokeControls = document.getElementById('eventBoundaryStrokeControls');
+    if (eventBoundaryStrokeControls) {
+      eventBoundaryStrokeControls.style.display = this.state.showEventBoundaryStrokes ? 'block' : 'none';
+    }
+    const eventBoundaryAllEdgesToggle = document.getElementById('eventBoundaryAllEdgesToggle');
+    if (eventBoundaryAllEdgesToggle) {
+      eventBoundaryAllEdgesToggle.checked = this.state.showAllEventBoundaryStrokes;
     }
 
     // Sync animation controls
