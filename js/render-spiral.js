@@ -2251,6 +2251,8 @@ Object.assign(SpiralCalendar.prototype, {
     // Draw current time/date display if enabled
     if (this.state.showTimeDisplay) {
       this.drawTimeDisplay(canvasWidth, canvasHeight);
-      }
+    }
+
+    this.drawTouchJoystickOverlay();
     }
 });

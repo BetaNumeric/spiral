@@ -194,6 +194,249 @@ Object.assign(SpiralCalendar.prototype, {
     this.touchState[frameKey] = requestAnimationFrame(step);
   },
 
+  updateRotationSliderUI() {
+    const rotateSlider = document.getElementById('rotateSlider');
+    if (!rotateSlider) return;
+
+    const degrees = this.state.rotation * 180 / Math.PI;
+    rotateSlider.value = degrees % 360;
+
+    const rotateVal = document.getElementById('rotateVal');
+    if (rotateVal) rotateVal.textContent = Math.round(degrees) + '°';
+  },
+
+  clearTouchJoystickTimer() {
+    if (!this.touchState || !this.touchState.longPressTimerId) return;
+    clearTimeout(this.touchState.longPressTimerId);
+    this.touchState.longPressTimerId = null;
+  },
+
+  resetPendingTouchJoystick() {
+    if (!this.touchState) return;
+    this.clearTouchJoystickTimer();
+    this.touchState.longPressPendingTouchId = null;
+    this.touchState.longPressStartTouchX = 0;
+    this.touchState.longPressStartTouchY = 0;
+  },
+
+  getTouchJoystickTravel(dx, dy, maxTravel = 68) {
+    const distance = Math.hypot(dx, dy);
+    if (!distance || distance <= maxTravel) {
+      return { x: dx, y: dy, distance };
+    }
+
+    const scale = maxTravel / distance;
+    return {
+      x: dx * scale,
+      y: dy * scale,
+      distance: maxTravel
+    };
+  },
+
+  cancelTouchJoystick(resetConsumedTouch = false) {
+    if (!this.touchState) return;
+
+    this.resetPendingTouchJoystick();
+
+    if (this.touchState.joystickFrameId) {
+      cancelAnimationFrame(this.touchState.joystickFrameId);
+      this.touchState.joystickFrameId = null;
+    }
+
+    this.touchState.joystickActive = false;
+    this.touchState.joystickTouchId = null;
+    this.touchState.joystickOriginX = 0;
+    this.touchState.joystickOriginY = 0;
+    this.touchState.joystickBaseX = 0;
+    this.touchState.joystickBaseY = 0;
+    this.touchState.joystickDx = 0;
+    this.touchState.joystickDy = 0;
+    this.touchState.joystickLastFrameTs = 0;
+    this.touchState.joystickDayAccumulator = 0;
+    this.touchState.joystickLastDayDirection = 0;
+
+    if (resetConsumedTouch) {
+      this.touchState.joystickConsumedTouch = false;
+    }
+  },
+
+  beginPointerRotationDragAtPoint(pointX, pointY) {
+    const { centerX, centerY } = this.calculateCenter(this.canvas.clientWidth, this.canvas.clientHeight);
+    const currentAngle = Math.atan2(pointY - centerY, pointX - centerX);
+
+    this.mouseState.isDragging = true;
+    this.mouseState.hasMovedDuringDrag = false;
+    this.mouseState.dragStartAngle = currentAngle;
+    this.mouseState.lastAngle = currentAngle;
+    this.mouseState.dragStartRotation = this.state.rotation;
+    this.mouseState.previousInertiaVelocity = this._inertiaVelocity || 0;
+    this.stopInertia();
+    this.mouseState.wasDragging = false;
+
+    if (this.autoTimeAlignState.enabled) {
+      this.autoTimeAlignState.enabled = false;
+      this.stopAutoTimeAlign();
+    }
+  },
+
+  beginSingleTouchRotationDrag(touch) {
+    const { touchX, touchY } = this._touchToCanvasPoint(touch);
+    this.beginPointerRotationDragAtPoint(touchX, touchY);
+  },
+
+  activatePendingJoystick(pointerId, originX, originY) {
+    if (!this.touchState || !this.state.enableLongPressJoystick || this.state.detailMode !== null) return;
+
+    const canvasHeight = this.canvas.clientHeight;
+    const baseOffset = 54;
+    const bottomPadding = 46;
+    const baseY = Math.min(canvasHeight - bottomPadding, originY + baseOffset);
+
+    this.resetPendingTouchJoystick();
+    this.touchState.joystickActive = true;
+    this.touchState.joystickConsumedTouch = true;
+    this.touchState.joystickTouchId = pointerId;
+    this.touchState.joystickOriginX = originX;
+    this.touchState.joystickOriginY = originY;
+    this.touchState.joystickBaseX = originX;
+    this.touchState.joystickBaseY = baseY;
+    this.touchState.joystickDx = 0;
+    this.touchState.joystickDy = 0;
+    this.touchState.joystickDayAccumulator = 0;
+    this.touchState.joystickLastDayDirection = 0;
+    this.touchState.joystickLastFrameTs = performance.now();
+
+    this.mouseState.isDragging = false;
+    this.mouseState.hasMovedDuringDrag = false;
+    this.mouseState.wasDragging = false;
+    this.stopInertia();
+
+    if (this.autoTimeAlignState.enabled) {
+      this.autoTimeAlignState.enabled = false;
+      this.stopAutoTimeAlign();
+    }
+
+    this.playFeedback(0.08, 12);
+    this.startTouchJoystickLoop();
+    this.drawSpiral();
+  },
+
+  startPendingJoystick(pointerId, originX, originY) {
+    if (!this.touchState || !this.state.enableLongPressJoystick) return false;
+
+    this.cancelTouchJoystick(true);
+    this.mouseState.isDragging = false;
+    this.mouseState.hasMovedDuringDrag = false;
+    this.mouseState.wasDragging = false;
+
+    this.touchState.longPressPendingTouchId = pointerId;
+    this.touchState.longPressStartTouchX = originX;
+    this.touchState.longPressStartTouchY = originY;
+
+    this.touchState.longPressTimerId = setTimeout(() => {
+      if (!this.touchState || this.touchState.longPressPendingTouchId !== pointerId) {
+        return;
+      }
+      this.activatePendingJoystick(pointerId, originX, originY);
+    }, 360);
+
+    return true;
+  },
+
+  startPendingTouchJoystick(touch) {
+    const { touchX, touchY } = this._touchToCanvasPoint(touch);
+    return this.startPendingJoystick(touch.identifier, touchX, touchY);
+  },
+
+  startPendingMouseJoystick(mouseX, mouseY) {
+    return this.startPendingJoystick('mouse', mouseX, mouseY);
+  },
+
+  updateJoystickFromPoint(pointX, pointY) {
+    if (!this.touchState || !this.touchState.joystickActive) return;
+
+    this.touchState.joystickDx = pointX - this.touchState.joystickOriginX;
+    this.touchState.joystickDy = pointY - this.touchState.joystickOriginY;
+  },
+
+  updateTouchJoystickFromTouch(touch) {
+    const { touchX, touchY } = this._touchToCanvasPoint(touch);
+    this.updateJoystickFromPoint(touchX, touchY);
+  },
+
+  updateMouseJoystick(mouseX, mouseY) {
+    this.updateJoystickFromPoint(mouseX, mouseY);
+  },
+
+  stepTouchJoystickDay(direction) {
+    if (!direction) return;
+    this.state.rotation += direction > 0 ? 2 * Math.PI : -2 * Math.PI;
+    this._shouldUpdateEventList = true;
+  },
+
+  startTouchJoystickLoop() {
+    if (!this.touchState || this.touchState.joystickFrameId) return;
+
+    const step = (now) => {
+      if (!this.touchState || !this.touchState.joystickActive) {
+        if (this.touchState) this.touchState.joystickFrameId = null;
+        return;
+      }
+
+      const dtMs = Math.max(0, Math.min(80, now - (this.touchState.joystickLastFrameTs || now)));
+      this.touchState.joystickLastFrameTs = now;
+
+      const deadZone = 10;
+      const maxTravel = 68;
+      const limited = this.getTouchJoystickTravel(this.touchState.joystickDx, this.touchState.joystickDy, maxTravel);
+      let rotationChanged = false;
+
+      if (Math.abs(limited.x) > deadZone) {
+        const horizontalNorm = Math.min(1, (Math.abs(limited.x) - deadZone) / (maxTravel - deadZone));
+        const angularVelocity = Math.sign(limited.x) * Math.pow(horizontalNorm, 1.45) * (Math.PI * 2.1);
+        if (angularVelocity) {
+          this.state.rotation += angularVelocity * (dtMs / 1000);
+          this._shouldUpdateEventList = true;
+          rotationChanged = true;
+        }
+      }
+
+      if (Math.abs(limited.y) > deadZone) {
+        const verticalNorm = Math.min(1, (Math.abs(limited.y) - deadZone) / (maxTravel - deadZone));
+        const direction = limited.y > 0 ? -1 : 1;
+        const intervalMs = 420 - verticalNorm * 320;
+
+        if (direction !== this.touchState.joystickLastDayDirection) {
+          this.touchState.joystickLastDayDirection = direction;
+          this.touchState.joystickDayAccumulator = intervalMs;
+        } else {
+          this.touchState.joystickDayAccumulator += dtMs;
+        }
+
+        let safety = 0;
+        while (this.touchState.joystickDayAccumulator >= intervalMs && safety < 4) {
+          this.touchState.joystickDayAccumulator -= intervalMs;
+          this.stepTouchJoystickDay(direction);
+          rotationChanged = true;
+          safety += 1;
+        }
+      } else {
+        this.touchState.joystickDayAccumulator = 0;
+        this.touchState.joystickLastDayDirection = 0;
+      }
+
+      if (rotationChanged) {
+        this.clampRotationToEventWindow();
+        this.updateRotationSliderUI();
+        this.drawSpiral();
+      }
+
+      this.touchState.joystickFrameId = requestAnimationFrame(step);
+    };
+
+    this.touchState.joystickFrameId = requestAnimationFrame(step);
+  },
+
   handleTouchStart(e) {
     // If page zoom is active, allow browser pinch zoom and ignore canvas gesture
     if (this.pageZoomActive) return;
@@ -238,6 +481,7 @@ Object.assign(SpiralCalendar.prototype, {
 
     if (e.touches.length === 4) {
       // Four-finger gesture: two anchor + two-finger pinch for radius adjustment
+      this.cancelTouchJoystick(true);
       e.preventDefault();
       this.cancelTouchResetAnimation('radius', true);
       this.touchState.radiusAdjustActive = true;
@@ -254,6 +498,7 @@ Object.assign(SpiralCalendar.prototype, {
       }
     } else if (e.touches.length === 3) {
       // Three-finger gesture: one anchor + two-finger pinch for days adjustment
+      this.cancelTouchJoystick(true);
       e.preventDefault();
       this.cancelTouchResetAnimation('days', true);
       this.touchState.daysAdjustActive = true;
@@ -270,6 +515,7 @@ Object.assign(SpiralCalendar.prototype, {
       }
     } else if (e.touches.length === 2) {
       // Two-finger pinch-to-zoom
+      this.cancelTouchJoystick(true);
       e.preventDefault();
       this.touchState.isActive = true;
       this.touchState.initialDistance = this.getTouchDistance(e.touches[0], e.touches[1]);
@@ -348,27 +594,13 @@ Object.assign(SpiralCalendar.prototype, {
 
       // Single-finger interactions (only if not in detail mode)
       if (this.state.detailMode === null) {
-        const rect = this.canvas.getBoundingClientRect();
-        const touchX = e.touches[0].clientX - rect.left;
-        const touchY = e.touches[0].clientY - rect.top;
-        // Use calculateCenter to get the correct center coordinates (accounting for time display offset)
-        const { centerX, centerY } = this.calculateCenter(this.canvas.clientWidth, this.canvas.clientHeight);
-        const currentAngle = Math.atan2(touchY - centerY, touchX - centerX);
-        this.mouseState.isDragging = true;
-        this.mouseState.hasMovedDuringDrag = false; // Reset movement flag
-        this.mouseState.dragStartAngle = currentAngle;
-        this.mouseState.lastAngle = currentAngle; // Initialize last angle
-        this.mouseState.dragStartRotation = this.state.rotation;
-        
-        // Store current inertia velocity before stopping it (for momentum accumulation)
-        this.mouseState.previousInertiaVelocity = this._inertiaVelocity || 0;
-        // Stop any existing inertia when a new drag starts
-        this.stopInertia();
-        // Reset wasDragging flag for new interaction
-        this.mouseState.wasDragging = false;
+        if (!this.startPendingTouchJoystick(e.touches[0])) {
+          this.beginSingleTouchRotationDrag(e.touches[0]);
+        }
       }
       this.touchState.isActive = false;
     } else {
+      this.cancelTouchJoystick(true);
       this.touchState.isActive = false;
       this.mouseState.isDragging = false;
     }
@@ -699,11 +931,43 @@ Object.assign(SpiralCalendar.prototype, {
       this._justPinchZoomed = true;
           this.drawSpiral();
       }
-    } else if (e.touches.length === 1 && this.mouseState.isDragging) {
+    } else if (e.touches.length === 1) {
+      const activeTouch = e.touches[0];
+
+      if (this.touchState.joystickActive) {
+        if (activeTouch.identifier === this.touchState.joystickTouchId) {
+          this.updateTouchJoystickFromTouch(activeTouch);
+          this.drawSpiral();
+          e.preventDefault();
+        }
+        return;
+      }
+
+      if (this.touchState.longPressPendingTouchId !== null) {
+        if (activeTouch.identifier !== this.touchState.longPressPendingTouchId) {
+          this.resetPendingTouchJoystick();
+        } else {
+          const { touchX, touchY } = this._touchToCanvasPoint(activeTouch);
+          const dx = touchX - this.touchState.longPressStartTouchX;
+          const dy = touchY - this.touchState.longPressStartTouchY;
+          if (Math.hypot(dx, dy) > 12) {
+            this.resetPendingTouchJoystick();
+            this.beginSingleTouchRotationDrag(activeTouch);
+          } else {
+            if (e.cancelable) e.preventDefault();
+            return;
+          }
+        }
+      }
+
+      if (!this.mouseState.isDragging) {
+        return;
+      }
+
       // Single-finger drag rotation
       const rect = this.canvas.getBoundingClientRect();
-      const touchX = e.touches[0].clientX - rect.left;
-      const touchY = e.touches[0].clientY - rect.top;
+      const touchX = activeTouch.clientX - rect.left;
+      const touchY = activeTouch.clientY - rect.top;
       // Use calculateCenter to get the correct center coordinates (accounting for time display offset)
       const { centerX, centerY } = this.calculateCenter(this.canvas.clientWidth, this.canvas.clientHeight);
       const currentAngle = Math.atan2(touchY - centerY, touchX - centerX);
@@ -764,6 +1028,30 @@ Object.assign(SpiralCalendar.prototype, {
   handleTouchEnd(e) {
     // If page zoom is active, no canvas gesture to finalize
     if (this.pageZoomActive) return;
+
+    const touchUsedJoystick = !!(this.touchState && this.touchState.joystickConsumedTouch);
+
+    if (this.touchState) {
+      if (this.touchState.joystickActive) {
+        const trackedId = this.touchState.joystickTouchId;
+        const stillTrackedTouchActive = trackedId !== null && Array.from(e.touches || []).some((touch) => touch.identifier === trackedId);
+        if (!stillTrackedTouchActive) {
+          this.cancelTouchJoystick(false);
+        }
+      } else if (e.touches.length === 0 || !Array.from(e.touches || []).some((touch) => touch.identifier === this.touchState.longPressPendingTouchId)) {
+        this.resetPendingTouchJoystick();
+      }
+    }
+
+    if (touchUsedJoystick && e.touches.length === 0) {
+      this.touchState.joystickConsumedTouch = false;
+      this.mouseState.isDragging = false;
+      this.mouseState.hasMovedDuringDrag = false;
+      this.mouseState.wasDragging = false;
+      this.drawSpiral();
+      if (e.cancelable) e.preventDefault();
+      return;
+    }
 
     // Finalize event time handle dragging.
     if (this.mouseState.isHandleDragging) {
@@ -1012,6 +1300,45 @@ Object.assign(SpiralCalendar.prototype, {
     const y2 = touch2.clientY - rect.top;
     
     return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+  },
+
+  drawTouchJoystickOverlay() {
+    if (!this.touchState || !this.touchState.joystickActive) return;
+
+    const limited = this.getTouchJoystickTravel(this.touchState.joystickDx, this.touchState.joystickDy, 68);
+    const baseX = this.touchState.joystickBaseX;
+    const baseY = this.touchState.joystickBaseY;
+    const knobX = baseX + limited.x;
+    const knobY = baseY + limited.y;
+    const isDark = !!this.state.darkMode;
+
+    this.ctx.save();
+    this.ctx.lineWidth = 2;
+    this.ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.22)' : 'rgba(19,29,42,0.18)';
+    this.ctx.fillStyle = isDark ? 'rgba(12,16,22,0.34)' : 'rgba(255,255,255,0.36)';
+
+    this.ctx.beginPath();
+    this.ctx.arc(baseX, baseY, 40, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.stroke();
+
+    this.ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.16)' : 'rgba(19,29,42,0.14)';
+    this.ctx.beginPath();
+    this.ctx.moveTo(baseX, baseY);
+    this.ctx.lineTo(knobX, knobY);
+    this.ctx.stroke();
+
+    this.ctx.fillStyle = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(28,36,48,0.86)';
+    this.ctx.beginPath();
+    this.ctx.arc(knobX, knobY, 18, 0, Math.PI * 2);
+    this.ctx.fill();
+
+    this.ctx.fillStyle = isDark ? 'rgba(255,255,255,0.22)' : 'rgba(28,36,48,0.14)';
+    this.ctx.beginPath();
+    this.ctx.arc(baseX, baseY, 5, 0, Math.PI * 2);
+    this.ctx.fill();
+
+    this.ctx.restore();
   },
 
 setNightOverlayEnabled(enabled) {

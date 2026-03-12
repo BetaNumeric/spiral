@@ -400,6 +400,20 @@ Object.assign(SpiralCalendar.prototype, {
       });
     }
 
+    const longPressJoystickToggle = document.getElementById('longPressJoystickToggle');
+    if (longPressJoystickToggle) {
+      longPressJoystickToggle.addEventListener('change', function(e) {
+        self.state.enableLongPressJoystick = e.target.checked;
+        if (!self.state.enableLongPressJoystick && typeof self.cancelTouchJoystick === 'function') {
+          self.cancelTouchJoystick(true);
+          self.mouseState.isDragging = false;
+          self.mouseState.hasMovedDuringDrag = false;
+        }
+        self.drawSpiral();
+        self.saveSettingsToStorage();
+      });
+    }
+
     // Event color mode controls
     const colorModeSelect = document.getElementById('colorModeSelect');
     const colorModeButtons = Array.from(document.querySelectorAll('#colorModeButtons .palette-mode-btn'));
@@ -1116,7 +1130,24 @@ Object.assign(SpiralCalendar.prototype, {
         anchorTouchIds: [],
         daysPinchTouchIds: [], // Track which two touches are pinching for days
         radiusResetAnimationId: null,
-        daysResetAnimationId: null
+        daysResetAnimationId: null,
+        longPressTimerId: null,
+        longPressPendingTouchId: null,
+        longPressStartTouchX: 0,
+        longPressStartTouchY: 0,
+        joystickActive: false,
+        joystickConsumedTouch: false,
+        joystickTouchId: null,
+        joystickOriginX: 0,
+        joystickOriginY: 0,
+        joystickBaseX: 0,
+        joystickBaseY: 0,
+        joystickDx: 0,
+        joystickDy: 0,
+        joystickFrameId: null,
+        joystickLastFrameTs: 0,
+        joystickDayAccumulator: 0,
+        joystickLastDayDirection: 0
       };
 
       // Add touch event listeners for pinch-to-zoom

@@ -430,6 +430,7 @@ Object.assign(SpiralCalendar.prototype, {
         showMidnightLines: this.state.showMidnightLines,
         showNoonLines: this.state.showNoonLines,
         showSixAmPmLines: this.state.showSixAmPmLines,
+        enableLongPressJoystick: this.state.enableLongPressJoystick,
         // Overlay opacity values
         nightOverlayOpacity: this.state.nightOverlayOpacity,
         dayOverlayOpacity: this.state.dayOverlayOpacity,
@@ -673,6 +674,7 @@ Object.assign(SpiralCalendar.prototype, {
       { id: 'segmentEdgesToggle', value: this.state.showSegmentEdges },
       { id: 'arcLinesToggle', value: this.state.showArcLines },
       { id: 'overlayStackMode', value: this.state.overlayStackMode },
+      { id: 'longPressJoystickToggle', value: this.state.enableLongPressJoystick },
     ];
     
     checkboxes.forEach(checkbox => {
@@ -779,6 +781,11 @@ Object.assign(SpiralCalendar.prototype, {
     const showSixAmPmLinesToggle = document.getElementById('showSixAmPmLinesToggle');
     if (showSixAmPmLinesToggle) {
       showSixAmPmLinesToggle.checked = this.state.showSixAmPmLines;
+    }
+
+    const longPressJoystickToggle = document.getElementById('longPressJoystickToggle');
+    if (longPressJoystickToggle) {
+      longPressJoystickToggle.checked = this.state.enableLongPressJoystick;
     }
 
     // Sync animation controls

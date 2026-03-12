@@ -73,6 +73,7 @@ const APP_SETTINGS_DEFAULTS = {
   showMidnightLines: true,
   showNoonLines: false,
   showSixAmPmLines: false,
+  enableLongPressJoystick: true,
 
   // Overlay opacity values (0.0 - 1.0)
   nightOverlayOpacity: 0.05,
@@ -90,6 +91,7 @@ const APP_DEV_OPTIONS_CONFIG = {
     'rotateSlider', 'rotateVal',
     'rotateMaxSlider', 'rotateMaxVal',
     'showMidnightLinesToggle','showNoonLinesToggle','showSixAmPmLinesToggle',
+    'longPressJoystickToggle',
     'showHourNumbers', 'hourNumbersControls',
     'showDayNumbers', 'dayNumbersControls',
     'timeDisplayToggle',

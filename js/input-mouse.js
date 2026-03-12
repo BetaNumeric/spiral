@@ -148,6 +148,23 @@ Object.assign(SpiralCalendar.prototype, {
       }
       
       // Handle drag rotation
+      if (this.touchState && this.touchState.joystickActive && this.touchState.joystickTouchId === 'mouse') {
+        this.updateMouseJoystick(mouseX, mouseY);
+        this.drawSpiral();
+        return;
+      }
+
+      if (this.touchState && this.touchState.longPressPendingTouchId === 'mouse') {
+        const dx = mouseX - this.touchState.longPressStartTouchX;
+        const dy = mouseY - this.touchState.longPressStartTouchY;
+        if (Math.hypot(dx, dy) > 12) {
+          this.resetPendingTouchJoystick();
+          this.beginPointerRotationDragAtPoint(mouseX, mouseY);
+        } else {
+          return;
+        }
+      }
+
       if (this.mouseState.isDragging) {
         // Use calculateCenter to get the correct center coordinates (accounting for time display offset)
         const { centerX, centerY } = this.calculateCenter(this.canvas.clientWidth, this.canvas.clientHeight);
@@ -957,6 +974,10 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     handleMouseDown(event) {
+      if (event.button !== 0) {
+        return;
+      }
+
       // Time display drag to collapse/expand (desktop)
       if (this.state.showTimeDisplay) {
         const rect = this.canvas.getBoundingClientRect();
@@ -1050,24 +1071,34 @@ Object.assign(SpiralCalendar.prototype, {
     }
       
       // Use calculateCenter to get the correct center coordinates (accounting for time display offset)
-      const { centerX, centerY } = this.calculateCenter(this.canvas.clientWidth, this.canvas.clientHeight);
-      
-      this.mouseState.isDragging = true;
-      this.mouseState.hasMovedDuringDrag = false; // Reset movement flag
-      this.mouseState.dragStartAngle = Math.atan2(mouseY - centerY, mouseX - centerX);
-      this.mouseState.lastAngle = this.mouseState.dragStartAngle; // Initialize last angle
-      this.mouseState.dragStartRotation = this.state.rotation;
-      
-      // Store current inertia velocity before stopping it (for momentum accumulation)
-      this.mouseState.previousInertiaVelocity = this._inertiaVelocity || 0;
-      // Stop any existing inertia when a new drag starts
-      this.stopInertia();
+      if (!this.startPendingMouseJoystick(mouseX, mouseY)) {
+        this.beginPointerRotationDragAtPoint(mouseX, mouseY);
+      }
       
       // Prevent text selection while dragging
       event.preventDefault();
     },
 
     handleMouseUp(event) {
+      const mouseUsedJoystick = !!(
+        this.touchState &&
+        this.touchState.joystickConsumedTouch &&
+        this.touchState.joystickTouchId === 'mouse'
+      );
+
+      if (this.touchState && this.touchState.longPressPendingTouchId === 'mouse') {
+        this.resetPendingTouchJoystick();
+      }
+
+      if (mouseUsedJoystick) {
+        this.cancelTouchJoystick(true);
+        this.mouseState.isDragging = false;
+        this.mouseState.hasMovedDuringDrag = false;
+        this.mouseState.wasDragging = true;
+        this.drawSpiral();
+        return;
+      }
+
       // Finalize event time handle dragging
       if (this.mouseState.isHandleDragging) {
         this.mouseState.isHandleDragging = false;

@@ -64,6 +64,7 @@ class SpiralCalendar {
         showMidnightLines: true,
         showNoonLines: false,
         showSixAmPmLines: false,
+        enableLongPressJoystick: true,
         nightOverlayOpacity: 0.05,
         dayOverlayOpacity: 0.15,
         gradientOverlayOpacity: 0.05
@@ -154,6 +155,7 @@ class SpiralCalendar {
         showMidnightLines: this.defaultSettings.showMidnightLines,
         showNoonLines: this.defaultSettings.showNoonLines,
         showSixAmPmLines: this.defaultSettings.showSixAmPmLines,
+        enableLongPressJoystick: this.defaultSettings.enableLongPressJoystick,
         // Overlay opacity values
         nightOverlayOpacity: this.defaultSettings.nightOverlayOpacity,
         dayOverlayOpacity: this.defaultSettings.dayOverlayOpacity,
