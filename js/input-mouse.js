@@ -1157,7 +1157,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (this.getRenderCircleMode()) {
         // Circle mode detection - use same logic as drawing
         const { maxRadius, thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
-        const visibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
+        const visibilityRange = this.getRenderVisibilityRange(thetaMax);
         const radiusFunction = this.createRadiusFunction(maxRadius, thetaMax, this.state.radiusExponent, this.state.rotation);
         const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
         
@@ -1202,7 +1202,7 @@ Object.assign(SpiralCalendar.prototype, {
       } else {
         // Spiral mode detection
         const { thetaMax, maxRadius } = this.calculateTransforms(canvasWidth, canvasHeight);
-        const visibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
+        const visibilityRange = this.getRenderVisibilityRange(thetaMax);
         const radiusFunction = this.createRadiusFunction(maxRadius, thetaMax, this.state.radiusExponent, this.state.rotation);
         const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
         

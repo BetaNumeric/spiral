@@ -1131,7 +1131,7 @@ Object.assign(SpiralCalendar.prototype, {
       
       // Use the same visibility logic as spiral mode
       const { thetaMax } = this.calculateTransforms(this.canvas.clientWidth, this.canvas.clientHeight);
-      const visibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
+      const visibilityRange = this.getRenderVisibilityRange(thetaMax);
       
       // Create radius function using the same logic as spiral mode
       const radiusFunction = this.createRadiusFunction(maxRadius, thetaMax, this.state.radiusExponent, this.state.rotation);

@@ -566,6 +566,60 @@ Object.assign(SpiralCalendar.prototype, {
       };
     },
 
+    updateActiveTitleEditorLayout(detailLayout) {
+      const input = document.getElementById('titleEditor');
+      if (!input || !this.titleClickArea) return;
+
+      const safeTop = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('padding-top')) || 0;
+      const canvasRect = this.canvas.getBoundingClientRect();
+      const visualFontSize = this.titleClickArea.fontSizeUsed || detailLayout.titleFontSize;
+      const cssFontSize = Math.max(16, visualFontSize);
+      const visualScale = visualFontSize / cssFontSize;
+      const width = this.titleClickArea.width / visualScale;
+      const height = Math.max(this.titleClickArea.height / visualScale, cssFontSize * 1.6);
+      const left = detailLayout.centerX - width / 2;
+      const top = canvasRect.top + this.titleClickArea.centerY - height / 2 + safeTop;
+
+      input.style.left = `${left}px`;
+      input.style.top = `${top}px`;
+      input.style.width = `${width}px`;
+      input.style.height = `${height}px`;
+      input.style.fontSize = `${cssFontSize}px`;
+      input.style.lineHeight = `${Math.max(cssFontSize * 1.2, height - 4)}px`;
+      input.style.borderRadius = `${Math.max(4, Math.round((this.titleClickArea.height || height) * 0.22 / visualScale))}px`;
+      input.style.padding = `0 ${Math.max(8, Math.round(detailLayout.baseFontSize * 0.45 / visualScale))}px`;
+      input.style.transform = visualScale !== 1 ? `scale(${visualScale})` : '';
+      input.style.transformOrigin = 'center center';
+    },
+
+    updateActiveDescriptionEditorLayout(detailLayout) {
+      const textarea = document.getElementById('descEditor');
+      if (!textarea || !this.descClickArea) return;
+
+      const safeTop = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('padding-top')) || 0;
+      const canvasRect = this.canvas.getBoundingClientRect();
+      const visualFontSize = detailLayout.smallFontSize;
+      const cssFontSize = Math.max(16, visualFontSize);
+      const visualScale = visualFontSize / cssFontSize;
+      const baseWidth = this.descClickArea.width / visualScale;
+      const baseHeight = Math.max(this.descClickArea.height / visualScale, cssFontSize * 1.6 + 12);
+
+      textarea.style.width = `${baseWidth}px`;
+      textarea.style.fontSize = `${cssFontSize}px`;
+      textarea.style.lineHeight = `${Math.max(cssFontSize * 1.2, cssFontSize + 2)}px`;
+      textarea.style.transform = visualScale !== 1 ? `scale(${visualScale})` : '';
+      textarea.style.transformOrigin = 'center center';
+
+      textarea.style.height = 'auto';
+      const newHeight = Math.max(baseHeight, Math.min(textarea.scrollHeight, baseHeight * 5));
+      const left = detailLayout.centerX - baseWidth / 2;
+      const top = canvasRect.top + this.descClickArea.centerY - newHeight / 2 + safeTop;
+
+      textarea.style.left = `${left}px`;
+      textarea.style.top = `${top}px`;
+      textarea.style.height = `${newHeight}px`;
+    },
+
     drawDetailView(maxRadius) {
       const detailLayout = this.getDetailViewLayout(maxRadius);
       const {
@@ -576,9 +630,13 @@ Object.assign(SpiralCalendar.prototype, {
         baseFontSize,
         smallFontSize,
         titleFontSize,
+        counterY,
         titleY,
         dateTimeY,
+        descriptionTop,
+        descriptionBottom,
         descriptionY,
+        maxDescriptionHeight,
         buttonY
       } = detailLayout;
     
@@ -679,7 +737,6 @@ Object.assign(SpiralCalendar.prototype, {
         // Event counter for real events with multiples
         if (!isDraftEventActive && selectedEventCount > 1) {
           const eventCounterText = `Event ${activeEventIndex + 1} of ${selectedEventCount}`;
-          const counterY = titleY - circleRadius * 0.15;
           this.ctx.fillStyle = '#666';
           this.ctx.font = getFontString(smallFontSize);
           this.ctx.textAlign = 'center';
@@ -711,51 +768,70 @@ Object.assign(SpiralCalendar.prototype, {
           
         // Draw title (fitted) and set click area
         const displayTitle = isDraftEventActive ? (detailEvent.title || 'Click to add title...') : detailEvent.title;
+        const color = isDraftEventActive && !detailEvent.title ? '#999' : '#000';
+        const { width: fittedWidth, height: fittedHeight, fontSizeUsed, maxTitleWidth } = this.measureTitleFitted(displayTitle, circleRadius, titleFontSize, true);
+        const titleBoxWidth = maxTitleWidth + baseFontSize * 0.9;
+        const titleBoxHeight = Math.max(fontSizeUsed * 1.7, baseFontSize * 1.7);
+        this.titleClickArea = {
+          x: centerX - titleBoxWidth / 2,
+          y: titleY - titleBoxHeight / 2,
+          width: titleBoxWidth,
+          height: titleBoxHeight,
+          event: detailEvent,
+          centerY: titleY,
+          fontSizeUsed,
+          textWidth: fittedWidth,
+          textHeight: fittedHeight,
+          maxTextWidth: maxTitleWidth
+        };
         if (!this.hideTitleWhileEditing) {
-          const color = isDraftEventActive && !detailEvent.title ? '#999' : '#000';
-          const { width: fittedWidth, height: fittedHeight } = this.drawTitleFitted(displayTitle, centerX, titleY, circleRadius, titleFontSize, color, true);
-          this.titleClickArea = {
-            x: centerX - fittedWidth / 2,
-            y: titleY - fittedHeight / 2,
-            width: fittedWidth,
-            height: fittedHeight,
-            event: detailEvent,
-            centerY: titleY
-          };
+          this.drawTitleFitted(displayTitle, centerX, titleY, circleRadius, titleFontSize, color, true);
         }
 
         // Description height and static date/time Y (center)
         const maxWidth = circleRadius * 1.6;
-        const actualTextHeight = this.calculateTextHeight(detailEvent.description, maxWidth, smallFontSize);
         this.drawDateTimeAndColorBoxes(detailEvent, centerX, dateTimeY, baseFontSize, circleRadius, buttonY);
 
-        // Description click area (static spacing between title and date boxes for empty)
-          this.descClickArea = {
-          ...this.buildDescriptionClickArea(centerX, descriptionY, circleRadius, baseFontSize, titleY, titleFontSize, dateTimeY, actualTextHeight, !!detailEvent.description),
+        // Description click area uses the body zone between the header and metadata row.
+        this.descClickArea = {
+          ...this.buildDescriptionClickArea(centerX, descriptionTop, descriptionBottom, circleRadius),
           event: detailEvent,
           centerY: descriptionY
         };
 
         // Draw description or placeholder
-          if (!this.hideDescriptionWhileEditing) {
-              this.ctx.font = getFontString(smallFontSize);
+        if (!this.hideDescriptionWhileEditing) {
+          this.ctx.font = getFontString(smallFontSize);
           if (detailEvent.description) {
             this.ctx.fillStyle = '#000';
             const wrappedText = this.wrapText(detailEvent.description, maxWidth);
-              let lineY = descriptionY - (wrappedText.length - 1) * smallLineHeight / 2;
-              for (const line of wrappedText) {
-                this.ctx.fillText(line, centerX, lineY);
-                lineY += smallLineHeight;
+            const maxDescriptionLines = Math.max(1, Math.floor(maxDescriptionHeight / smallLineHeight));
+            const visibleLines = wrappedText.slice(0, maxDescriptionLines);
+            if (wrappedText.length > maxDescriptionLines && visibleLines.length > 0) {
+              let lastLine = visibleLines[visibleLines.length - 1];
+              while (lastLine.length > 1 && this.ctx.measureText(`${lastLine}...`).width > maxWidth) {
+                lastLine = lastLine.slice(0, -1);
               }
-            } else {
-              this.ctx.fillStyle = '#999';
-              this.ctx.fillText('Click to add description...', centerX, descriptionY);
+              visibleLines[visibleLines.length - 1] = `${lastLine}...`;
             }
+            const renderedTextHeight = visibleLines.length * smallLineHeight;
+            let lineY = descriptionY - renderedTextHeight / 2 + smallLineHeight / 2;
+            for (const line of visibleLines) {
+              this.ctx.fillText(line, centerX, lineY);
+              lineY += smallLineHeight;
+            }
+          } else {
+            this.ctx.fillStyle = '#999';
+            this.ctx.fillText('Click to add description...', centerX, descriptionY);
           }
+        }
           
         // Click background for description
-          this.ctx.fillStyle = 'rgba(0, 0, 0, 0.00)';
-          this.ctx.fillRect(this.descClickArea.x, this.descClickArea.y, this.descClickArea.width, this.descClickArea.height);
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.00)';
+        this.ctx.fillRect(this.descClickArea.x, this.descClickArea.y, this.descClickArea.width, this.descClickArea.height);
+
+        this.updateActiveTitleEditorLayout(detailLayout);
+        this.updateActiveDescriptionEditorLayout(detailLayout);
           
         // Buttons: draft => single "Add Event"; real => "+ New" and "Delete"
         if (isDraftEventActive) {
@@ -845,40 +921,6 @@ Object.assign(SpiralCalendar.prototype, {
         existingEditor.remove();
       }
       const detailLayout = this.getDetailViewLayout();
-      const { centerX, circleRadius, titleY } = detailLayout;
-      // Get the same font size as used in drawDetailView
-      let titleFontSize = this.titleClickArea ? this.titleClickArea.height : 16;
-
-      // Apply the same dynamic font sizing logic as in drawDetailView
-      let maxTitleWidth = circleRadius * 1.4;
-      this.ctx.font = getFontString(titleFontSize, 'bold ');
-      let titleMetrics = this.ctx.measureText(event.title);
-      
-      if (titleMetrics.width > maxTitleWidth) {
-        const scaleFactor = maxTitleWidth / titleMetrics.width;
-        titleFontSize = Math.max(1, Math.floor(titleFontSize * scaleFactor));
-      }
-
-      // Use the same font size and width as the title in the circle
-      this.ctx.font = getFontString(titleFontSize, 'bold ');
-      const textMetrics = this.ctx.measureText(event.title);
-      const textWidth = textMetrics.width;
-      const textHeight = titleFontSize;
-      const titleX = centerX;
-      // Calculate canvas offset and safe area inset
-      const canvasRect = this.canvas.getBoundingClientRect();
-      const safeTop = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('padding-top')) || 0;
-      // Calculate input position to center it exactly where the text was
-      const inputLeft = titleX - textWidth / 2;
-      // Adjust for text baseline alignment - canvas fillText uses baseline, HTML input uses top edge
-      const baselineAdjustment = titleFontSize * 0.8; // Approximate baseline offset
-      const inputTop = canvasRect.top + (this.titleClickArea && this.titleClickArea.centerY !== undefined ? this.titleClickArea.centerY - textHeight / 2 : titleY - baselineAdjustment) + safeTop;
-      
-      // Apply iOS minimum font size only to the HTML input element
-      let inputFontSize = titleFontSize;
-      if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) {
-        inputFontSize = Math.max(inputFontSize, 16);
-      }
       
       // Create input element
       const input = document.createElement('input');
@@ -888,21 +930,23 @@ Object.assign(SpiralCalendar.prototype, {
       input.maxLength = document.getElementById('eventTitle').maxLength; // Use value from form input
       input.style.cssText = `
         position: absolute;
-        left: ${inputLeft}px;
-        top: ${inputTop}px;
-        width: ${textWidth}px;
-        height: ${textHeight}px;
-        font-size: ${inputFontSize}px;
+        left: 0;
+        top: 0;
+        width: 10px;
+        height: 28px;
+        font-size: 16px;
         font-weight: bold;
+        line-height: 20px;
         border: 2px solid #4CAF50;
-        border-radius: 2px;
-        padding: 0;
+        border-radius: 4px;
+        padding: 0 8px;
         background: ${document.body.classList.contains('dark-mode') ? 'var(--dark-bg-secondary)' : 'white'};
         color: ${document.body.classList.contains('dark-mode') ? 'var(--dark-text-primary)' : 'black'};
         z-index: 1000;
         font-family: inherit;
         text-align: center;
         box-sizing: border-box;
+        transform-origin: center center;
       `;
       // iOS: Hide persistent inputs while editing to prevent jump
       function isIOS() {
@@ -937,32 +981,13 @@ Object.assign(SpiralCalendar.prototype, {
 
       // Add to page
       document.body.appendChild(input);
+      this.updateActiveTitleEditorLayout(detailLayout);
       input.focus();
       input.select();
       
       // Hide the original title text while editing
       this.hideTitleWhileEditing = true;
       this.drawSpiral();
-
-      // Track maximum width to prevent shrinking
-      let maxWidth = textWidth;
-      
-      // Function to resize input based on text content (only expand)
-      const resizeInput = () => {
-        this.ctx.font = getFontString(titleFontSize, 'bold ');
-        const newTextMetrics = this.ctx.measureText(input.value || 'A'); // Use 'A' as minimum width
-        const newTextWidth = Math.max(newTextMetrics.width, 20); // Minimum width of 20px
-        
-        // Only expand, never shrink
-        if (newTextWidth > maxWidth) {
-          maxWidth = newTextWidth;
-        }
-        
-        // Update input width and position to keep it centered
-        const newInputLeft = titleX - maxWidth / 2;
-        input.style.width = `${maxWidth}px`;
-        input.style.left = `${newInputLeft}px`;
-      };
 
       // Handle save on Enter or blur
       const saveTitle = () => {
@@ -979,9 +1004,6 @@ Object.assign(SpiralCalendar.prototype, {
         // Update event list to show new icon state (with delay to ensure properties are saved)
         setTimeout(() => renderEventList(), 0);
       };
-
-      // Add input event listener for real-time resizing
-      input.addEventListener('input', resizeInput);
 
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -1329,25 +1351,6 @@ Object.assign(SpiralCalendar.prototype, {
         existingEditor.remove();
       }
       const detailLayout = this.getDetailViewLayout();
-      const { centerX, centerY, circleRadius } = detailLayout;
-      let smallFontSize = detailLayout.smallFontSize;
-      // iOS Safari zooms in when font size is below 16px, so ensure minimum size
-      if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) {
-        smallFontSize = Math.max(smallFontSize, 16);
-      }
-      // Calculate the area where description was drawn
-      const descAreaWidth = this.descClickArea ? this.descClickArea.width : 115;
-      const descAreaHeight = this.descClickArea ? this.descClickArea.height : 20;
-      const descX = centerX;
-      const descY = this.descClickArea ? this.descClickArea.y + descAreaHeight / 2 : centerY + smallFontSize * 1.2;
-      // Calculate canvas offset and safe area inset
-      const canvasRect = this.canvas.getBoundingClientRect();
-      const safeTop = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('padding-top')) || 0;
-      // Calculate input position to center it over the description area
-      const inputLeft = descX - descAreaWidth / 2;
-      // Adjust for text baseline alignment - canvas fillText uses baseline, HTML textarea uses top edge
-      const baselineAdjustment = smallFontSize * 0.8; // Approximate baseline offset
-      const inputTop = canvasRect.top + (this.descClickArea && this.descClickArea.centerY !== undefined ? this.descClickArea.centerY - descAreaHeight / 2 : descY - baselineAdjustment) + safeTop;
       // Create textarea element
       const textarea = document.createElement('textarea');
       textarea.id = 'descEditor';
@@ -1355,14 +1358,13 @@ Object.assign(SpiralCalendar.prototype, {
       textarea.maxLength = document.getElementById('eventDescription').maxLength; // Use value from form input
       textarea.placeholder = 'Enter description...';
       // Calculate the same line height as the display text
-      const smallLineHeight = smallFontSize;
       textarea.style.cssText = `
         position: absolute;
-        left: ${inputLeft}px;
-        top: ${inputTop}px;
-        width: ${descAreaWidth}px;
-        height: ${descAreaHeight}px;
-        font-size: ${smallFontSize}px;
+        left: 0;
+        top: 0;
+        width: 10px;
+        height: 44px;
+        font-size: 16px;
         border: 2px solid #4CAF50;
         border-radius: 2px;
         padding: 6px;
@@ -1372,9 +1374,10 @@ Object.assign(SpiralCalendar.prototype, {
         font-family: inter, sans-serif;
         resize: none;
         box-sizing: border-box;
-        line-height: ${smallLineHeight}px;
+        line-height: 20px;
         text-align: center;
         overflow: hidden;
+        transform-origin: center center;
       `;
       // iOS: Hide persistent inputs while editing to prevent jump
       function isIOS() {
@@ -1409,6 +1412,7 @@ Object.assign(SpiralCalendar.prototype, {
 
       // Add to page
       document.body.appendChild(textarea);
+      this.updateActiveDescriptionEditorLayout(detailLayout);
       textarea.focus();
       textarea.select();
       
@@ -1418,19 +1422,7 @@ Object.assign(SpiralCalendar.prototype, {
 
       // Function to auto-resize textarea based on content and keep it centered
       const resizeTextarea = () => {
-        textarea.style.height = 'auto';
-        const scrollHeight = textarea.scrollHeight;
-        const maxHeight = descAreaHeight*5; // Limit maximum height
-        const newHeight = Math.min(scrollHeight, maxHeight);
-        
-        // Calculate how much the height changed
-        const heightDifference = newHeight - descAreaHeight;
-        
-        // Move the textarea up by half the height difference to keep it centered
-        const newTop = inputTop - heightDifference / 2;
-        
-        textarea.style.height = `${newHeight}px`;
-        textarea.style.top = `${newTop}px`;
+        this.updateActiveDescriptionEditorLayout(this.getDetailViewLayout());
       };
 
       // Handle save on Enter (with Ctrl) or blur

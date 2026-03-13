@@ -947,6 +947,29 @@ Object.assign(SpiralCalendar.prototype, {
     return this.state.spiralScale;
   },
 
+  getRenderVisibilityRange(thetaMax) {
+    const visibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
+    if (!this.isDetailViewCircleModeActive() || !this.mouseState.selectedSegment) {
+      return visibilityRange;
+    }
+
+    const daySpan = 2 * Math.PI;
+    const selectedDayStart = this.mouseState.selectedSegment.day * daySpan;
+    const epsilon = 1e-9;
+    const outerDayStart = Math.floor((visibilityRange.max - epsilon) / daySpan) * daySpan;
+    const outerDayEnd = outerDayStart + daySpan;
+    const visibleOuterFraction = Math.max(0, Math.min(1, (visibilityRange.max - outerDayStart) / daySpan));
+    const isSelectedOutermostDay = Math.abs(selectedDayStart - outerDayStart) < epsilon * 10;
+    const normalizedMax = isSelectedOutermostDay || visibleOuterFraction >= 0.5
+      ? outerDayEnd
+      : outerDayStart;
+
+    return {
+      min: normalizedMax - thetaMax,
+      max: normalizedMax
+    };
+  },
+
   alignSelectedSegmentInCircleMode() {
     if (!this.mouseState.selectedSegment) return;
     
@@ -1212,7 +1235,7 @@ Object.assign(SpiralCalendar.prototype, {
     const canvasWidth = this.canvas.clientWidth;
     const canvasHeight = this.canvas.clientHeight;
     const { thetaMax, maxRadius } = this.calculateTransforms(canvasWidth, canvasHeight);
-    const visibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
+    const visibilityRange = this.getRenderVisibilityRange(thetaMax);
     const radiusFunction = this.createRadiusFunction(maxRadius, thetaMax, this.state.radiusExponent, this.state.rotation);
     const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
     const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
@@ -1267,7 +1290,7 @@ Object.assign(SpiralCalendar.prototype, {
     const { thetaMax, maxRadius: effectiveMaxRadius } = this.calculateTransforms(canvasWidth, canvasHeight);
     const resolvedMaxRadius = Number.isFinite(maxRadius) ? maxRadius : effectiveMaxRadius;
     const { centerX, centerY } = this.calculateCenter(canvasWidth, canvasHeight);
-    const visibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
+    const visibilityRange = this.getRenderVisibilityRange(thetaMax);
     const radiusFunction = this.createRadiusFunction(
       resolvedMaxRadius,
       thetaMax,
@@ -1310,10 +1333,26 @@ Object.assign(SpiralCalendar.prototype, {
     const edgePadding = baseFontSize * 0.8;
     const topY = metrics.centerY - circleRadius;
     const bottomY = metrics.centerY + circleRadius;
+    const boxHeight = baseFontSize * 1.8;
+    const innerGap = baseFontSize * 0.55;
     const titleY = topY + edgePadding * 3 + titleFontSize / 2;
+    const counterY = titleY - circleRadius * 0.15;
     const dateTimeY = metrics.centerY;
-    const descriptionY = (titleY + dateTimeY) / 2;
     const buttonY = bottomY - edgePadding * 3;
+
+    const titleBottom = titleY + titleFontSize / 2 + baseFontSize * 0.35;
+    const dateTimeTop = dateTimeY - boxHeight / 2 - baseFontSize * 0.35;
+    const descriptionTop = titleBottom;
+    const descriptionBottom = Math.max(descriptionTop + smallFontSize, dateTimeTop);
+    const descriptionY = (descriptionTop + descriptionBottom) / 2;
+    const maxDescriptionHeight = Math.max(smallFontSize, descriptionBottom - descriptionTop);
+
+    const headerTop = topY + edgePadding * 1.2;
+    const headerBottom = descriptionTop - innerGap * 0.4;
+    const bodyTop = descriptionTop;
+    const bodyBottom = descriptionBottom;
+    const footerTop = dateTimeY + boxHeight + innerGap;
+    const footerBottom = bottomY - edgePadding * 1.2;
 
     return {
       ...metrics,
@@ -1322,11 +1361,35 @@ Object.assign(SpiralCalendar.prototype, {
       baseFontSize,
       smallFontSize,
       edgePadding,
+      innerGap,
+      boxHeight,
       topY,
       bottomY,
+      headerZone: {
+        top: headerTop,
+        bottom: headerBottom,
+        centerY: (headerTop + headerBottom) / 2,
+        height: headerBottom - headerTop
+      },
+      bodyZone: {
+        top: bodyTop,
+        bottom: bodyBottom,
+        centerY: (bodyTop + bodyBottom) / 2,
+        height: bodyBottom - bodyTop
+      },
+      footerZone: {
+        top: footerTop,
+        bottom: footerBottom,
+        centerY: (footerTop + footerBottom) / 2,
+        height: footerBottom - footerTop
+      },
+      counterY,
       titleY,
       dateTimeY,
+      descriptionTop,
+      descriptionBottom,
       descriptionY,
+      maxDescriptionHeight,
       buttonY
     };
   },
@@ -1620,38 +1683,17 @@ Object.assign(SpiralCalendar.prototype, {
     return totalHeight;
   },
 
-  computeDynamicDateTimeY(centerY, circleRadius, baseFontSize, smallFontSize, descriptionY, actualTextHeight, deleteButtonY) {
-    const boxHeight = baseFontSize * 1.8;
-    const trueCenterY = centerY;
-    const descriptionThreshold = smallFontSize * 2.5;
-    let dynamicDateTimeY = trueCenterY;
-    if (actualTextHeight > descriptionThreshold) {
-      const descriptionBottomY = descriptionY + actualTextHeight / 2;
-      const spacing = circleRadius * 0.2;
-      const minDateTimeY = descriptionBottomY + spacing + (boxHeight / 2);
-      const maxDateTimeY = deleteButtonY - circleRadius * 0.4;
-      dynamicDateTimeY = Math.min(minDateTimeY, maxDateTimeY);
-    }
-    return dynamicDateTimeY;
-  },
-
-  buildDescriptionClickArea(centerX, descriptionY, circleRadius, baseFontSize, titleY, titleFontSize, dynamicDateTimeY, actualTextHeight, hasDescription) {
+  buildDescriptionClickArea(centerX, descriptionTop, descriptionBottom, circleRadius) {
     const descAreaWidth = circleRadius * 1.6;
-    let clickAreaHeight = actualTextHeight;
-    if (!hasDescription) {
-      const titleBottomY = titleY + titleFontSize / 2 + 20;
-      const dateBoxTopY = dynamicDateTimeY - (baseFontSize * 1.8) / 2;
-      clickAreaHeight = Math.max(actualTextHeight, dateBoxTopY - titleBottomY);
-    }
     return {
       x: centerX - descAreaWidth / 2,
-      y: descriptionY - clickAreaHeight / 2,
+      y: descriptionTop,
       width: descAreaWidth,
-      height: clickAreaHeight
+      height: Math.max(1, descriptionBottom - descriptionTop)
     };
   },
 
-  drawTitleFitted(text, centerX, titleY, circleRadius, baseTitleFontSize, color = '#000', isBold = true) {
+  measureTitleFitted(text, circleRadius, baseTitleFontSize, isBold = true) {
     let fontSize = baseTitleFontSize;
     const maxTitleWidth = circleRadius * 1.4;
     this.ctx.font = getFontString(fontSize, isBold ? 'bold ' : '');
@@ -1662,11 +1704,16 @@ Object.assign(SpiralCalendar.prototype, {
       this.ctx.font = getFontString(fontSize, isBold ? 'bold ' : '');
       metrics = this.ctx.measureText(text);
     }
+    return { width: metrics.width, height: fontSize, fontSizeUsed: fontSize, maxTitleWidth };
+  },
+
+  drawTitleFitted(text, centerX, titleY, circleRadius, baseTitleFontSize, color = '#000', isBold = true) {
+    const measured = this.measureTitleFitted(text, circleRadius, baseTitleFontSize, isBold);
     this.ctx.fillStyle = color;
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
     this.ctx.fillText(text, centerX, titleY);
-    return { width: metrics.width, height: fontSize, fontSizeUsed: fontSize };
+    return measured;
   },
 
   formatDateTime(date) {
