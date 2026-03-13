@@ -534,6 +534,38 @@ Object.assign(SpiralCalendar.prototype, {
       this._pendingSpiralOverlapEdgeKeys = null;
     },
 
+    drawDetailViewChevronButton(centerX, centerY, size, direction, isHover) {
+      const hitRadius = size * 0.75;
+      const strokeWidth = Math.max(1.5, size * 0.05);
+      const halfHeight = size * 0.2;
+      const halfWidth = size * 0.12;
+
+      this.ctx.save();
+      this.ctx.strokeStyle = isHover ? '#111' : '#555';
+      this.ctx.lineWidth = strokeWidth;
+      this.ctx.lineCap = 'round';
+      this.ctx.lineJoin = 'round';
+      this.ctx.beginPath();
+      if (direction < 0) {
+        this.ctx.moveTo(centerX + halfWidth, centerY - halfHeight);
+        this.ctx.lineTo(centerX - halfWidth, centerY);
+        this.ctx.lineTo(centerX + halfWidth, centerY + halfHeight);
+      } else {
+        this.ctx.moveTo(centerX - halfWidth, centerY - halfHeight);
+        this.ctx.lineTo(centerX + halfWidth, centerY);
+        this.ctx.lineTo(centerX - halfWidth, centerY + halfHeight);
+      }
+      this.ctx.stroke();
+      this.ctx.restore();
+
+      return {
+        x: centerX - hitRadius,
+        y: centerY - hitRadius,
+        width: hitRadius * 2,
+        height: hitRadius * 2
+      };
+    },
+
     drawDetailView(maxRadius) {
       const detailLayout = this.getDetailViewLayout(maxRadius);
       const {
@@ -553,6 +585,8 @@ Object.assign(SpiralCalendar.prototype, {
     // Clear previous button info to prevent stale references
     this.deleteButtonInfo = null;
     this.addButtonInfo = null;
+    this.canvasClickAreas.prevEventChevron = null;
+    this.canvasClickAreas.nextEventChevron = null;
       
       this.ctx.save();
       const detailEventState = this.mouseState.selectedSegment
@@ -645,13 +679,35 @@ Object.assign(SpiralCalendar.prototype, {
         // Event counter for real events with multiples
         if (!isDraftEventActive && selectedEventCount > 1) {
           const eventCounterText = `Event ${activeEventIndex + 1} of ${selectedEventCount}`;
-            this.ctx.fillStyle = '#666';
-            this.ctx.font = getFontString(smallFontSize);
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'middle';
-            const counterY = titleY - circleRadius * 0.15;
-            this.ctx.fillText(eventCounterText, centerX, counterY);
-          }
+          const counterY = titleY - circleRadius * 0.15;
+          this.ctx.fillStyle = '#666';
+          this.ctx.font = getFontString(smallFontSize);
+          this.ctx.textAlign = 'center';
+          this.ctx.textBaseline = 'middle';
+
+          const counterWidth = this.ctx.measureText(eventCounterText).width;
+          const chevronSize = Math.max(12, smallFontSize * 1.45);
+          const chevronGap = chevronSize * 0.8;
+          const prevChevronX = centerX - counterWidth / 2 - chevronGap;
+          const nextChevronX = centerX + counterWidth / 2 + chevronGap;
+
+          this.canvasClickAreas.prevEventChevron = this.drawDetailViewChevronButton(
+            prevChevronX,
+            counterY,
+            chevronSize,
+            -1,
+            this.mouseState.hoveredDetailElement === 'prevEventChevron'
+          );
+          this.canvasClickAreas.nextEventChevron = this.drawDetailViewChevronButton(
+            nextChevronX,
+            counterY,
+            chevronSize,
+            1,
+            this.mouseState.hoveredDetailElement === 'nextEventChevron'
+          );
+
+          this.ctx.fillText(eventCounterText, centerX, counterY);
+        }
           
         // Draw title (fitted) and set click area
         const displayTitle = isDraftEventActive ? (detailEvent.title || 'Click to add title...') : detailEvent.title;
@@ -1416,7 +1472,8 @@ Object.assign(SpiralCalendar.prototype, {
       const canvasWidth = this.canvas.clientWidth;
       const canvasHeight = this.canvas.clientHeight;
       const startup = this.startupAnimationState;
-      const useStartupDrawIn = !!(startup && startup.active && !this.state.circleMode);
+      const renderCircleMode = this.getRenderCircleMode();
+      const useStartupDrawIn = !!(startup && startup.active && !renderCircleMode);
       let startupHourRevealCount = 24;
       let startupHourRevealOriginTheta = -this.state.rotation;
       const startupRevealedHourSegmentKeys = (startup && Array.isArray(startup.revealedHourSegmentKeys))
@@ -1518,6 +1575,8 @@ Object.assign(SpiralCalendar.prototype, {
         this.canvasClickAreas.calendarBox = null;
         this.canvasClickAreas.colorBox = null;
         this.canvasClickAreas.colorRing = null;
+        this.canvasClickAreas.prevEventChevron = null;
+        this.canvasClickAreas.nextEventChevron = null;
         
         // Remove persistent datetime inputs and color picker only when closing detail view
         const persistentStartInput = document.getElementById('persistentStartDateTime');
@@ -1540,7 +1599,7 @@ Object.assign(SpiralCalendar.prototype, {
     const { centerX, centerY } = this.calculateCenter(canvasWidth, canvasHeight);
     this.ctx.translate(centerX, centerY);
       
-      if (this.state.circleMode) {
+      if (renderCircleMode) {
         if (this.state.staticMode) {
           this.ctx.rotate(Math.PI); // 180° turn in static mode
         } else {

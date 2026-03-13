@@ -169,13 +169,10 @@ Object.assign(SpiralCalendar.prototype, {
       if (foundDay !== -1) newDay = foundDay;
 
       // Apply selection
-      this.mouseState.selectedSegment = { day: newDay, segment: targetSegment };
-      const adjustedSegmentId = totalVisibleSegments - (newDay * CONFIG.SEGMENTS_PER_DAY + targetSegment) - 1;
-      this.mouseState.selectedSegmentId = adjustedSegmentId;
+      this.openDetailViewForSegment({ day: newDay, segment: targetSegment });
       const allEvents = this.getAllEventsForSegment(newDay, targetSegment);
       const eventIdx = allEvents.findIndex(ei => ei.event === ev);
       this.mouseState.selectedEventIndex = eventIdx >= 0 ? eventIdx : 0;
-      this.state.detailViewDay = newDay;
 
       // Disable auto align and sync UI
       if (this.autoTimeAlignState && this.autoTimeAlignState.enabled) {

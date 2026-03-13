@@ -354,8 +354,14 @@ Object.assign(SpiralCalendar.prototype, {
   checkDetailViewHover(mouseX, mouseY, centerX, centerY) {
     let hoveredElement = null;
     
+    if (this.canvasClickAreas.prevEventChevron && this.isPointInRect(mouseX, mouseY, this.canvasClickAreas.prevEventChevron)) {
+      hoveredElement = 'prevEventChevron';
+    }
+    else if (this.canvasClickAreas.nextEventChevron && this.isPointInRect(mouseX, mouseY, this.canvasClickAreas.nextEventChevron)) {
+      hoveredElement = 'nextEventChevron';
+    }
     // Check title click area
-    if (this.titleClickArea && this.isPointInRect(mouseX, mouseY, this.titleClickArea)) {
+    else if (this.titleClickArea && this.isPointInRect(mouseX, mouseY, this.titleClickArea)) {
       hoveredElement = 'title';
     }
     // Check description click area
@@ -466,14 +472,7 @@ Object.assign(SpiralCalendar.prototype, {
         }
         // If an event is open, close it and reset auto-activated settings
         if (this.state.detailViewDay !== null) {
-          // Close the detail view
-          this.state.detailViewDay = null;
-          this.mouseState.selectedSegment = null;
-          this.mouseState.selectedSegmentId = null;
-          this.draftEvent = null;
-          this._detailViewHasChanges = false; // Reset changes when closing detail view
-          this.mouseState.hoveredDetailElement = null;
-          this.canvas.style.cursor = 'default';
+          this.closeDetailView({ clearSelection: true, clearDraft: true });
           
           // Reset auto-activated settings
           this.resetAutoActivatedSettings();
@@ -553,6 +552,24 @@ Object.assign(SpiralCalendar.prototype, {
               return;
             }
           }
+
+          if (this.canvasClickAreas.prevEventChevron &&
+              this.isPointInRect(mouseX, mouseY, this.canvasClickAreas.prevEventChevron)) {
+            if (this.cycleDetailViewEvent(-1)) {
+              this.playFeedback(0.08, 6);
+              this.drawSpiral();
+            }
+            return;
+          }
+
+          if (this.canvasClickAreas.nextEventChevron &&
+              this.isPointInRect(mouseX, mouseY, this.canvasClickAreas.nextEventChevron)) {
+            if (this.cycleDetailViewEvent(1)) {
+              this.playFeedback(0.08, 6);
+              this.drawSpiral();
+            }
+            return;
+          }
           
           // Check for title, description, and delete button
           if (this.titleClickArea) {
@@ -584,8 +601,7 @@ Object.assign(SpiralCalendar.prototype, {
               this.playFeedback(); // Add click sound
               if (this._detailViewHasChanges) {
                 // "Done" button clicked - close the detail view
-                this.state.detailViewDay = null;
-                this._detailViewHasChanges = false;
+                this.closeDetailView();
                 this.drawSpiral();
                 return;
               }
@@ -646,31 +662,15 @@ Object.assign(SpiralCalendar.prototype, {
                   this.events.push(newEvent);
                   this.draftEvent = null; // Clear draft event
                   
-                  // Reset auto-activated settings
+                // Reset auto-activated settings
                   this.resetAutoActivatedSettings();
                 // Force redraw to update the interface
                 this.drawSpiral();
                 }
-                // Only restore previous mode when adding event if we were originally in spiral mode
-                if (this._wasSpiralModeBeforeDetail) {
-                  // Prevent double restoration by temporarily setting a flag
-                  this._suppressScaleRestore = true;
-                  this.state.circleMode = false;
-                  const circleModeCheckbox = document.getElementById('circleMode');
-                  if (circleModeCheckbox) circleModeCheckbox.checked = false;
-                  this._suppressScaleRestore = false;
-                  // Restore original spiral scale when exiting circle mode
-                  this.restoreOriginalSpiralScale();
-                }
                 this.deleteButtonInfo = null;
                 this.addButtonInfo = null;
                 this.titleClickArea = null;
-                this.state.detailViewDay = null;
-                this.mouseState.selectedSegment = null;
-                this.mouseState.selectedSegmentId = null;
-                this._detailViewHasChanges = false; // Reset changes when closing detail view
-                this.mouseState.hoveredDetailElement = null;
-                this.canvas.style.cursor = 'default';
+                this.closeDetailView({ clearSelection: true });
                 
                 // Reset auto-activated inside segment numbers
                 if (this.state.autoInsideSegmentNumbers) {
@@ -682,13 +682,6 @@ Object.assign(SpiralCalendar.prototype, {
                     insideSegmentCheckbox.checked = false;
                   }
                 }
-              // Switch back to spiral mode if we were previously in spiral mode
-              if (this._wasSpiralModeBeforeDetail) {
-                this.state.circleMode = false;
-                const circleModeCheckbox = document.getElementById('circleMode');
-                if (circleModeCheckbox) circleModeCheckbox.checked = false;
-                this.restoreOriginalSpiralScale();
-              }
                 this.drawSpiral();
               } else {
                 // Delete button clicked
@@ -700,21 +693,10 @@ Object.assign(SpiralCalendar.prototype, {
                   this.deleteButtonInfo = null;
                   this.addButtonInfo = null;
                   this.titleClickArea = null;
-                  this.state.detailViewDay = null;
-                  this.mouseState.selectedSegment = null;
-                  this.mouseState.selectedSegmentId = null;
-                  this.mouseState.hoveredDetailElement = null;
-                  this.canvas.style.cursor = 'default';
+                  this.closeDetailView({ clearSelection: true });
                   
                   // Reset auto-activated settings
                   this.resetAutoActivatedSettings();
-                // Switch back to spiral mode if we were previously in spiral mode
-                if (this._wasSpiralModeBeforeDetail) {
-                  this.state.circleMode = false;
-                  const circleModeCheckbox = document.getElementById('circleMode');
-                  if (circleModeCheckbox) circleModeCheckbox.checked = false;
-                  this.restoreOriginalSpiralScale();
-                }
                   this.drawSpiral();
                   }
                 }
@@ -744,9 +726,8 @@ Object.assign(SpiralCalendar.prototype, {
             const detailEventState = this.getDetailViewEventState();
             const selectedEventCount = detailEventState ? detailEventState.selectedEventCount : 0;
             const activeEvent = detailEventState ? detailEventState.activePersistedEvent : null;
-            if (selectedEventCount > 1) {
+            if (selectedEventCount > 1 && this.cycleDetailViewEvent(1)) {
               // Cycle to the next event
-              this.mouseState.selectedEventIndex = (this.mouseState.selectedEventIndex + 1) % selectedEventCount;
               this.drawSpiral(); // Redraw to update the detail view
               return; // Keep detail view open
             } else if (selectedEventCount === 1 && activeEvent) {
@@ -755,18 +736,7 @@ Object.assign(SpiralCalendar.prototype, {
               return;
             } else {
               // No events: close detail view as before
-              if (this._wasSpiralModeBeforeDetail) {
-                this.state.circleMode = false;
-                const circleModeCheckbox = document.getElementById('circleMode');
-                if (circleModeCheckbox) circleModeCheckbox.checked = false;
-                // Restore original spiral scale when exiting circle mode
-                this.restoreOriginalSpiralScale();
-              }
-              this.state.detailViewDay = null;
-              this.draftEvent = null; // Clear draft event when closing
-              this.mouseState.hoveredDetailElement = null;
-              this._detailViewHasChanges = false; // Reset changes when closing detail view
-              this.canvas.style.cursor = 'default';
+              this.closeDetailView({ clearDraft: true });
               
               // Reset auto-activated inside segment numbers
               if (this.state.autoInsideSegmentNumbers) {
@@ -780,41 +750,11 @@ Object.assign(SpiralCalendar.prototype, {
               }
             }
           } else {
-            // Opening detail view: remember previous mode and switch to circle mode
-            this._wasSpiralModeBeforeDetail = !this.state.circleMode;
-            
-            // Reset event index when opening detail view
-            this.mouseState.selectedEventIndex = 0;
-            
-            // If switching from spiral to circle mode, align the selected segment
-            if (!this.state.circleMode) {
-              // Align using the clicked segment (selectedSegment updates later in this handler)
-              this.alignSelectedSegmentInCircleMode();
-            }
-            
-            this.state.circleMode = true;
-            const circleModeCheckbox = document.getElementById('circleMode');
-            if (circleModeCheckbox) circleModeCheckbox.checked = true;
-            this.state.detailViewDay = segment.day;
+            this.openDetailViewForSegment(segment, { selectedEventIndex: 0 });
           }
         } else {
           // Clicked a different segment - select it and reset event index
-          this.mouseState.selectedEventIndex = 0;
-          // Opening detail view: remember previous mode and switch to circle mode
-          if (this.state.detailViewDay === null) {
-            this._wasSpiralModeBeforeDetail = !this.state.circleMode;
-            
-            // If switching from spiral to circle mode, align the selected segment
-            if (!this.state.circleMode) {
-              // Align using the clicked segment (selectedSegment updates later in this handler)
-              this.alignSelectedSegmentInCircleMode();
-            }
-            
-            this.state.circleMode = true;
-            const circleModeCheckbox = document.getElementById('circleMode');
-            if (circleModeCheckbox) circleModeCheckbox.checked = true;
-          }
-          this.state.detailViewDay = segment.day;
+          this.openDetailViewForSegment(segment, { selectedEventIndex: 0 });
         }
         
         this.mouseState.selectedSegment = segment;
@@ -826,21 +766,7 @@ Object.assign(SpiralCalendar.prototype, {
       } else {
         // Clicked outside of any segment - deselect current selection
         const hadSelection = this.state.detailViewDay !== null || this.mouseState.selectedSegment !== null;
-        
-        if (this.state.detailViewDay !== null) {
-          // Closing detail view: restore spiral mode if it was active before
-          if (this._wasSpiralModeBeforeDetail) {
-            this.state.circleMode = false;
-            const circleModeCheckbox = document.getElementById('circleMode');
-            if (circleModeCheckbox) circleModeCheckbox.checked = false;
-            // Restore original spiral scale when exiting circle mode
-            this.restoreOriginalSpiralScale();
-          }
-        }
-        this.state.detailViewDay = null;
-        this.mouseState.selectedSegment = null;
-        this.mouseState.selectedSegmentId = null;
-        this.draftEvent = null; // Clear draft event when deselecting
+        this.closeDetailView({ clearSelection: true, clearDraft: true });
         
         // Reset auto-activated settings (independent of autoInsideSegmentNumbers flag)
         let needsRedraw = false;
@@ -1228,7 +1154,7 @@ Object.assign(SpiralCalendar.prototype, {
       // Normalize angle to positive range
       while (angle < 0) angle += 2 * Math.PI;
       
-      if (this.state.circleMode) {
+      if (this.getRenderCircleMode()) {
         // Circle mode detection - use same logic as drawing
         const { maxRadius, thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
         const visibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
@@ -1327,19 +1253,23 @@ Object.assign(SpiralCalendar.prototype, {
       return null;
     },
 
-    createRadiusFunction(maxRadius, thetaMax, exponent, rotation) {
+    createRadiusFunction(maxRadius, thetaMax, exponent, rotation, options = {}) {
+      const circleMode = typeof options.circleMode === 'boolean'
+        ? options.circleMode
+        : this.getRenderCircleMode();
+      const dayCount = Number.isFinite(options.dayCount) ? options.dayCount : this.state.days;
       return (theta) => {
         // Adjust theta to maintain constant spiral size during rotation
         const adjustedTheta = theta + rotation;
         const normalizedTheta = adjustedTheta / thetaMax;
         const t = Math.max(0, Math.min(1, normalizedTheta));
         
-        if (this.state.circleMode) {
+        if (circleMode) {
           // Circle mode: Create discrete rings that jump at the beginning of each day (0:00)
           // Each day gets its own ring, so we floor to the current day
           const daysInTheta = adjustedTheta / (2 * Math.PI);
           const flooredDays = Math.ceil(daysInTheta);
-          const discreteT = Math.max(0, Math.min(1, flooredDays / this.state.days));
+          const discreteT = Math.max(0, Math.min(1, flooredDays / dayCount));
           
           return maxRadius * Math.pow(discreteT, exponent);
         } else {
@@ -1366,11 +1296,14 @@ Object.assign(SpiralCalendar.prototype, {
       };
     },
 
-    calculateTransforms(canvasWidth, canvasHeight) {
+    calculateTransforms(canvasWidth, canvasHeight, options = {}) {
       // Add one extra day to compensate for the 360° cut-off in the visibility range
       // This ensures that when user selects 7 days, they actually see 7 days worth of content
       const thetaMax = (this.state.days) * 2 * Math.PI;
-      let maxRadius = Math.min(canvasWidth, canvasHeight) * this.state.spiralScale;
+      const spiralScale = Number.isFinite(options.spiralScale)
+        ? options.spiralScale
+        : this.getRenderSpiralScale();
+      let maxRadius = Math.min(canvasWidth, canvasHeight) * spiralScale;
 
       // Scale down spiral when time display is pulled up, but only if the spiral would exceed available space
       if (this.state.showTimeDisplay && this.timeDisplayState) {

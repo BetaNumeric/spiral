@@ -893,6 +893,60 @@ Object.assign(SpiralCalendar.prototype, {
     this.drawSpiral();
   },
 
+  isDetailViewCircleModeActive() {
+    return this.state.detailViewDay !== null &&
+      !!this.mouseState.selectedSegment &&
+      !this.mouseState.isHandleDragging;
+  },
+
+  getRenderCircleMode() {
+    return this.state.circleMode || this.isDetailViewCircleModeActive();
+  },
+
+  getAlignedCircleModeScaleForSegment(segment = this.mouseState.selectedSegment, baseSpiralScale = this.state.spiralScale) {
+    if (!segment) return baseSpiralScale;
+
+    const canvasWidth = this.canvas.clientWidth;
+    const canvasHeight = this.canvas.clientHeight;
+    const thetaMax = this.state.days * 2 * Math.PI;
+    const currentMaxRadius = Math.min(canvasWidth, canvasHeight) * baseSpiralScale;
+    const spiralRadiusFunction = this.createRadiusFunction(
+      currentMaxRadius,
+      thetaMax,
+      this.state.radiusExponent,
+      this.state.rotation,
+      { circleMode: false }
+    );
+
+    const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
+    const segmentTheta = segment.day * 2 * Math.PI + (segment.segment + 1) * segmentAngle;
+    const spiralRadius = spiralRadiusFunction(segmentTheta);
+    const dayTheta = segment.day * 2 * Math.PI;
+    const adjustedTheta = dayTheta + this.state.rotation;
+    const daysInTheta = adjustedTheta / (2 * Math.PI);
+    const roundedDays = Math.ceil(daysInTheta);
+    const discreteT = Math.max(0, Math.min(1, roundedDays / this.state.days));
+
+    if (!(discreteT > 0)) return baseSpiralScale;
+
+    const targetMaxRadius = spiralRadius / Math.pow(discreteT, this.state.radiusExponent);
+    const newSpiralScale = targetMaxRadius / Math.min(canvasWidth, canvasHeight);
+    if (!Number.isFinite(newSpiralScale)) return baseSpiralScale;
+    const minScale = 0.1;
+    const maxScale = 1.0;
+    return Math.max(minScale, Math.min(maxScale, newSpiralScale));
+  },
+
+  getRenderSpiralScale() {
+    if (this.isDetailViewCircleModeActive()) {
+      const baseSpiralScale = this._originalSpiralScale !== null
+        ? this._originalSpiralScale
+        : this.state.spiralScale;
+      return this.getAlignedCircleModeScaleForSegment(this.mouseState.selectedSegment, baseSpiralScale);
+    }
+    return this.state.spiralScale;
+  },
+
   alignSelectedSegmentInCircleMode() {
     if (!this.mouseState.selectedSegment) return;
     
@@ -901,47 +955,73 @@ Object.assign(SpiralCalendar.prototype, {
       this._originalSpiralScale = this.state.spiralScale;
     }
     
-    const canvasWidth = this.canvas.clientWidth;
-    const canvasHeight = this.canvas.clientHeight;
-    const segment = this.mouseState.selectedSegment;
-    
-    // Calculate the radius the selected segment had in spiral mode
-    const { thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
-    const currentMaxRadius = Math.min(canvasWidth, canvasHeight) * this._originalSpiralScale;
-    const spiralRadiusFunction = this.createRadiusFunction(currentMaxRadius, thetaMax, this.state.radiusExponent, this.state.rotation);
-    
-    const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
-    const segmentTheta = segment.day * 2 * Math.PI + (segment.segment + 1) * segmentAngle;
-    const spiralRadius = spiralRadiusFunction(segmentTheta);
-    
-    // In circle mode, all segments of a day share the same radius
-    // We want the day ring to have the same radius as the selected segment had in spiral mode
-    const dayTheta = segment.day * 2 * Math.PI;
-    
-    // For circle mode with discrete rings, we need to calculate what scale would make
-    // the discrete ring for this day match the spiral radius
-    const adjustedTheta = dayTheta + this.state.rotation;
-    const daysInTheta = adjustedTheta / (2 * Math.PI);
-    const roundedDays = Math.ceil(daysInTheta); // Use same logic as circle mode
-    const discreteT = Math.max(0, Math.min(1, roundedDays / this.state.days));
-    
-    if (discreteT > 0) {
-      const targetMaxRadius = spiralRadius / Math.pow(discreteT, this.state.radiusExponent);
-      const newSpiralScale = targetMaxRadius / Math.min(canvasWidth, canvasHeight);
-      
-      // Clamp to reasonable bounds
-      const minScale = 0.1;
-      const maxScale = 1.0;
-      this.state.spiralScale = Math.max(minScale, Math.min(maxScale, newSpiralScale));
-      
-      // Update the UI slider
-      const scaleSlider = document.getElementById('scaleSlider');
-      if (scaleSlider) {
-        scaleSlider.value = this.state.spiralScale;
-        const scaleVal = document.getElementById('scaleVal');
-        if (scaleVal) scaleVal.textContent = this.state.spiralScale.toFixed(2);
-      }
+    this.state.spiralScale = this.getAlignedCircleModeScaleForSegment(
+      this.mouseState.selectedSegment,
+      this._originalSpiralScale
+    );
+
+    // Update the UI slider
+    const scaleSlider = document.getElementById('scaleSlider');
+    if (scaleSlider) {
+      scaleSlider.value = this.state.spiralScale;
+      const scaleVal = document.getElementById('scaleVal');
+      if (scaleVal) scaleVal.textContent = this.state.spiralScale.toFixed(2);
     }
+  },
+
+  openDetailViewForSegment(segment, options = {}) {
+    if (!segment) return null;
+
+    const nextSegment = { day: segment.day, segment: segment.segment };
+    this.mouseState.selectedSegment = nextSegment;
+    this.mouseState.selectedSegmentId = this.getSelectedSegmentId(nextSegment);
+    if (typeof options.selectedEventIndex === 'number') {
+      this.mouseState.selectedEventIndex = options.selectedEventIndex;
+    }
+    this.state.detailViewDay = nextSegment.day;
+    this._detailViewHasChanges = false;
+    this.mouseState.hoveredDetailElement = null;
+    return nextSegment;
+  },
+
+  closeDetailView(options = {}) {
+    const {
+      clearSelection = false,
+      clearDraft = false
+    } = options;
+
+    this.state.detailViewDay = null;
+    this._detailViewHasChanges = false;
+    this.mouseState.hoveredDetailElement = null;
+
+    if (clearDraft) {
+      this.draftEvent = null;
+    }
+    if (clearSelection) {
+      this.mouseState.selectedSegment = null;
+      this.mouseState.selectedSegmentId = null;
+    }
+    if (this.canvasClickAreas) {
+      this.canvasClickAreas.prevEventChevron = null;
+      this.canvasClickAreas.nextEventChevron = null;
+    }
+
+    if (this.canvas) {
+      this.canvas.style.cursor = 'default';
+    }
+  },
+
+  cycleDetailViewEvent(direction = 1) {
+    const detailEventState = this.getDetailViewEventState();
+    if (!detailEventState || detailEventState.selectedEventCount < 2) {
+      return false;
+    }
+
+    const eventCount = detailEventState.selectedEventCount;
+    const normalizedDirection = direction < 0 ? -1 : 1;
+    const nextIndex = (this.mouseState.selectedEventIndex + normalizedDirection + eventCount) % eventCount;
+    this.mouseState.selectedEventIndex = nextIndex;
+    return true;
   },
 
   _getSelectedEventForHandleEditing() {
@@ -1184,11 +1264,9 @@ Object.assign(SpiralCalendar.prototype, {
   getDetailViewMetrics(maxRadius = null) {
     const canvasWidth = this.canvas.clientWidth;
     const canvasHeight = this.canvas.clientHeight;
-    const resolvedMaxRadius = Number.isFinite(maxRadius)
-      ? maxRadius
-      : Math.min(canvasWidth, canvasHeight) * this.state.spiralScale;
+    const { thetaMax, maxRadius: effectiveMaxRadius } = this.calculateTransforms(canvasWidth, canvasHeight);
+    const resolvedMaxRadius = Number.isFinite(maxRadius) ? maxRadius : effectiveMaxRadius;
     const { centerX, centerY } = this.calculateCenter(canvasWidth, canvasHeight);
-    const { thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
     const visibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
     const radiusFunction = this.createRadiusFunction(
       resolvedMaxRadius,
@@ -1200,7 +1278,7 @@ Object.assign(SpiralCalendar.prototype, {
     let outerRadius = radiusFunction(visibilityRange.max);
     if (this.mouseState.selectedSegment) {
       const segment = this.mouseState.selectedSegment;
-      if (this.state.circleMode) {
+      if (this.getRenderCircleMode()) {
         outerRadius = radiusFunction(segment.day * 2 * Math.PI);
       } else {
         const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;

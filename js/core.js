@@ -228,9 +228,6 @@ class SpiralCalendar {
         isEditingDescription: false
       };
       
-      // Track previous mode for auto-switching between spiral/circle
-      this._wasSpiralModeBeforeDetail = false;
-      
       // Store original spiral scale before adjustments
       this._originalSpiralScale = null;
       
@@ -239,7 +236,9 @@ class SpiralCalendar {
         startDateBox: null,
         endDateBox: null,
         colorBox: null,
-        colorRing: null
+        colorRing: null,
+        prevEventChevron: null,
+        nextEventChevron: null
       };
       
       // Store draft event for blank segments being edited

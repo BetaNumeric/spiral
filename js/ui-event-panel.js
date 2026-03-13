@@ -1109,15 +1109,11 @@ Object.assign(SpiralCalendar.prototype, {
             newDay = foundDay;
           }
 
-          this.mouseState.selectedSegment = { day: newDay, segment: targetSegment };
-          // Keep selectedSegmentId consistent with the adjusted day/segment
-          const adjustedSegmentId = totalVisibleSegments - (newDay * CONFIG.SEGMENTS_PER_DAY + targetSegment) - 1;
-          this.mouseState.selectedSegmentId = adjustedSegmentId;
+          this.openDetailViewForSegment({ day: newDay, segment: targetSegment });
           // Find the event index for this segment
           const allEvents = this.getAllEventsForSegment(newDay, targetSegment);
           const eventIdx = allEvents.findIndex(ei => ei.event === ev);
           this.mouseState.selectedEventIndex = eventIdx >= 0 ? eventIdx : 0;
-          this.state.detailViewDay = newDay;
           
           // --- rotation already updated above ---
           
@@ -1133,15 +1129,6 @@ Object.assign(SpiralCalendar.prototype, {
             rotateSlider.value = degrees;
             const rotateVal = document.getElementById('rotateVal');
             if (rotateVal) rotateVal.textContent = Math.round(degrees) + '°';
-          }
-          
-          // Switch to circle mode for detail view
-          if (!this.state.circleMode) {
-            this._wasSpiralModeBeforeDetail = true;
-            this.alignSelectedSegmentInCircleMode();
-            this.state.circleMode = true;
-            const circleModeCheckbox = document.getElementById('circleMode');
-            if (circleModeCheckbox) circleModeCheckbox.checked = true;
           }
           
           // Force a redraw to ensure the time display shows the correct time
