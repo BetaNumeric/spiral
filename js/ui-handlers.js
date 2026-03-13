@@ -351,6 +351,23 @@ Object.assign(SpiralCalendar.prototype, {
       });
     }
 
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || this.state.detailViewDay === null) {
+        return;
+      }
+
+      const target = e.target;
+      const tagName = target && target.tagName ? target.tagName.toLowerCase() : '';
+      if (target && (target.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select')) {
+        return;
+      }
+
+      this.closeDetailView({ clearSelection: true, clearDraft: true });
+      this.resetAutoActivatedSettings();
+      this.drawSpiral();
+      e.preventDefault();
+    });
+
     const gradientOverlayOpacitySlider = document.getElementById('gradientOverlayOpacitySlider');
     const gradientOverlayOpacityVal = document.getElementById('gradientOverlayOpacityVal');
     if (gradientOverlayOpacitySlider && gradientOverlayOpacityVal) {
