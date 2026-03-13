@@ -536,7 +536,7 @@ Object.assign(SpiralCalendar.prototype, {
 
     drawDetailViewChevronButton(centerX, centerY, size, direction, isHover) {
       const hitRadius = size * 0.75;
-      const strokeWidth = Math.max(1.5, size * 0.05);
+      const strokeWidth = Math.max(0.1, size * 0.05);
       const halfHeight = size * 0.2;
       const halfWidth = size * 0.12;
 
@@ -686,7 +686,7 @@ Object.assign(SpiralCalendar.prototype, {
           this.ctx.textBaseline = 'middle';
 
           const counterWidth = this.ctx.measureText(eventCounterText).width;
-          const chevronSize = Math.max(12, smallFontSize * 1.45);
+          const chevronSize = Math.max(1, smallFontSize * 1.45);
           const chevronGap = chevronSize * 0.8;
           const prevChevronX = centerX - counterWidth / 2 - chevronGap;
           const nextChevronX = centerX + counterWidth / 2 + chevronGap;
