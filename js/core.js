@@ -316,6 +316,7 @@ class SpiralCalendar {
         targetHeight: CONFIG.TIME_DISPLAY_HEIGHT,
         animId: null,
         swipeActive: false,
+        swipeStartedInRenderRect: false,
         swipeStartY: 0,
         swipeStartHeight: CONFIG.TIME_DISPLAY_HEIGHT,
         swipeLastY: 0,
@@ -323,6 +324,7 @@ class SpiralCalendar {
         hitPadding: 80,
         // Desktop mouse drag support
         mouseActive: false,
+        mouseStartedInRenderRect: false,
         mouseStartY: 0,
         mouseLastY: 0,
         mouseStartHeight: CONFIG.TIME_DISPLAY_HEIGHT,

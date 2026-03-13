@@ -947,26 +947,48 @@ Object.assign(SpiralCalendar.prototype, {
     return this.state.spiralScale;
   },
 
-  getRenderVisibilityRange(thetaMax) {
-    const visibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
-    if (!this.isDetailViewCircleModeActive() || !this.mouseState.selectedSegment) {
-      return visibilityRange;
+  getDetailViewOutermostDayNormalization(thetaMax, visibilityRange = null) {
+    const baseVisibilityRange = visibilityRange || this.calculateVisibilityRange(this.state.rotation, thetaMax);
+    if (this.state.detailViewDay === null || !this.mouseState.selectedSegment) {
+      return null;
     }
 
     const daySpan = 2 * Math.PI;
     const selectedDayStart = this.mouseState.selectedSegment.day * daySpan;
     const epsilon = 1e-9;
-    const outerDayStart = Math.floor((visibilityRange.max - epsilon) / daySpan) * daySpan;
+    const outerDayStart = Math.floor((baseVisibilityRange.max - epsilon) / daySpan) * daySpan;
     const outerDayEnd = outerDayStart + daySpan;
-    const visibleOuterFraction = Math.max(0, Math.min(1, (visibilityRange.max - outerDayStart) / daySpan));
+    const visibleOuterFraction = Math.max(0, Math.min(1, (baseVisibilityRange.max - outerDayStart) / daySpan));
     const isSelectedOutermostDay = Math.abs(selectedDayStart - outerDayStart) < epsilon * 10;
     const normalizedMax = isSelectedOutermostDay || visibleOuterFraction >= 0.5
       ? outerDayEnd
       : outerDayStart;
 
     return {
-      min: normalizedMax - thetaMax,
-      max: normalizedMax
+      outerDayStart,
+      outerDayEnd,
+      normalizedMax,
+      fillOutermostDay: normalizedMax >= outerDayEnd - epsilon
+    };
+  },
+
+  shouldAllowDetailViewSpiralOverflow(thetaMax, normalization = null) {
+    return !!(
+      this.mouseState.isHandleDragging &&
+      (normalization || this.getDetailViewOutermostDayNormalization(thetaMax))?.fillOutermostDay
+    );
+  },
+
+  getRenderVisibilityRange(thetaMax) {
+    const visibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
+    const normalization = this.getDetailViewOutermostDayNormalization(thetaMax, visibilityRange);
+    if (!normalization) {
+      return visibilityRange;
+    }
+
+    return {
+      min: normalization.normalizedMax - thetaMax,
+      max: normalization.normalizedMax
     };
   },
 
@@ -1236,7 +1258,19 @@ Object.assign(SpiralCalendar.prototype, {
     const canvasHeight = this.canvas.clientHeight;
     const { thetaMax, maxRadius } = this.calculateTransforms(canvasWidth, canvasHeight);
     const visibilityRange = this.getRenderVisibilityRange(thetaMax);
-    const radiusFunction = this.createRadiusFunction(maxRadius, thetaMax, this.state.radiusExponent, this.state.rotation);
+    const detailDayNormalization = this.mouseState.isHandleDragging
+      ? this.getDetailViewOutermostDayNormalization(thetaMax)
+      : null;
+    const radiusFunction = this.createRadiusFunction(
+      maxRadius,
+      thetaMax,
+      this.state.radiusExponent,
+      this.state.rotation,
+      {
+        allowSpiralOverflow: this.shouldAllowDetailViewSpiralOverflow(thetaMax, detailDayNormalization),
+        circleMode: this.getRenderCircleMode()
+      }
+    );
     const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
     const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
     const selectedEventSegments = (this.eventSegments || []).filter(es => es && es.event === selectedEvent);

@@ -1622,7 +1622,39 @@ Object.assign(SpiralCalendar.prototype, {
             max: collapsedTheta + (normalVisibilityRange.max - collapsedTheta) * progress
           };
         }
-        const radiusFunction = this.createRadiusFunction(maxRadius, thetaMax, this.state.radiusExponent, this.state.rotation);
+        const detailDayNormalization = (!useStartupDrawIn && this.mouseState.isHandleDragging)
+          ? this.getDetailViewOutermostDayNormalization(thetaMax, visibilityRange)
+          : null;
+        const displayVisibilityMax = detailDayNormalization
+          ? detailDayNormalization.normalizedMax
+          : visibilityRange.max;
+        const getSegmentThetaRange = (rawStartAngle, rawEndAngle, range = visibilityRange) => {
+          let startTheta = Math.max(rawStartAngle, range.min);
+          let endTheta = Math.min(rawEndAngle, range.max);
+          if (
+            detailDayNormalization &&
+            rawStartAngle >= detailDayNormalization.outerDayStart - 0.0001 &&
+            rawEndAngle <= detailDayNormalization.outerDayEnd + 0.0001
+          ) {
+            if (detailDayNormalization.fillOutermostDay) {
+              startTheta = rawStartAngle;
+              endTheta = rawEndAngle;
+            } else {
+              endTheta = startTheta;
+            }
+          }
+          return { startTheta, endTheta };
+        };
+        const radiusFunction = this.createRadiusFunction(
+          maxRadius,
+          thetaMax,
+          this.state.radiusExponent,
+          this.state.rotation,
+          {
+            allowSpiralOverflow: this.shouldAllowDetailViewSpiralOverflow(thetaMax, detailDayNormalization),
+            circleMode: false
+          }
+        );
         const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
       // Draw all segments within the visible range
       // Calculate which segments fall within the visible angular range
@@ -1641,8 +1673,7 @@ Object.assign(SpiralCalendar.prototype, {
           const rawEndAngle = rawStartAngle + segmentAngle;
 
           // Clamp to visible range for smooth disappearance
-          const startTheta = Math.max(rawStartAngle, visibilityRange.min);
-          const endTheta = Math.min(rawEndAngle, visibilityRange.max);
+          const { startTheta, endTheta } = getSegmentThetaRange(rawStartAngle, rawEndAngle);
           
           if (endTheta <= startTheta) continue; // segment is fully hidden
           
@@ -1664,8 +1695,7 @@ Object.assign(SpiralCalendar.prototype, {
       const segmentsWithVisibility = segmentsWithRadii.map(segment => {
         const rawStartAngle = segment.day * 2 * Math.PI + segment.segment * segmentAngle;
         const rawEndAngle = rawStartAngle + segmentAngle;
-        const startTheta = Math.max(rawStartAngle, visibilityRange.min);
-        const endTheta = Math.min(rawEndAngle, visibilityRange.max);
+        const { startTheta, endTheta } = getSegmentThetaRange(rawStartAngle, rawEndAngle);
         
         const visibility = endTheta > startTheta ? (endTheta - startTheta) / (rawEndAngle - rawStartAngle) : 0;
         
@@ -1759,8 +1789,7 @@ Object.assign(SpiralCalendar.prototype, {
                 max: visibilityRange.max - (segmentAngle * 0.5)
               };
               
-              const startTheta = Math.max(rawStartAngle, shiftedVisibilityRange.min);
-              const endTheta = Math.min(rawEndAngle, shiftedVisibilityRange.max);
+              const { startTheta, endTheta } = getSegmentThetaRange(rawStartAngle, rawEndAngle, shiftedVisibilityRange);
               const shiftedVisibility = endTheta > startTheta ? (endTheta - startTheta) / (rawEndAngle - rawStartAngle) : 0;
               
               shouldShow = shiftedVisibility >= 0.17;
@@ -1793,8 +1822,7 @@ Object.assign(SpiralCalendar.prototype, {
           const rawEndAngle = rawStartAngle + segmentAngle;
 
           // Clamp to visible range for smooth disappearance
-          const startTheta = Math.max(rawStartAngle, visibilityRange.min);
-          const endTheta = Math.min(rawEndAngle, visibilityRange.max);
+          const { startTheta, endTheta } = getSegmentThetaRange(rawStartAngle, rawEndAngle);
           
           if (endTheta <= startTheta) continue; // segment is fully hidden
 
@@ -1970,7 +1998,7 @@ Object.assign(SpiralCalendar.prototype, {
           if (isFirstHourOfDay && rawStartAngle !== null && rawEndAngle !== null) {
             // Determine if this is one of the outermost visible day rings (up to 2 days)
             const currentDayTheta = day * 2 * Math.PI;
-            const outermostDayTheta = Math.floor(visibilityRange.max / (2 * Math.PI)) * 2 * Math.PI;
+            const outermostDayTheta = Math.floor(displayVisibilityMax / (2 * Math.PI)) * 2 * Math.PI;
             const secondOutermostDayTheta = outermostDayTheta - 2 * Math.PI;
             const isOutermostDay = Math.abs(currentDayTheta - outermostDayTheta) < 0.1;
             const isSecondOutermostDay = Math.abs(currentDayTheta - secondOutermostDayTheta) < 0.1;

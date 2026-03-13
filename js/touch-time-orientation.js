@@ -449,6 +449,7 @@ Object.assign(SpiralCalendar.prototype, {
       const touchesHandleInDetailMode = this.state.detailViewDay !== null && !!this.getHandleAtCanvasPoint(canvasX, canvasY, 14);
       const canvasWidth = this.canvas.clientWidth;
       const canvasHeight = this.canvas.clientHeight;
+      const renderRect = this.getTimeDisplayRenderRect(canvasWidth, canvasHeight);
       const tdHeight = (this.timeDisplayState && this.timeDisplayState.collapsed) ? (this.timeDisplayState.collapseHeight || 12) : CONFIG.TIME_DISPLAY_HEIGHT;
       const pullUpOffset = (this.timeDisplayState && this.timeDisplayState.pullUpOffset) ? this.timeDisplayState.pullUpOffset : 0;
       // Reduce hit padding when event list is extended (when pullUpOffset > 0)
@@ -459,6 +460,12 @@ Object.assign(SpiralCalendar.prototype, {
       if (inside && !touchesHandleInDetailMode) {
         // Begin swipe tracking for collapse/expand
         this.timeDisplayState.swipeActive = true;
+        this.timeDisplayState.swipeStartedInRenderRect = (
+          touchX >= renderRect.x &&
+          touchX <= renderRect.x + renderRect.width &&
+          touchY >= renderRect.y &&
+          touchY <= renderRect.y + renderRect.height
+        );
         this.timeDisplayState.swipeStartY = touchY;
         this.timeDisplayState.swipeLastY = touchY;
         // Store initial state for tracking collapse/expand and pull-up
@@ -1083,10 +1090,13 @@ Object.assign(SpiralCalendar.prototype, {
       const dy = this.timeDisplayState.swipeLastY - this.timeDisplayState.swipeStartY;
       const tiny = Math.abs(dy) < 6;
       if (tiny) {
+        const startedInRenderRect = !!this.timeDisplayState.swipeStartedInRenderRect;
         if (this.timeDisplayState.collapsed) {
-          // Tap on collapsed bar expands it
-          this.setTimeDisplayCollapsed(false);
-        } else {
+          if (startedInRenderRect) {
+            // Tap on collapsed bar expands it
+            this.setTimeDisplayCollapsed(false);
+          }
+        } else if (startedInRenderRect) {
           // Tap on expanded bar -> enable Auto Time Align if currently off
           if (!this.autoTimeAlignState.enabled) {
             this.autoTimeAlignState.enabled = true;
@@ -1096,58 +1106,63 @@ Object.assign(SpiralCalendar.prototype, {
           this.playFeedback(0.15, 10);
         }
         this.timeDisplayState.swipeActive = false;
-        return;
-      }
-      // Decide final state based on pull-up offset and time display height
-      const base = CONFIG.TIME_DISPLAY_HEIGHT;
-      const minH = this.timeDisplayState.collapseHeight || 12;
-      const threshold = this.timeDisplayState.eventListThreshold || 20;
-      const currentOffset = this.timeDisplayState.pullUpOffset || 0;
-      const h = this.getTimeDisplayHeight();
-      
-      if (h <= minH + (base - minH) / 2) {
-        // Snap collapsed - reset offset
-        this.timeDisplayState.collapsed = true;
-        this.timeDisplayState.currentHeight = minH;
-        this.timeDisplayState.targetHeight = minH;
-        this.timeDisplayState.pullUpOffset = 0;
-        this.hideBottomEventList();
+        this.timeDisplayState.swipeStartedInRenderRect = false;
+        if (startedInRenderRect) {
+          return;
+        }
       } else {
-        // Time display is expanded
-        this.timeDisplayState.collapsed = false;
-        this.timeDisplayState.currentHeight = base;
-        this.timeDisplayState.targetHeight = base;
-        // Snap pull-up offset: use midpoint of max offset (similar to pull-down using midpoint of height range)
-        const canvasHeight = this.canvas.clientHeight;
-        const maxScreenHeight = canvasHeight * 0.6; // Max 60% of screen
-        const minTopMargin = canvasHeight * 0.1; // At least 10% margin from top
-        const timeDisplayBottom = canvasHeight - currentOffset;
-        const availableSpace = Math.max(0, timeDisplayBottom - minTopMargin);
-        const maxAllowedHeight = Math.min(this.getEventListMaxHeight(), maxScreenHeight, availableSpace);
-        const contentHeight = this.timeDisplayState.eventListContentHeight || 0;
-        const maxOffset = contentHeight > 0 ? Math.min(contentHeight, maxAllowedHeight) : maxAllowedHeight;
-        const offsetMid = maxOffset / 2;
-        if (currentOffset < offsetMid) {
-          // Snapped back to default - hide event list and reset offset
+        // Decide final state based on pull-up offset and time display height
+        const base = CONFIG.TIME_DISPLAY_HEIGHT;
+        const minH = this.timeDisplayState.collapseHeight || 12;
+        const threshold = this.timeDisplayState.eventListThreshold || 20;
+        const currentOffset = this.timeDisplayState.pullUpOffset || 0;
+        const h = this.getTimeDisplayHeight();
+        
+        if (h <= minH + (base - minH) / 2) {
+          // Snap collapsed - reset offset
+          this.timeDisplayState.collapsed = true;
+          this.timeDisplayState.currentHeight = minH;
+          this.timeDisplayState.targetHeight = minH;
           this.timeDisplayState.pullUpOffset = 0;
           this.hideBottomEventList();
         } else {
-          // Snapped to extended event list position
-          this.timeDisplayState.pullUpOffset = maxOffset;
-          this.showBottomEventList(maxOffset);
+          // Time display is expanded
+          this.timeDisplayState.collapsed = false;
+          this.timeDisplayState.currentHeight = base;
+          this.timeDisplayState.targetHeight = base;
+          // Snap pull-up offset: use midpoint of max offset (similar to pull-down using midpoint of height range)
+          const canvasHeight = this.canvas.clientHeight;
+          const maxScreenHeight = canvasHeight * 0.6; // Max 60% of screen
+          const minTopMargin = canvasHeight * 0.1; // At least 10% margin from top
+          const timeDisplayBottom = canvasHeight - currentOffset;
+          const availableSpace = Math.max(0, timeDisplayBottom - minTopMargin);
+          const maxAllowedHeight = Math.min(this.getEventListMaxHeight(), maxScreenHeight, availableSpace);
+          const contentHeight = this.timeDisplayState.eventListContentHeight || 0;
+          const maxOffset = contentHeight > 0 ? Math.min(contentHeight, maxAllowedHeight) : maxAllowedHeight;
+          const offsetMid = maxOffset / 2;
+          if (currentOffset < offsetMid) {
+            // Snapped back to default - hide event list and reset offset
+            this.timeDisplayState.pullUpOffset = 0;
+            this.hideBottomEventList();
+          } else {
+            // Snapped to extended event list position
+            this.timeDisplayState.pullUpOffset = maxOffset;
+            this.showBottomEventList(maxOffset);
+          }
         }
+        this.timeDisplayState.swipeActive = false;
+        this.timeDisplayState.swipeStartedInRenderRect = false;
+        // Set flag to prevent segment selection after time display drag
+        this.timeDisplayState.justFinishedDrag = true;
+        // Clear the flag after a short delay to allow normal interaction
+        setTimeout(() => {
+          if (this.timeDisplayState) {
+            this.timeDisplayState.justFinishedDrag = false;
+          }
+        }, 100);
+        this.drawSpiral();
+        return;
       }
-      this.timeDisplayState.swipeActive = false;
-      // Set flag to prevent segment selection after time display drag
-      this.timeDisplayState.justFinishedDrag = true;
-      // Clear the flag after a short delay to allow normal interaction
-      setTimeout(() => {
-        if (this.timeDisplayState) {
-          this.timeDisplayState.justFinishedDrag = false;
-        }
-      }, 100);
-      this.drawSpiral();
-      return;
     }
     
     // End the four-finger radius gesture and return to the saved slider value.
@@ -1237,12 +1252,7 @@ Object.assign(SpiralCalendar.prototype, {
         if (this.state.showTimeDisplay) {
           const canvasWidth = this.canvas.clientWidth;
           const canvasHeight = this.canvas.clientHeight;
-          const timeDisplayArea = {
-            x: 0,
-            y: canvasHeight - CONFIG.TIME_DISPLAY_HEIGHT,
-            width: canvasWidth,
-            height: CONFIG.TIME_DISPLAY_HEIGHT
-          };
+          const timeDisplayArea = this.getTimeDisplayRenderRect(canvasWidth, canvasHeight);
           
           if (touchX >= timeDisplayArea.x && touchX <= timeDisplayArea.x + timeDisplayArea.width &&
               touchY >= timeDisplayArea.y && touchY <= timeDisplayArea.y + timeDisplayArea.height) {
@@ -1482,6 +1492,20 @@ setArcLinesEnabled(enabled) {
   this.saveSettingsToStorage();
 },
 
+getTimeDisplayRenderRect(canvasWidth = this.canvas.clientWidth, canvasHeight = this.canvas.clientHeight) {
+  const timeDisplayHeight = this.getTimeDisplayHeight();
+  const pullUpOffset = (this.timeDisplayState && this.timeDisplayState.pullUpOffset) ? this.timeDisplayState.pullUpOffset : 0;
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const safeAreaBottom = (isIOS && pullUpOffset < 10) ? 34 : 0;
+
+  return {
+    x: 0,
+    y: canvasHeight - timeDisplayHeight - pullUpOffset - safeAreaBottom,
+    width: canvasWidth,
+    height: timeDisplayHeight
+  };
+},
+
 drawTimeDisplay(canvasWidth, canvasHeight) {
   // Helper function to get time span for a segment
   const getSegmentTimeSpan = (segment) => {
@@ -1611,26 +1635,14 @@ drawTimeDisplay(canvasWidth, canvasHeight) {
   // Position time display at canvas bottom - it should be flush with viewport bottom in standalone
   // But if event list is visible, move time display up to make room for it
   const baseHeight = CONFIG.TIME_DISPLAY_HEIGHT;
-  const timeDisplayHeight = this.getTimeDisplayHeight();
+  const timeDisplayRect = this.getTimeDisplayRenderRect(canvasWidth, canvasHeight);
+  const timeDisplayHeight = timeDisplayRect.height;
   const minHForRender = this.timeDisplayState ? (this.timeDisplayState.collapseHeight || 12) : 12;
   const timeDisplayCollapsed = timeDisplayHeight <= (minHForRender + 0.5);
   const pullUpOffset = (this.timeDisplayState && this.timeDisplayState.pullUpOffset) ? this.timeDisplayState.pullUpOffset : 0;
   const eventListHeight = this.getEventListHeight();
-  
-  // Add safe area bottom inset for iPhones when in default (middle) state
-  // Only apply when not pulled up (pullUpOffset is 0 or very small)
-  const safeAreaBottom = (isIOS && pullUpOffset < 10) ? 34 : 0;
-  
-  // Time display moves up by the pull-up offset and accounts for safe area on iOS
-  const timeDisplayY = canvasHeight - timeDisplayHeight - pullUpOffset - safeAreaBottom;
-  
-  // Check if mouse is hovering over time display area
-  const timeDisplayArea = {
-    x: 0,
-    y: timeDisplayY,
-    width: canvasWidth,
-    height: CONFIG.TIME_DISPLAY_HEIGHT  // Use base height for hit detection
-  };
+  const timeDisplayY = timeDisplayRect.y;
+  const timeDisplayArea = timeDisplayRect;
   
   const isHovering = this.mouseState.hoveredTimeDisplay || false;
   const isClicking = this.mouseState.clickingTimeDisplay || false;

@@ -227,14 +227,7 @@ Object.assign(SpiralCalendar.prototype, {
     if (this.state.showTimeDisplay) {
       const canvasWidth = this.canvas.clientWidth;
       const canvasHeight = this.canvas.clientHeight;
-      const tdHeight = (this.timeDisplayState && this.timeDisplayState.collapsed) ? (this.timeDisplayState.collapseHeight || 12) : CONFIG.TIME_DISPLAY_HEIGHT;
-      const pullUpOffset = (this.timeDisplayState && this.timeDisplayState.pullUpOffset) ? this.timeDisplayState.pullUpOffset : 0;
-      const timeDisplayArea = {
-        x: 0,
-        y: canvasHeight - tdHeight - pullUpOffset,
-        width: canvasWidth,
-        height: tdHeight
-      };
+      const timeDisplayArea = this.getTimeDisplayRenderRect(canvasWidth, canvasHeight);
       
       const isHoveringTimeDisplay = mouseX >= timeDisplayArea.x && mouseX <= timeDisplayArea.x + timeDisplayArea.width &&
                                   mouseY >= timeDisplayArea.y && mouseY <= timeDisplayArea.y + timeDisplayArea.height;
@@ -454,14 +447,7 @@ Object.assign(SpiralCalendar.prototype, {
     if (this.state.showTimeDisplay) {
       const canvasWidth = this.canvas.clientWidth;
       const canvasHeight = this.canvas.clientHeight;
-      const tdHeight = (this.timeDisplayState && this.timeDisplayState.collapsed) ? (this.timeDisplayState.collapseHeight || 12) : CONFIG.TIME_DISPLAY_HEIGHT;
-      const pullUpOffset = (this.timeDisplayState && this.timeDisplayState.pullUpOffset) ? this.timeDisplayState.pullUpOffset : 0;
-      const timeDisplayArea = {
-        x: 0,
-        y: canvasHeight - tdHeight - pullUpOffset,
-        width: canvasWidth,
-        height: tdHeight
-      };
+      const timeDisplayArea = this.getTimeDisplayRenderRect(canvasWidth, canvasHeight);
       
       if (mouseX >= timeDisplayArea.x && mouseX <= timeDisplayArea.x + timeDisplayArea.width &&
           mouseY >= timeDisplayArea.y && mouseY <= timeDisplayArea.y + timeDisplayArea.height) {
@@ -859,6 +845,7 @@ Object.assign(SpiralCalendar.prototype, {
         const mouseY = event.clientY - rect.top;
         const canvasWidth = this.canvas.clientWidth;
         const canvasHeight = this.canvas.clientHeight;
+        const renderRect = this.getTimeDisplayRenderRect(canvasWidth, canvasHeight);
         const tdHeight = (this.timeDisplayState && this.timeDisplayState.collapsed) ? (this.timeDisplayState.collapseHeight || 12) : CONFIG.TIME_DISPLAY_HEIGHT;
         const pullUpOffset = (this.timeDisplayState && this.timeDisplayState.pullUpOffset) ? this.timeDisplayState.pullUpOffset : 0;
         // Reduce hit padding when event list is extended (when pullUpOffset > 0)
@@ -867,6 +854,12 @@ Object.assign(SpiralCalendar.prototype, {
         const area = { x: 0, y: Math.max(0, canvasHeight - tdHeight - pullUpOffset - pad), width: canvasWidth, height: tdHeight + pad };
         if (mouseX >= area.x && mouseX <= area.x + area.width && mouseY >= area.y && mouseY <= area.y + area.height) {
           this.timeDisplayState.mouseActive = true;
+          this.timeDisplayState.mouseStartedInRenderRect = (
+            mouseX >= renderRect.x &&
+            mouseX <= renderRect.x + renderRect.width &&
+            mouseY >= renderRect.y &&
+            mouseY <= renderRect.y + renderRect.height
+          );
           this.timeDisplayState.mouseStartY = mouseY;
           this.timeDisplayState.mouseLastY = mouseY;
           // Store initial state for tracking collapse/expand and pull-up
@@ -926,13 +919,7 @@ Object.assign(SpiralCalendar.prototype, {
     if (this.state.showTimeDisplay) {
       const canvasWidth = this.canvas.clientWidth;
       const canvasHeight = this.canvas.clientHeight;
-      const pullUpOffset = (this.timeDisplayState && this.timeDisplayState.pullUpOffset) ? this.timeDisplayState.pullUpOffset : 0;
-      const timeDisplayArea = {
-        x: 0,
-        y: canvasHeight - CONFIG.TIME_DISPLAY_HEIGHT - pullUpOffset,
-        width: canvasWidth,
-        height: CONFIG.TIME_DISPLAY_HEIGHT
-      };
+      const timeDisplayArea = this.getTimeDisplayRenderRect(canvasWidth, canvasHeight);
       
       const isClickingTimeDisplay = mouseX >= timeDisplayArea.x && mouseX <= timeDisplayArea.x + timeDisplayArea.width &&
                                   mouseY >= timeDisplayArea.y && mouseY <= timeDisplayArea.y + timeDisplayArea.height;
@@ -1005,9 +992,12 @@ Object.assign(SpiralCalendar.prototype, {
         const dy = this.timeDisplayState.mouseLastY - this.timeDisplayState.mouseStartY;
         const tiny = Math.abs(dy) < 6;
         if (tiny) {
+          const startedInRenderRect = !!this.timeDisplayState.mouseStartedInRenderRect;
           if (this.timeDisplayState.collapsed) {
-            this.setTimeDisplayCollapsed(false);
-          } else {
+            if (startedInRenderRect) {
+              this.setTimeDisplayCollapsed(false);
+            }
+          } else if (startedInRenderRect) {
             // Enable Auto Time Align on tap if off
             if (!this.autoTimeAlignState.enabled) {
               this.autoTimeAlignState.enabled = true;
@@ -1016,6 +1006,7 @@ Object.assign(SpiralCalendar.prototype, {
             this.playFeedback(0.15, 10);
           }
           this.timeDisplayState.mouseActive = false;
+          this.timeDisplayState.mouseStartedInRenderRect = false;
           return;
         }
         const base = CONFIG.TIME_DISPLAY_HEIGHT;
@@ -1057,6 +1048,7 @@ Object.assign(SpiralCalendar.prototype, {
           }
         }
         this.timeDisplayState.mouseActive = false;
+        this.timeDisplayState.mouseStartedInRenderRect = false;
         // Set flag to prevent segment selection after time display drag
         this.timeDisplayState.justFinishedDrag = true;
         // Clear the flag after a short delay to allow normal interaction
@@ -1203,7 +1195,19 @@ Object.assign(SpiralCalendar.prototype, {
         // Spiral mode detection
         const { thetaMax, maxRadius } = this.calculateTransforms(canvasWidth, canvasHeight);
         const visibilityRange = this.getRenderVisibilityRange(thetaMax);
-        const radiusFunction = this.createRadiusFunction(maxRadius, thetaMax, this.state.radiusExponent, this.state.rotation);
+        const detailDayNormalization = this.mouseState.isHandleDragging
+          ? this.getDetailViewOutermostDayNormalization(thetaMax, visibilityRange)
+          : null;
+        const radiusFunction = this.createRadiusFunction(
+          maxRadius,
+          thetaMax,
+          this.state.radiusExponent,
+          this.state.rotation,
+          {
+            allowSpiralOverflow: this.shouldAllowDetailViewSpiralOverflow(thetaMax, detailDayNormalization),
+            circleMode: false
+          }
+        );
         const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
         
         const startDay = Math.floor(visibilityRange.min / (2 * Math.PI)) - 1;
@@ -1258,13 +1262,14 @@ Object.assign(SpiralCalendar.prototype, {
         ? options.circleMode
         : this.getRenderCircleMode();
       const dayCount = Number.isFinite(options.dayCount) ? options.dayCount : this.state.days;
+      const allowSpiralOverflow = !!options.allowSpiralOverflow;
       return (theta) => {
         // Adjust theta to maintain constant spiral size during rotation
         const adjustedTheta = theta + rotation;
         const normalizedTheta = adjustedTheta / thetaMax;
-        const t = Math.max(0, Math.min(1, normalizedTheta));
         
         if (circleMode) {
+          const t = Math.max(0, Math.min(1, normalizedTheta));
           // Circle mode: Create discrete rings that jump at the beginning of each day (0:00)
           // Each day gets its own ring, so we floor to the current day
           const daysInTheta = adjustedTheta / (2 * Math.PI);
@@ -1272,10 +1277,14 @@ Object.assign(SpiralCalendar.prototype, {
           const discreteT = Math.max(0, Math.min(1, flooredDays / dayCount));
           
           return maxRadius * Math.pow(discreteT, exponent);
-        } else {
-          // Spiral mode: Keep the gradual growth
-        return maxRadius * Math.pow(t, exponent);
         }
+
+        // Spiral mode: Keep the gradual growth, but allow temporary
+        // overflow when detail-view handle dragging fills the outer day.
+        const t = allowSpiralOverflow
+          ? Math.max(0, normalizedTheta)
+          : Math.max(0, Math.min(1, normalizedTheta));
+        return maxRadius * Math.pow(t, exponent);
       };
     },
 
