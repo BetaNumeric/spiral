@@ -287,18 +287,25 @@ Object.assign(SpiralCalendar.prototype, {
       if (circleModeCheckbox) {
       circleModeCheckbox.addEventListener('change', (e) => {
         const wasCircleMode = this.state.circleMode;
-        this.state.circleMode = e.target.checked;
-        
-        // If switching to circle mode with a selected segment, adjust scale to align segments
-        if (!wasCircleMode && this.state.circleMode && this.mouseState.selectedSegment) {
-          this.alignSelectedSegmentInCircleMode();
+        const nextCircleMode = e.target.checked;
+        this.state.circleMode = nextCircleMode;
+
+        const shouldAnimate = !this.isDetailViewCircleModeActive();
+        if (shouldAnimate) {
+          this.startModeTransition(nextCircleMode, {
+            fromProgress: wasCircleMode ? 1 : 0,
+            restoreScale: !this._suppressScaleRestore
+          });
+        } else {
+          // Detail view already forces circle rendering, so keep the old immediate behavior.
+          if (!wasCircleMode && nextCircleMode && this.mouseState.selectedSegment) {
+            this.alignSelectedSegmentInCircleMode();
+          } else if (wasCircleMode && !nextCircleMode && !this._suppressScaleRestore) {
+            this.restoreOriginalSpiralScale();
+          }
+          this.drawSpiral();
         }
-        // If switching from circle mode back to spiral mode, restore original scale
-        else if (wasCircleMode && !this.state.circleMode && !this._suppressScaleRestore) {
-          this.restoreOriginalSpiralScale();
-        }
-        
-        this.drawSpiral();
+
         this.saveSettingsToStorage();
       });
       }

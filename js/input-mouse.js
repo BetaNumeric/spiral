@@ -1263,20 +1263,38 @@ Object.assign(SpiralCalendar.prototype, {
         : this.getRenderCircleMode();
       const dayCount = Number.isFinite(options.dayCount) ? options.dayCount : this.state.days;
       const allowSpiralOverflow = !!options.allowSpiralOverflow;
+      const modeMorphProgress = Number.isFinite(options.modeMorphProgress)
+        ? Math.max(0, Math.min(1, options.modeMorphProgress))
+        : this.getModeMorphProgress();
+      const turnsPerDay = 2 * Math.PI;
+      const rotationTurns = rotation / turnsPerDay;
       return (theta) => {
         // Adjust theta to maintain constant spiral size during rotation
         const adjustedTheta = theta + rotation;
         const normalizedTheta = adjustedTheta / thetaMax;
         
         if (circleMode) {
-          const t = Math.max(0, Math.min(1, normalizedTheta));
-          // Circle mode: Create discrete rings that jump at the beginning of each day (0:00)
-          // Each day gets its own ring, so we floor to the current day
-          const daysInTheta = adjustedTheta / (2 * Math.PI);
-          const flooredDays = Math.ceil(daysInTheta);
-          const discreteT = Math.max(0, Math.min(1, flooredDays / dayCount));
+          // Anchor the day seam to actual midnight boundaries instead of the
+          // current rotated viewport edge.
+          const rawDayTurns = theta / turnsPerDay;
+          const dayIndex = Math.floor(rawDayTurns + 1e-9);
+          const dayStartTurns = dayIndex + rotationTurns;
+          const discreteT = Math.max(0, Math.min(1, dayStartTurns / dayCount));
           
           return maxRadius * Math.pow(discreteT, exponent);
+        }
+
+        if (modeMorphProgress > 0) {
+          // Collapse the intra-day spiral slope toward the real midnight seam,
+          // while preserving the scrolled day ordering from rotation.
+          const rawDayTurns = theta / turnsPerDay;
+          const dayIndex = Math.floor(rawDayTurns + 1e-9);
+          const withinDay = rawDayTurns - dayIndex;
+          const morphedTurns = dayIndex + rotationTurns + withinDay * (1 - modeMorphProgress);
+          const morphedT = allowSpiralOverflow && modeMorphProgress < 1
+            ? Math.max(0, morphedTurns / dayCount)
+            : Math.max(0, Math.min(1, morphedTurns / dayCount));
+          return maxRadius * Math.pow(morphedT, exponent);
         }
 
         // Spiral mode: Keep the gradual growth, but allow temporary

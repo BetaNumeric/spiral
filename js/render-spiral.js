@@ -1607,7 +1607,7 @@ Object.assign(SpiralCalendar.prototype, {
         }
         
         // Set up drawing parameters for spiral mode
-        const normalVisibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
+        const normalVisibilityRange = this.getRenderVisibilityRange(thetaMax);
         let visibilityRange = normalVisibilityRange;
         if (useStartupDrawIn) {
           const progress = Math.max(0, Math.min(1, startup.progress || 0));

@@ -302,6 +302,20 @@ class SpiralCalendar {
         revealedHourSegmentKeys: []
       };
 
+      this.modeTransitionState = {
+        active: false,
+        progress: 0,
+        fromProgress: 0,
+        toProgress: 0,
+        startScale: this.state.spiralScale,
+        endScale: this.state.spiralScale,
+        animationId: null,
+        durationMs: 650,
+        targetCircleMode: false,
+        restoreScaleOnExit: true,
+        alignVisibilityToMidnight: false
+      };
+
       // Auto time align state
       this.autoTimeAlignState = {
       enabled: true,
