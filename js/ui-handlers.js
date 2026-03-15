@@ -1198,7 +1198,10 @@ Object.assign(SpiralCalendar.prototype, {
         joystickLastDayDirection: 0,
         joystickLastDayStep: 0,
         joystickMode: 'idle',
-        joystickLastAngle: null
+        joystickLastAngle: null,
+        lastTapTs: 0,
+        lastTapX: 0,
+        lastTapY: 0
       };
 
       // Add touch event listeners for pinch-to-zoom

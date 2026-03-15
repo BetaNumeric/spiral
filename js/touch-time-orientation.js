@@ -219,6 +219,48 @@ Object.assign(SpiralCalendar.prototype, {
     this.touchState.longPressStartTouchY = 0;
   },
 
+  clearTouchTapSequence() {
+    if (!this.touchState) return;
+    this.touchState.lastTapTs = 0;
+    this.touchState.lastTapX = 0;
+    this.touchState.lastTapY = 0;
+  },
+
+  isTouchDoubleTap(touchX, touchY, now = performance.now()) {
+    if (!this.touchState) return false;
+
+    const doubleTapWindowMs = 320;
+    const doubleTapMaxDistance = 28;
+    const dt = now - (this.touchState.lastTapTs || 0);
+    const dx = touchX - (this.touchState.lastTapX || 0);
+    const dy = touchY - (this.touchState.lastTapY || 0);
+    const isDoubleTap =
+      this.touchState.lastTapTs > 0 &&
+      dt > 0 &&
+      dt <= doubleTapWindowMs &&
+      Math.hypot(dx, dy) <= doubleTapMaxDistance;
+
+    if (isDoubleTap) {
+      this.clearTouchTapSequence();
+      return true;
+    }
+
+    this.touchState.lastTapTs = now;
+    this.touchState.lastTapX = touchX;
+    this.touchState.lastTapY = touchY;
+    return false;
+  },
+
+  resetToCurrentTimeFromTap() {
+    if (this.autoTimeAlignState.enabled) {
+      this.updateRotationToCurrentTime();
+    } else {
+      this.autoTimeAlignState.enabled = true;
+      this.startAutoTimeAlign();
+    }
+    this.playFeedback(0.15, 10);
+  },
+
   getTouchJoystickTravel(dx, dy, maxTravel = 68) {
     const distance = Math.hypot(dx, dy);
     if (!distance || distance <= maxTravel) {
@@ -314,6 +356,7 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   beginPointerRotationDragAtPoint(pointX, pointY) {
+    this.clearTouchTapSequence();
     const { centerX, centerY } = this.calculateCenter(this.canvas.clientWidth, this.canvas.clientHeight);
     const currentAngle = Math.atan2(pointY - centerY, pointX - centerX);
 
@@ -1206,12 +1249,7 @@ Object.assign(SpiralCalendar.prototype, {
           }
         } else if (startedInRenderRect) {
           // Tap on expanded bar -> enable Auto Time Align if currently off
-          if (!this.autoTimeAlignState.enabled) {
-            this.autoTimeAlignState.enabled = true;
-            this.startAutoTimeAlign();
-          }
-          // Light feedback
-          this.playFeedback(0.15, 10);
+          this.resetToCurrentTimeFromTap();
         }
         this.timeDisplayState.swipeActive = false;
         this.timeDisplayState.swipeStartedInRenderRect = false;
@@ -1355,6 +1393,11 @@ Object.assign(SpiralCalendar.prototype, {
         const rect = this.canvas.getBoundingClientRect();
         const touchX = e.changedTouches[0].clientX - rect.left;
         const touchY = e.changedTouches[0].clientY - rect.top;
+
+        if (this.state.detailViewDay === null && this.isTouchDoubleTap(touchX, touchY)) {
+          this.resetToCurrentTimeFromTap();
+          return;
+        }
         
         // Check if tap is on the time display (only if time display is enabled)
         if (this.state.showTimeDisplay) {
@@ -1365,10 +1408,7 @@ Object.assign(SpiralCalendar.prototype, {
           if (touchX >= timeDisplayArea.x && touchX <= timeDisplayArea.x + timeDisplayArea.width &&
               touchY >= timeDisplayArea.y && touchY <= timeDisplayArea.y + timeDisplayArea.height) {
             // Time display tapped - activate Auto Time Align if it's currently off
-            if (!this.autoTimeAlignState.enabled) {
-              this.autoTimeAlignState.enabled = true;
-              this.startAutoTimeAlign();
-            }
+            this.resetToCurrentTimeFromTap();
             return; // Don't process other clicks
           }
         }
