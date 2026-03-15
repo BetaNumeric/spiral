@@ -233,6 +233,49 @@ Object.assign(SpiralCalendar.prototype, {
     };
   },
 
+  getTouchJoystickConfig() {
+    return {
+      deadZone: 1,
+      maxTravel: 250,
+      axialEnterRadius: 180,
+      axialExitRadius: 140,
+      dayStepVerticalRatio: 0.9,
+      circularGuideRadius: 20,
+      knobRadius: 20
+    };
+  },
+
+  normalizeTouchJoystickAngleDelta(deltaAngle) {
+    if (deltaAngle > Math.PI) return deltaAngle - Math.PI * 2;
+    if (deltaAngle < -Math.PI) return deltaAngle + Math.PI * 2;
+    return deltaAngle;
+  },
+
+  getTouchJoystickMode(distance) {
+    if (!this.touchState) return 'idle';
+
+    const {
+      deadZone,
+      axialEnterRadius,
+      axialExitRadius
+    } = this.getTouchJoystickConfig();
+
+    if (!Number.isFinite(distance) || distance <= deadZone) {
+      return 'idle';
+    }
+
+    const previousMode = this.touchState.joystickMode || 'idle';
+    if (previousMode === 'axial') {
+      return distance < axialExitRadius ? 'circular' : 'axial';
+    }
+
+    if (previousMode === 'circular') {
+      return distance > axialEnterRadius ? 'axial' : 'circular';
+    }
+
+    return distance > axialEnterRadius ? 'axial' : 'circular';
+  },
+
   cancelTouchJoystick(resetConsumedTouch = false) {
     if (!this.touchState) return;
 
@@ -254,6 +297,9 @@ Object.assign(SpiralCalendar.prototype, {
     this.touchState.joystickLastFrameTs = 0;
     this.touchState.joystickDayAccumulator = 0;
     this.touchState.joystickLastDayDirection = 0;
+    this.touchState.joystickLastDayStep = 0;
+    this.touchState.joystickMode = 'idle';
+    this.touchState.joystickLastAngle = null;
 
     if (resetConsumedTouch) {
       this.touchState.joystickConsumedTouch = false;
@@ -299,6 +345,9 @@ Object.assign(SpiralCalendar.prototype, {
     this.touchState.joystickDy = 0;
     this.touchState.joystickDayAccumulator = 0;
     this.touchState.joystickLastDayDirection = 0;
+    this.touchState.joystickLastDayStep = 0;
+    this.touchState.joystickMode = 'idle';
+    this.touchState.joystickLastAngle = null;
     this.touchState.joystickLastFrameTs = performance.now();
 
     this.mouseState.isDragging = false;
@@ -363,9 +412,10 @@ Object.assign(SpiralCalendar.prototype, {
     this.updateJoystickFromPoint(mouseX, mouseY);
   },
 
-  stepTouchJoystickDay(direction) {
+  stepTouchJoystickDay(direction, dayStep = 1) {
     if (!direction) return;
-    this.state.rotation += direction > 0 ? 2 * Math.PI : -2 * Math.PI;
+    const stepCount = Math.max(1, Math.round(Math.abs(dayStep)));
+    this.state.rotation += (direction > 0 ? 1 : -1) * 2 * Math.PI * stepCount;
     this._shouldUpdateEventList = true;
   },
 
@@ -381,47 +431,98 @@ Object.assign(SpiralCalendar.prototype, {
       const dtMs = Math.max(0, Math.min(80, now - (this.touchState.joystickLastFrameTs || now)));
       this.touchState.joystickLastFrameTs = now;
 
-      const deadZone = 10;
-      const maxTravel = 68;
+      const {
+        deadZone,
+        maxTravel,
+        axialEnterRadius,
+        dayStepVerticalRatio
+      } = this.getTouchJoystickConfig();
       const limited = this.getTouchJoystickTravel(this.touchState.joystickDx, this.touchState.joystickDy, maxTravel);
+      const distance = limited.distance;
+      const currentAngle = distance > deadZone ? Math.atan2(limited.y, limited.x) : null;
+      const nextMode = this.getTouchJoystickMode(distance);
+      const previousMode = this.touchState.joystickMode || 'idle';
       let rotationChanged = false;
 
-      if (Math.abs(limited.x) > deadZone) {
-        const horizontalNorm = Math.min(1, (Math.abs(limited.x) - deadZone) / (maxTravel - deadZone));
-        const angularVelocity = Math.sign(limited.x) * Math.pow(horizontalNorm, 1.45) * (Math.PI * 2.1);
-        if (angularVelocity) {
-          this.state.rotation += angularVelocity * (dtMs / 1000);
-          this._shouldUpdateEventList = true;
-          rotationChanged = true;
+      if (nextMode !== previousMode) {
+        this.touchState.joystickMode = nextMode;
+        this.touchState.joystickLastAngle = nextMode === 'circular' ? currentAngle : null;
+        if (nextMode !== 'axial') {
+          this.touchState.joystickDayAccumulator = 0;
+          this.touchState.joystickLastDayDirection = 0;
+          this.touchState.joystickLastDayStep = 0;
         }
       }
 
-      if (Math.abs(limited.y) > deadZone) {
-        const verticalNorm = Math.min(1, (Math.abs(limited.y) - deadZone) / (maxTravel - deadZone));
-        const direction = limited.y > 0 ? -1 : 1;
-        const intervalMs = 420 - verticalNorm * 320;
+      if (this.touchState.joystickMode === 'circular') {
+        const previousAngle = this.touchState.joystickLastAngle;
+        if (Number.isFinite(currentAngle) && Number.isFinite(previousAngle)) {
+          let deltaAngle = this.normalizeTouchJoystickAngleDelta(currentAngle - previousAngle);
+          const circularNorm = Math.min(
+            1,
+            Math.max(0, (distance - deadZone) / Math.max(1, axialEnterRadius - deadZone))
+          );
+          deltaAngle *= 0.45 + circularNorm * 0.55;
 
-        if (direction !== this.touchState.joystickLastDayDirection) {
-          this.touchState.joystickLastDayDirection = direction;
-          this.touchState.joystickDayAccumulator = intervalMs;
-        } else {
-          this.touchState.joystickDayAccumulator += dtMs;
+          if (Math.abs(deltaAngle) > 0.001) {
+            const rotationDirection = this.state.staticMode ? 1 : -1;
+            this.state.rotation += deltaAngle * rotationDirection;
+            this._shouldUpdateEventList = true;
+            rotationChanged = true;
+          }
         }
 
-        let safety = 0;
-        while (this.touchState.joystickDayAccumulator >= intervalMs && safety < 4) {
-          this.touchState.joystickDayAccumulator -= intervalMs;
-          this.stepTouchJoystickDay(direction);
-          rotationChanged = true;
-          safety += 1;
+        this.touchState.joystickLastAngle = currentAngle;
+      } else if (this.touchState.joystickMode === 'axial') {
+        if (Math.abs(limited.x) > deadZone) {
+          const horizontalNorm = Math.min(1, (Math.abs(limited.x) - deadZone) / (maxTravel - deadZone));
+          const angularVelocity = Math.sign(limited.x) * Math.pow(horizontalNorm, 1.45) * (Math.PI * 2.1);
+          if (angularVelocity) {
+            this.state.rotation += angularVelocity * (dtMs / 1000);
+            this._shouldUpdateEventList = true;
+            rotationChanged = true;
+          }
+        }
+
+        const verticalAlignment = distance > 0 ? Math.abs(limited.y) / distance : 0;
+        if (Math.abs(limited.y) > deadZone && verticalAlignment >= dayStepVerticalRatio) {
+          const verticalNorm = Math.min(1, (Math.abs(limited.y) - deadZone) / (maxTravel - deadZone));
+          const direction = limited.y > 0 ? -1 : 1;
+          const weekJumpThreshold = axialEnterRadius + (maxTravel - axialEnterRadius) * 0.55;
+          const dayStep = Math.abs(limited.y) >= weekJumpThreshold ? 7 : 1;
+          const intervalMs = (420 - verticalNorm * 320) + (dayStep === 7 ? 80 : 0);
+
+          if (
+            direction !== this.touchState.joystickLastDayDirection ||
+            dayStep !== this.touchState.joystickLastDayStep
+          ) {
+            this.touchState.joystickLastDayDirection = direction;
+            this.touchState.joystickLastDayStep = dayStep;
+            this.touchState.joystickDayAccumulator = intervalMs;
+          } else {
+            this.touchState.joystickDayAccumulator += dtMs;
+          }
+
+          let safety = 0;
+          while (this.touchState.joystickDayAccumulator >= intervalMs && safety < 4) {
+            this.touchState.joystickDayAccumulator -= intervalMs;
+            this.stepTouchJoystickDay(direction, dayStep);
+            rotationChanged = true;
+            safety += 1;
+          }
+        } else {
+          this.touchState.joystickDayAccumulator = 0;
+          this.touchState.joystickLastDayDirection = 0;
+          this.touchState.joystickLastDayStep = 0;
         }
       } else {
+        this.touchState.joystickLastAngle = null;
         this.touchState.joystickDayAccumulator = 0;
         this.touchState.joystickLastDayDirection = 0;
+        this.touchState.joystickLastDayStep = 0;
       }
 
       if (rotationChanged) {
-        this.clampRotationToEventWindow();
         this.updateRotationSliderUI();
         this.drawSpiral();
       }
@@ -1310,37 +1411,62 @@ Object.assign(SpiralCalendar.prototype, {
   drawTouchJoystickOverlay() {
     if (!this.touchState || !this.touchState.joystickActive) return;
 
-    const limited = this.getTouchJoystickTravel(this.touchState.joystickDx, this.touchState.joystickDy, 68);
+    const {
+      maxTravel,
+      axialEnterRadius,
+      circularGuideRadius,
+      knobRadius
+    } = this.getTouchJoystickConfig();
+    const limited = this.getTouchJoystickTravel(this.touchState.joystickDx, this.touchState.joystickDy, maxTravel);
     const baseX = this.touchState.joystickBaseX;
     const baseY = this.touchState.joystickBaseY;
     const knobX = baseX + limited.x;
     const knobY = baseY + limited.y;
+    const joystickMode = this.touchState.joystickMode === 'idle'
+      ? this.getTouchJoystickMode(limited.distance)
+      : this.touchState.joystickMode;
+    const circularActive = joystickMode === 'circular';
+    const axialActive = joystickMode === 'axial';
     const isDark = !!this.state.darkMode;
+    const centerDotRadius = 3;
+    const centerDotColor = axialActive
+      ? (isDark ? 'rgba(255,255,255,0.18)' : 'rgba(28,36,48,0.14)')
+      : (isDark ? 'rgba(255,255,255,0.14)' : 'rgba(28,36,48,0.1)');
 
     this.ctx.save();
-    this.ctx.lineWidth = 2;
-    this.ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.22)' : 'rgba(19,29,42,0.18)';
-    this.ctx.fillStyle = isDark ? 'rgba(12,16,22,0.34)' : 'rgba(255,255,255,0.36)';
-
+    this.ctx.fillStyle = circularActive
+      ? (isDark ? 'rgba(255,255,255,0.055)' : 'rgba(28,36,48,0.04)')
+      : (isDark ? 'rgba(255,255,255,0.028)' : 'rgba(28,36,48,0.02)');
     this.ctx.beginPath();
-    this.ctx.arc(baseX, baseY, 40, 0, Math.PI * 2);
+    this.ctx.arc(baseX, baseY, axialEnterRadius, 0, Math.PI * 2);
     this.ctx.fill();
+
+    this.ctx.lineWidth = 1.5;
+    this.ctx.strokeStyle = circularActive
+      ? (isDark ? 'rgba(255,255,255,0.22)' : 'rgba(28,36,48,0.18)')
+      : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(19,29,42,0.06)');
+    this.ctx.beginPath();
+    this.ctx.arc(baseX, baseY, circularGuideRadius, 0, Math.PI * 2);
     this.ctx.stroke();
 
-    this.ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.16)' : 'rgba(19,29,42,0.14)';
+    this.ctx.lineWidth = centerDotRadius * 2;
+    this.ctx.lineCap = 'round';
+    this.ctx.strokeStyle = centerDotColor;
     this.ctx.beginPath();
     this.ctx.moveTo(baseX, baseY);
     this.ctx.lineTo(knobX, knobY);
     this.ctx.stroke();
 
-    this.ctx.fillStyle = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(28,36,48,0.86)';
+    this.ctx.fillStyle = circularActive
+      ? (isDark ? 'rgba(255,255,255,0.92)' : 'rgba(28,36,48,0.88)')
+      : (isDark ? 'rgba(255,255,255,0.86)' : 'rgba(28,36,48,0.8)');
     this.ctx.beginPath();
-    this.ctx.arc(knobX, knobY, 18, 0, Math.PI * 2);
+    this.ctx.arc(knobX, knobY, knobRadius, 0, Math.PI * 2);
     this.ctx.fill();
 
-    this.ctx.fillStyle = isDark ? 'rgba(255,255,255,0.22)' : 'rgba(28,36,48,0.14)';
+    this.ctx.fillStyle = centerDotColor;
     this.ctx.beginPath();
-    this.ctx.arc(baseX, baseY, 5, 0, Math.PI * 2);
+    this.ctx.arc(baseX, baseY, centerDotRadius, 0, Math.PI * 2);
     this.ctx.fill();
 
     this.ctx.restore();

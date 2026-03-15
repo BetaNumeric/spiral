@@ -2059,12 +2059,24 @@ Object.assign(SpiralCalendar.prototype, {
             // Use smaller dimension, with some padding
             const maxDimension = Math.min(radialHeight, arcWidth) * 0.4;
             const fontSize = Math.max(1, Math.min(24, maxDimension));
+            let transitionFontSize = null;
+            if (this.isModeTransitionActive()) {
+              const circleInnerRadius = radiusFunction(day * 2 * Math.PI);
+              const circleOuterRadius = radiusFunction((day + 1) * 2 * Math.PI);
+              const circleCenterRadius = (circleInnerRadius + circleOuterRadius) / 2;
+              const circleSegmentAngleSize = Math.max(0, endTheta - startTheta);
+              const circleRadialHeight = circleOuterRadius - circleInnerRadius;
+              const circleArcWidth = circleCenterRadius * circleSegmentAngleSize;
+              const circleMaxDimension = Math.min(circleRadialHeight, circleArcWidth) * 0.4;
+              transitionFontSize = Math.max(1, Math.min(24, circleMaxDimension));
+            }
             
             this.dayNumbers.push({
               x: centerRadius * Math.cos(-centerTheta + CONFIG.INITIAL_ROTATION_OFFSET),
               y: centerRadius * Math.sin(-centerTheta + CONFIG.INITIAL_ROTATION_OFFSET),
               text: fullDayLabel,
               fontSize: fontSize,
+              transitionFontSize: transitionFontSize,
               isCircleMode: false,
               radiusFunction: radiusFunction,
               centerTheta: centerTheta,

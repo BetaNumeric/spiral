@@ -878,8 +878,16 @@ Object.assign(SpiralCalendar.prototype, {
       this.ctx.fillStyle = CONFIG.LABEL_COLOR;
       
     // 7.5 degrees in radians (used if upright is off)
-      const tiltRadians = 7.5 * Math.PI / 180;
+    const tiltRadians = 7.5 * Math.PI / 180;
     const onlyDayNumber = !this.state.dayLabelShowWeekday && !this.state.dayLabelShowMonth && !this.state.dayLabelShowYear;
+    const getRenderedFontSize = (item) => {
+      const baseSize = Math.max(1, Number(item.fontSize) || 0);
+      if (!Number.isFinite(item.transitionFontSize) || !this.isModeTransitionActive()) {
+        return baseSize;
+      }
+      const progress = this.getModeMorphProgress();
+      return baseSize + (item.transitionFontSize - baseSize) * progress;
+    };
     
     // Helper: draw text following the local spiral tangent by placing characters sequentially
     const drawCurvedText = (item) => {
@@ -892,7 +900,7 @@ Object.assign(SpiralCalendar.prototype, {
       // Estimate half text angular length
       if (!isFinite(labelRadius) || labelRadius < 1) return;
       this.ctx.save();
-      const fontPx = Math.max(1, Math.floor(item.fontSize || 0));
+      const fontPx = getRenderedFontSize(item);
       this.ctx.font = getFontString(fontPx);
       // Precompute kerning-aware per-character advances using cumulative widths
       const advances = [];
@@ -996,9 +1004,10 @@ Object.assign(SpiralCalendar.prototype, {
       // If only the numeric day is shown, render centered like before (non-curved)
       if (onlyDayNumber || dayNum.onlyNumeric) {
         const drawCentered = () => {
+        const renderedFontSize = getRenderedFontSize(dayNum);
         this.ctx.save();
         this.ctx.translate(dayNum.x, dayNum.y);
-        this.ctx.font = getFontString(dayNum.fontSize);
+        this.ctx.font = getFontString(renderedFontSize);
         if (this.state.dayNumbersUpright) {
           if (this.state.staticMode) {
               this.ctx.rotate(Math.PI);
@@ -1018,8 +1027,9 @@ Object.assign(SpiralCalendar.prototype, {
           ? dayNum.outerEndClipTheta
           : null;
         if (outerEndClipTheta !== null) {
+          const renderedFontSize = getRenderedFontSize(dayNum);
           this.ctx.save();
-          this.ctx.font = getFontString(dayNum.fontSize);
+          this.ctx.font = getFontString(renderedFontSize);
           const textWidth = this.ctx.measureText(dayNum.text).width;
           this.ctx.restore();
           const radius = Math.max(1, dayNum.centerRadius || 1);
