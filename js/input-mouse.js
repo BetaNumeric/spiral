@@ -468,13 +468,8 @@ Object.assign(SpiralCalendar.prototype, {
           return; // Don't process other clicks
         }
         
-        // Time display clicked - activate Auto Time Align if it's currently off
-        if (!this.autoTimeAlignState.enabled) {
-          this.autoTimeAlignState.enabled = true;
-          this.startAutoTimeAlign();
-        }
+        this.resetToCurrentTimeFromTap();
         // Play feedback for time display click
-        this.playFeedback(0.15, 10);
         return; // Don't process other clicks
       }
     }
@@ -998,12 +993,7 @@ Object.assign(SpiralCalendar.prototype, {
               this.setTimeDisplayCollapsed(false);
             }
           } else if (startedInRenderRect) {
-            // Enable Auto Time Align on tap if off
-            if (!this.autoTimeAlignState.enabled) {
-              this.autoTimeAlignState.enabled = true;
-              this.startAutoTimeAlign();
-            }
-            this.playFeedback(0.15, 10);
+            this.resetToCurrentTimeFromTap();
           }
           this.timeDisplayState.mouseActive = false;
           this.timeDisplayState.mouseStartedInRenderRect = false;

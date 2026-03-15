@@ -287,12 +287,7 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   resetToCurrentTimeFromTap() {
-    if (this.autoTimeAlignState.enabled) {
-      this.updateRotationToCurrentTime();
-    } else {
-      this.autoTimeAlignState.enabled = true;
-      this.startAutoTimeAlign();
-    }
+    this.animateResetToCurrentTime({ enableAutoTimeAlign: true });
     this.playFeedback(0.15, 10);
   },
 

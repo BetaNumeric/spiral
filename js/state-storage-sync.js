@@ -65,12 +65,20 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     stopInertia() {
+      this.stopCurrentTimeResetAnimation();
       if (this._inertiaAnimationId) {
         cancelAnimationFrame(this._inertiaAnimationId);
         this._inertiaAnimationId = null;
       }
       this._inertiaVelocity = 0;
       this._inertiaLastTs = 0;
+    },
+
+    stopCurrentTimeResetAnimation() {
+      if (this._currentTimeResetAnimationId) {
+        cancelAnimationFrame(this._currentTimeResetAnimationId);
+        this._currentTimeResetAnimationId = null;
+      }
     },
 
     resetMobileZoom() {
@@ -311,10 +319,13 @@ Object.assign(SpiralCalendar.prototype, {
       this._inertiaAnimationId = requestAnimationFrame(step);
     },
 
-  startAutoTimeAlign() {
+  startAutoTimeAlign(options = {}) {
     if (this.autoTimeAlignState.intervalId) return;
+    const skipImmediateUpdate = !!options.skipImmediateUpdate;
     this.autoTimeAlignState.enabled = true;
-    this.updateRotationToCurrentTime();
+    if (!skipImmediateUpdate) {
+      this.updateRotationToCurrentTime();
+    }
     this.autoTimeAlignState.intervalId = setInterval(() => {
       this.updateRotationToCurrentTime();
     }, 1000); // update every seconds
@@ -873,23 +884,84 @@ Object.assign(SpiralCalendar.prototype, {
     }
   },
 
+  getCurrentTimeRotation(date = new Date()) {
+    // Ensure we're using UTC time consistently
+    const tzOffsetHours = (typeof this.getTimezoneOffsetHours === 'function')
+      ? this.getTimezoneOffsetHours(date)
+      : (date.getTimezoneOffset() / -60);
+    const currentHour = ((date.getUTCHours() + tzOffsetHours + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600) % 24 + 24) % 24;
+    return (currentHour / CONFIG.SEGMENTS_PER_DAY) * 2 * Math.PI;
+  },
+
+  animateResetToCurrentTime(options = {}) {
+    const now = options.now instanceof Date ? options.now : new Date();
+    const startRotation = this.state.rotation;
+    const targetRotation = this.getCurrentTimeRotation(now);
+    const enableAutoTimeAlign = options.enableAutoTimeAlign !== undefined
+      ? !!options.enableAutoTimeAlign
+      : true;
+    const delta = targetRotation - startRotation;
+    const turnsAway = Math.abs(delta) / (Math.PI * 2);
+    const durationMs = Number.isFinite(options.durationMs)
+      ? options.durationMs
+      : Math.round(Math.max(180, Math.min(420, 180 + turnsAway * 36)));
+
+    this.stopInertia();
+
+    if (this.autoTimeAlignState.intervalId) {
+      clearInterval(this.autoTimeAlignState.intervalId);
+      this.autoTimeAlignState.intervalId = null;
+    }
+    this.autoTimeAlignState.enabled = enableAutoTimeAlign;
+
+    const finalize = () => {
+      this._currentTimeResetAnimationId = null;
+      this.state.rotation = targetRotation;
+      this._shouldUpdateEventList = true;
+      this.updateRotationSliderUI();
+      this.drawSpiral();
+      if (enableAutoTimeAlign) {
+        this.startAutoTimeAlign({ skipImmediateUpdate: true });
+      }
+    };
+
+    if (!Number.isFinite(startRotation) || !Number.isFinite(targetRotation) || Math.abs(delta) < 0.0005) {
+      finalize();
+      return;
+    }
+
+    const startTime = performance.now();
+    const easeInOutCubic = (t) => (
+      t < 0.5
+        ? 4 * t * t * t
+        : 1 - Math.pow(-2 * t + 2, 3) / 2
+    );
+
+    const step = (ts) => {
+      const t = Math.min(1, (ts - startTime) / Math.max(1, durationMs));
+      const eased = easeInOutCubic(t);
+      this.state.rotation = startRotation + delta * eased;
+      this._shouldUpdateEventList = true;
+      this.updateRotationSliderUI();
+      this.drawSpiral();
+
+      if (t < 1) {
+        this._currentTimeResetAnimationId = requestAnimationFrame(step);
+        return;
+      }
+
+      finalize();
+    };
+
+    this._currentTimeResetAnimationId = requestAnimationFrame(step);
+  },
+
   updateRotationToCurrentTime() {
     const now = new Date();
-  // Ensure we're using UTC time consistently
-  const tzOffsetHours = (typeof this.getTimezoneOffsetHours === 'function')
-    ? this.getTimezoneOffsetHours(now)
-    : (now.getTimezoneOffset() / -60);
-  const currentHour = ((now.getUTCHours() + tzOffsetHours + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600) % 24 + 24) % 24;
-    const rotation = (currentHour / CONFIG.SEGMENTS_PER_DAY) * 2 * Math.PI;
+    const rotation = this.getCurrentTimeRotation(now);
     this.state.rotation = rotation;
     // Update the rotateSlider UI to match
-    const rotateSlider = document.getElementById('rotateSlider');
-    if (rotateSlider) {
-      const degrees = rotation * 180 / Math.PI;
-      rotateSlider.value = degrees;
-      const rotateVal = document.getElementById('rotateVal');
-      if (rotateVal) rotateVal.textContent = Math.round(degrees) + '°';
-    }
+    this.updateRotationSliderUI();
     this.drawSpiral();
   },
 
@@ -1267,13 +1339,12 @@ Object.assign(SpiralCalendar.prototype, {
       clearDraft = false
     } = options;
 
-    this.state.detailViewDay = null;
-    this._detailViewHasChanges = false;
-    this.mouseState.hoveredDetailElement = null;
-
     if (clearDraft) {
       this.draftEvent = null;
     }
+    this.state.detailViewDay = null;
+    this._detailViewHasChanges = false;
+    this.mouseState.hoveredDetailElement = null;
     if (clearSelection) {
       this.mouseState.selectedSegment = null;
       this.mouseState.selectedSegmentId = null;
