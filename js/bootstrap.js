@@ -214,6 +214,9 @@ function initializeLocationButtons() {
   if (geoLocationBtn) {
     geoLocationBtn.innerHTML = `<img src="${getLocationIcon('location')}" alt="Location" style="width: 16px; height: 16px;">`;
   }
+  if (setLocationBtn) {
+    setLocationBtn.innerHTML = `<img src="${getLocationIcon('enter')}" alt="Set coordinates" style="width: 16px; height: 16px;">`;
+  }
 }
 
 // Update location button icons when dark mode changes
