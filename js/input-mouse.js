@@ -1115,6 +1115,31 @@ Object.assign(SpiralCalendar.prototype, {
     }
     },
 
+    handleDoubleClick(event) {
+      if (event.target !== this.canvas || isMobileDevice()) return;
+
+      // Ignore after drag interactions so the reset only comes from an intentional double-click.
+      if (this.mouseState.wasDragging) {
+        this.mouseState.wasDragging = false;
+        return;
+      }
+      if (this.timeDisplayState && this.timeDisplayState.justFinishedDrag) {
+        return;
+      }
+
+      const rect = this.canvas.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left;
+      const mouseY = event.clientY - rect.top;
+      const canvasX = mouseX * this.canvas.width / this.canvas.clientWidth;
+      const canvasY = mouseY * this.canvas.height / this.canvas.clientHeight;
+
+      if (!this.canUseCanvasDoubleTapReset(mouseX, mouseY, canvasX, canvasY)) {
+        return;
+      }
+
+      this.resetToCurrentTimeFromTap();
+    },
+
     findSegmentAtPoint(canvasX, canvasY) {
       const canvasWidth = this.canvas.clientWidth;
       const canvasHeight = this.canvas.clientHeight;

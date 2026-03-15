@@ -862,9 +862,10 @@ Object.assign(SpiralCalendar.prototype, {
         }
       }
       this.handleMouseMove(e);
-    });
+      });
       this.canvas.addEventListener('mouseleave', () => this.handleMouseLeave());
       this.canvas.addEventListener('click', (e) => this.handleClick(e));
+      this.canvas.addEventListener('dblclick', (e) => this.handleDoubleClick(e));
       this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
       this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
       // Also listen for mouseup and mousemove on window to catch events outside canvas

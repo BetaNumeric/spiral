@@ -226,6 +226,41 @@ Object.assign(SpiralCalendar.prototype, {
     this.touchState.lastTapY = 0;
   },
 
+  isBlockingTopPanelOpen() {
+    if (document.body && document.body.classList.contains('panel-open')) {
+      return true;
+    }
+
+    const panelIds = ['eventInputPanel', 'settingsPanel'];
+    return panelIds.some((panelId) => {
+      const panel = document.getElementById(panelId);
+      if (!panel) return false;
+      return panel.style.display === 'block' || window.getComputedStyle(panel).display !== 'none';
+    });
+  },
+
+  isTouchInsideTimeDisplay(touchX, touchY) {
+    if (!this.state.showTimeDisplay || !this.canvas) return false;
+
+    const canvasWidth = this.canvas.clientWidth;
+    const canvasHeight = this.canvas.clientHeight;
+    if (!canvasWidth || !canvasHeight) return false;
+
+    return this.isPointInRect(
+      touchX,
+      touchY,
+      this.getTimeDisplayRenderRect(canvasWidth, canvasHeight)
+    );
+  },
+
+  canUseCanvasDoubleTapReset(touchX, touchY, canvasX, canvasY) {
+    if (this.state.detailViewDay !== null) return false;
+    if (this.isBlockingTopPanelOpen()) return false;
+    if (this.isTouchInsideTimeDisplay(touchX, touchY)) return false;
+
+    return !this.findSegmentAtPoint(canvasX, canvasY);
+  },
+
   isTouchDoubleTap(touchX, touchY, now = performance.now()) {
     if (!this.touchState) return false;
 
@@ -1390,13 +1425,19 @@ Object.assign(SpiralCalendar.prototype, {
         }
         
         // This was a tap, not a drag - handle as a click
-        const rect = this.canvas.getBoundingClientRect();
-        const touchX = e.changedTouches[0].clientX - rect.left;
-        const touchY = e.changedTouches[0].clientY - rect.top;
-
-        if (this.state.detailViewDay === null && this.isTouchDoubleTap(touchX, touchY)) {
-          this.resetToCurrentTimeFromTap();
+        const changedTouch = e.changedTouches && e.changedTouches[0];
+        if (!changedTouch) {
           return;
+        }
+        const { touchX, touchY, canvasX, canvasY } = this._touchToCanvasPoint(changedTouch);
+
+        if (this.canUseCanvasDoubleTapReset(touchX, touchY, canvasX, canvasY)) {
+          if (this.isTouchDoubleTap(touchX, touchY)) {
+            this.resetToCurrentTimeFromTap();
+            return;
+          }
+        } else {
+          this.clearTouchTapSequence();
         }
         
         // Check if tap is on the time display (only if time display is enabled)

@@ -2890,6 +2890,9 @@ Object.assign(SpiralCalendar.prototype, {
     const closeEventPanel = () => {
       restorePreviousCalendarVisibility();
       eventInputPanel.style.display = 'none';
+      if (typeof this.clearTouchTapSequence === 'function') {
+        this.clearTouchTapSequence();
+      }
       syncPanelOpenState();
     };
 
@@ -2898,6 +2901,9 @@ Object.assign(SpiralCalendar.prototype, {
         settingsPanel.style.display = 'none';
       }
       eventInputPanel.style.display = 'block';
+      if (typeof this.clearTouchTapSequence === 'function') {
+        this.clearTouchTapSequence();
+      }
       syncPanelOpenState();
 
       renderEventList();
@@ -2933,6 +2939,9 @@ Object.assign(SpiralCalendar.prototype, {
     const closeSettingsPanel = () => {
       if (!settingsPanel) return;
       settingsPanel.style.display = 'none';
+      if (typeof this.clearTouchTapSequence === 'function') {
+        this.clearTouchTapSequence();
+      }
       syncPanelOpenState();
     };
 
@@ -2941,6 +2950,9 @@ Object.assign(SpiralCalendar.prototype, {
       restorePreviousCalendarVisibility();
       eventInputPanel.style.display = 'none';
       settingsPanel.style.display = 'block';
+      if (typeof this.clearTouchTapSequence === 'function') {
+        this.clearTouchTapSequence();
+      }
       syncPanelOpenState();
     };
 
