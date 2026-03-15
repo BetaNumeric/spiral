@@ -132,6 +132,99 @@
     body.dark-mode #locationCurrentInfo {
       color: var(--dark-text-secondary) !important;
     }
+    #locationControls {
+      --location-field-gap: 0.28em;
+      --location-coord-field-width: 6.0em;
+      display: none;
+      margin-left: 1em;
+      padding-left: 0.5em;
+      border-left: 2px solid #ccc;
+      width: calc(100% - 1em);
+      max-width: calc(100% - 1em);
+      min-width: 0;
+      box-sizing: border-box;
+      overflow-x: hidden;
+    }
+    .location-control-row {
+      display: flex;
+      gap: var(--location-field-gap);
+      align-items: stretch;
+      width: fit-content;
+      max-width: 100%;
+      min-width: 0;
+      justify-content: flex-start;
+    }
+    .location-search-row {
+      margin-bottom: 0.3em;
+    }
+    .location-field {
+      width: 100%;
+      min-width: 0;
+      min-height: 2.3em;
+      padding: 0.2em 0.5em;
+      border: 1px solid #ccc;
+      border-radius: 0.3em;
+      background: #fff;
+      box-sizing: border-box;
+    }
+    .location-action-btn {
+      min-width: 2.8em;
+      min-height: 2.3em;
+      padding: 0.2em 0.8em;
+      font-size: 0.9em;
+      border: 1px solid #ccc;
+      border-radius: 0.3em;
+      background: #fff;
+      box-sizing: border-box;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .location-icon-btn {
+      width: 2.8em;
+      padding-left: 0.45em;
+      padding-right: 0.45em;
+    }
+    .location-field-search {
+      flex: 0 1 calc((var(--location-coord-field-width) * 2) + var(--location-field-gap));
+      width: calc((var(--location-coord-field-width) * 2) + var(--location-field-gap));
+      max-width: calc((var(--location-coord-field-width) * 2) + var(--location-field-gap));
+    }
+    #latInput,
+    #lngInput {
+      flex: 0 0 var(--location-coord-field-width);
+      width: var(--location-coord-field-width);
+      max-width: var(--location-coord-field-width);
+    }
+    #locationSearchBtn,
+    #geoLocationBtn {
+      flex: 0 0 2.8em;
+    }
+    #setLocationBtn {
+      flex: 0 0 4.2em;
+      min-width: 4.2em;
+    }
+    .location-action-btn img {
+      display: block;
+      width: 16px;
+      height: 16px;
+    }
+    @media (max-width: 420px) {
+      .location-search-row {
+        flex-wrap: wrap;
+      }
+      .location-field-search {
+        max-width: min(100%, calc((var(--location-coord-field-width) * 2) + var(--location-field-gap)));
+      }
+      .location-coord-row {
+        flex-wrap: wrap;
+      }
+      #setLocationBtn {
+        width: min(100%, 8.6em);
+      }
+    }
     #locationSearchSuggestions {
       display: none;
       margin-top: 0.25em;
@@ -373,6 +466,9 @@
     }
 
     /* Settings panel styling */
+    #settingsPanel {
+      overflow-x: hidden;
+    }
     #settingsPanel label { display: flex; align-items: center; margin-bottom: .3em; margin-top: 1em; }
     #settingsPanel input[type=range] { margin: 0 0.5em; flex: 1; }
     #settingsPanel .palette-selector {
@@ -646,8 +742,9 @@
         left: 50% !important;
         top: 50% !important;
         transform: translate(-50%, -50%) !important;
-        max-width: 90vw !important;
-        min-width: 320px !important;
+        width: calc(100vw - 1.5em) !important;
+        max-width: calc(100vw - 1.5em) !important;
+        min-width: 0 !important;
         max-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 2em) !important;
       }
 
@@ -844,7 +941,7 @@
     </button>
 
     <!-- Settings Panel (hidden by default) -->
-    <div id="settingsPanel" style="display: none; position: absolute; top: 1.0em; right: 1.0em; background: rgba(222, 222, 222, 0.85); padding: .7em .9em .7em .9em; border-radius: .3em; font-size: .9em; z-index: 35; min-width: 360px; max-height: 96vh; overflow-y: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.10);">
+    <div id="settingsPanel" style="display: none; position: absolute; top: 1.0em; right: 1.0em; background: rgba(222, 222, 222, 0.85); padding: .7em .9em .7em .9em; border-radius: .3em; font-size: .9em; z-index: 35; width: min(360px, calc(100vw - 2em)); min-width: 0; max-width: calc(100vw - 2em); max-height: 96vh; overflow-y: auto; overflow-x: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.10);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2em;">
         <div style="display: flex; align-items: baseline; gap: 0.5em;">
           <span style="font-weight: bold; font-size: 1.1em;">Settings</span>
@@ -979,7 +1076,7 @@
           </label>
           <label style="display:flex; align-items:center; gap:0.5em;">
             <input type="checkbox" id="hourNumbersInsideSegment"/>
-            <span>Place numbers inside outer segments</span>
+            <span>Place numbers in outer segments</span>
           </label>
           <label style="display:flex; align-items:center; gap:0.5em;">
             <input type="checkbox" id="hourNumbersUpright"/>
@@ -1094,17 +1191,17 @@
         </div>
         
         <!-- Location controls (only visible when night overlay is enabled) -->
-        <div id="locationControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc; max-width: 270px; width: 100%;">
-          <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 0.4em; align-items: center; margin-bottom: 0.3em;">
-            <input type="text" id="locationSearch" placeholder="Search city or address" style="padding: 0.2em 0.5em; height: 2em;">
-            <button id="locationSearchBtn" title="Search" style="padding: 0.2em 0.6em; font-size: 0.9em;"></button>
-            <button id="geoLocationBtn" title="Use device location" style="padding: 0.2em 0.6em; font-size: 0.9em;"></button>
+        <div id="locationControls">
+          <div class="location-control-row location-search-row">
+            <input type="text" id="locationSearch" class="location-field location-field-search" placeholder="Search city or address">
+            <button id="locationSearchBtn" class="location-action-btn location-icon-btn" title="Search"></button>
+            <button id="geoLocationBtn" class="location-action-btn location-icon-btn" title="Use device location"></button>
           </div>
           <div id="locationSearchSuggestions" role="listbox" aria-label="Location suggestions"></div>
-          <div style="display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; gap: 0.4em; align-items: center;">
-            <input type="number" id="latInput" step="0.0001" placeholder="Lat" value="53.0793" style="width:100%; padding: 0.2em 0.5em; height: 2em;">
-            <input type="number" id="lngInput" step="0.0001" placeholder="Lng" value="8.8017" style="width:100%; padding: 0.2em 0.5em; height: 2em;">
-            <button id="setLocationBtn" style="padding: 0.2em 1em; font-size: 0.9em;">Set</button>
+          <div class="location-control-row location-coord-row">
+            <input type="number" id="latInput" class="location-field" step="0.0001" placeholder="Lat" value="53.0793">
+            <input type="number" id="lngInput" class="location-field" step="0.0001" placeholder="Lng" value="8.8017">
+            <button id="setLocationBtn" class="location-action-btn">Set</button>
           </div>
           <label style="display:flex; align-items:center; gap:0.45em; margin-top: 0.4em; font-size: 0.9em;">
             <input type="checkbox" id="useLocationTimezoneToggle">
