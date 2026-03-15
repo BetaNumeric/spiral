@@ -2857,17 +2857,49 @@ Object.assign(SpiralCalendar.prototype, {
       });
     }
 
-    // Show panel
-    addEventPanelBtn.addEventListener('click', () => {
-      // Play feedback for button click
-      this.playFeedback(0.1, 6);
-      
-      // Hide the button and show the panel
-      addEventPanelBtn.style.display = 'none';
+    const settingsPanel = document.getElementById('settingsPanel');
+    const settingsPanelBtn = document.getElementById('settingsPanelBtn');
+    const closeSettingsPanelBtn = document.getElementById('closeSettingsPanelBtn');
+
+    const syncPanelOpenState = () => {
+      const anyPanelOpen =
+        eventInputPanel.style.display === 'block' ||
+        (settingsPanel && settingsPanel.style.display === 'block');
+
+      document.body.classList.toggle('panel-open', anyPanelOpen);
+      if (!anyPanelOpen) {
+        this.resetMobileZoom();
+      }
+    };
+
+    const restorePreviousCalendarVisibility = () => {
+      if (this._previousVisibleCalendars === null) return;
+
+      this.state.visibleCalendars = [...this._previousVisibleCalendars];
+      this._previousVisibleCalendars = null;
+      this.saveSettingsToStorage();
+      if (typeof this.buildCalendarMenu === 'function') {
+        this.buildCalendarMenu();
+      }
+      if (typeof window.renderEventList === 'function') {
+        window.renderEventList();
+      }
+      this.drawSpiral();
+    };
+
+    const closeEventPanel = () => {
+      restorePreviousCalendarVisibility();
+      eventInputPanel.style.display = 'none';
+      syncPanelOpenState();
+    };
+
+    const openEventPanel = () => {
+      if (settingsPanel) {
+        settingsPanel.style.display = 'none';
+      }
       eventInputPanel.style.display = 'block';
-      // Prevent zooming while panel is open
-      document.body.classList.add('panel-open');
-      // Set default values
+      syncPanelOpenState();
+
       renderEventList();
       const now = new Date();
       const nextHour = new Date(now);
@@ -2885,7 +2917,6 @@ Object.assign(SpiralCalendar.prototype, {
       const endTime = new Date(nextHour);
       endTime.setHours(nextHour.getHours() + 1); // Add 1 hour in local time
       eventEnd.value = formatLocalDateTime(endTime);
-      // Update visible dt boxes
       if (typeof syncEventBoxes === 'function') syncEventBoxes();
       if (this.state.colorMode === 'seasonal') {
         eventColor.value = getSeasonalSuggestedColor();
@@ -2897,34 +2928,36 @@ Object.assign(SpiralCalendar.prototype, {
       eventDescription.value = '';
       titleCharCount.textContent = '0';
       descCharCount.textContent = '0';
-    });
-    // Hide panel
-    closeEventPanelBtn.addEventListener('click', () => {
-      // Play feedback for button click
-      this.playFeedback(0.1, 6);
-      
-      // Restore previous calendar visibility if it was filtered
-      if (this._previousVisibleCalendars !== null) {
-        this.state.visibleCalendars = [...this._previousVisibleCalendars];
-        this._previousVisibleCalendars = null;
-        this.saveSettingsToStorage();
-        // Rebuild calendar dropdown menu to update checkboxes
-        if (typeof this.buildCalendarMenu === 'function') {
-          this.buildCalendarMenu();
-        }
-        // Re-render event list and spiral
-        if (typeof window.renderEventList === 'function') {
-          window.renderEventList();
-        }
-        this.drawSpiral();
-      }
-      
+    };
+
+    const closeSettingsPanel = () => {
+      if (!settingsPanel) return;
+      settingsPanel.style.display = 'none';
+      syncPanelOpenState();
+    };
+
+    const openSettingsPanel = () => {
+      if (!settingsPanel) return;
+      restorePreviousCalendarVisibility();
       eventInputPanel.style.display = 'none';
-      // Show the button again
-      addEventPanelBtn.style.display = 'grid';
-      // Re-enable zooming and reset zoom level
-      document.body.classList.remove('panel-open');
-      this.resetMobileZoom();
+      settingsPanel.style.display = 'block';
+      syncPanelOpenState();
+    };
+
+    addEventPanelBtn.addEventListener('click', () => {
+      this.playFeedback(0.1, 6);
+
+      if (eventInputPanel.style.display === 'block') {
+        closeEventPanel();
+        return;
+      }
+
+      openEventPanel();
+    });
+
+    closeEventPanelBtn.addEventListener('click', () => {
+      this.playFeedback(0.1, 6);
+      closeEventPanel();
     });
     
     // --- Click outside to close ---
@@ -2938,78 +2971,36 @@ Object.assign(SpiralCalendar.prototype, {
             (!eventCalendarDropdown || !eventCalendarDropdown.contains(e.target)) &&
             (!newCalendarDialog || !newCalendarDialog.contains(e.target)) &&
             (!editCalendarDialog || !editCalendarDialog.contains(e.target))) {
-          // Restore previous calendar visibility if it was filtered
-          if (self._previousVisibleCalendars !== null) {
-            self.state.visibleCalendars = [...self._previousVisibleCalendars];
-            self._previousVisibleCalendars = null;
-            self.saveSettingsToStorage();
-            // Rebuild calendar dropdown menu to update checkboxes
-            if (typeof self.buildCalendarMenu === 'function') {
-              self.buildCalendarMenu();
-            }
-            // Re-render event list and spiral
-            if (typeof window.renderEventList === 'function') {
-              window.renderEventList();
-            }
-            self.drawSpiral();
-          }
-          
-          eventInputPanel.style.display = 'none';
-          // Show the button again when closing via outside click
-          addEventPanelBtn.style.display = 'grid';
-          // Re-enable zooming and reset zoom level
-          document.body.classList.remove('panel-open');
-          self.resetMobileZoom();
+          closeEventPanel();
         }
       }
       
       // Handle settings panel
-      const settingsPanel = document.getElementById('settingsPanel');
-      const settingsPanelBtn = document.getElementById('settingsPanelBtn');
       const locationSearchSuggestions = document.getElementById('locationSearchSuggestions');
       if (settingsPanel && settingsPanel.style.display === 'block') {
         if (!settingsPanel.contains(e.target) &&
             !settingsPanelBtn.contains(e.target) &&
             (!locationSearchSuggestions || !locationSearchSuggestions.contains(e.target))) {
-          settingsPanel.style.display = 'none';
-          // Show the button again when closing via outside click
-          settingsPanelBtn.style.display = 'grid';
-          // Re-enable zooming and reset zoom level
-          document.body.classList.remove('panel-open');
-          self.resetMobileZoom();
+          closeSettingsPanel();
         }
       }
     });
-    
-    // Settings panel handlers
-    const settingsPanelBtn = document.getElementById('settingsPanelBtn');
-    const settingsPanel = document.getElementById('settingsPanel');
-    const closeSettingsPanelBtn = document.getElementById('closeSettingsPanelBtn');
-    
+
     if (settingsPanelBtn && settingsPanel && closeSettingsPanelBtn) {
-      // Show settings panel
       settingsPanelBtn.addEventListener('click', () => {
-        // Play feedback for button click
         this.playFeedback(0.1, 6);
-        
-        // Hide the button and show the panel
-        settingsPanelBtn.style.display = 'none';
-        settingsPanel.style.display = 'block';
-        // Prevent zooming while panel is open
-        document.body.classList.add('panel-open');
+
+        if (settingsPanel.style.display === 'block') {
+          closeSettingsPanel();
+          return;
+        }
+
+        openSettingsPanel();
       });
-      
-      // Hide settings panel
+
       closeSettingsPanelBtn.addEventListener('click', () => {
-        // Play feedback for button click
         this.playFeedback(0.1, 6);
-        
-        settingsPanel.style.display = 'none';
-        // Show the button again
-        settingsPanelBtn.style.display = 'grid';
-        // Re-enable zooming and reset zoom level
-        document.body.classList.remove('panel-open');
-        this.resetMobileZoom();
+        closeSettingsPanel();
       });
     }
     // Add event
@@ -3062,11 +3053,7 @@ Object.assign(SpiralCalendar.prototype, {
         this.resetAutoActivatedSettings();
         
         // Hide panel after adding
-        eventInputPanel.style.display = 'none';
-        addEventPanelBtn.style.display = 'block'; // Show the add event button again
-        // Re-enable zooming and reset zoom level
-        document.body.classList.remove('panel-open');
-        this.resetMobileZoom();
+        closeEventPanel();
         renderEventList();
       } else {
         alert('Please select both start and end dates');
