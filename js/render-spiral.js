@@ -572,13 +572,19 @@ Object.assign(SpiralCalendar.prototype, {
 
       const safeTop = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('padding-top')) || 0;
       const canvasRect = this.canvas.getBoundingClientRect();
+      const pageLeft = window.visualViewport && Number.isFinite(window.visualViewport.pageLeft)
+        ? window.visualViewport.pageLeft
+        : (window.scrollX || window.pageXOffset || 0);
+      const pageTop = window.visualViewport && Number.isFinite(window.visualViewport.pageTop)
+        ? window.visualViewport.pageTop
+        : (window.scrollY || window.pageYOffset || 0);
       const visualFontSize = this.titleClickArea.fontSizeUsed || detailLayout.titleFontSize;
       const cssFontSize = Math.max(16, visualFontSize);
       const visualScale = visualFontSize / cssFontSize;
       const width = this.titleClickArea.width / visualScale;
       const height = Math.max(this.titleClickArea.height / visualScale, cssFontSize * 1.6);
-      const left = detailLayout.centerX - width / 2;
-      const top = canvasRect.top + this.titleClickArea.centerY - height / 2 + safeTop;
+      const left = canvasRect.left + pageLeft + detailLayout.centerX - width / 2;
+      const top = canvasRect.top + pageTop + this.titleClickArea.centerY - height / 2 + safeTop;
 
       input.style.left = `${left}px`;
       input.style.top = `${top}px`;
@@ -598,6 +604,12 @@ Object.assign(SpiralCalendar.prototype, {
 
       const safeTop = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('padding-top')) || 0;
       const canvasRect = this.canvas.getBoundingClientRect();
+      const pageLeft = window.visualViewport && Number.isFinite(window.visualViewport.pageLeft)
+        ? window.visualViewport.pageLeft
+        : (window.scrollX || window.pageXOffset || 0);
+      const pageTop = window.visualViewport && Number.isFinite(window.visualViewport.pageTop)
+        ? window.visualViewport.pageTop
+        : (window.scrollY || window.pageYOffset || 0);
       const visualFontSize = detailLayout.smallFontSize;
       const cssFontSize = Math.max(16, visualFontSize);
       const visualScale = visualFontSize / cssFontSize;
@@ -612,12 +624,59 @@ Object.assign(SpiralCalendar.prototype, {
 
       textarea.style.height = 'auto';
       const newHeight = Math.max(baseHeight, Math.min(textarea.scrollHeight, baseHeight * 5));
-      const left = detailLayout.centerX - baseWidth / 2;
-      const top = canvasRect.top + this.descClickArea.centerY - newHeight / 2 + safeTop;
+      const left = canvasRect.left + pageLeft + detailLayout.centerX - baseWidth / 2;
+      const top = canvasRect.top + pageTop + this.descClickArea.centerY - newHeight / 2 + safeTop;
 
       textarea.style.left = `${left}px`;
       textarea.style.top = `${top}px`;
       textarea.style.height = `${newHeight}px`;
+    },
+
+    syncActiveDetailTextEditorLayout() {
+      if (this.state.detailViewDay === null) return;
+      const detailLayout = this.getDetailViewLayout();
+      this.updateActiveTitleEditorLayout(detailLayout);
+      this.updateActiveDescriptionEditorLayout(detailLayout);
+    },
+
+    updateActiveDetailTextEditorViewportSyncState() {
+      const hasActiveTextEditor = !!document.getElementById('titleEditor') || !!document.getElementById('descEditor');
+
+      if (!hasActiveTextEditor) {
+        if (this._activeDetailTextEditorViewportRaf) {
+          cancelAnimationFrame(this._activeDetailTextEditorViewportRaf);
+          this._activeDetailTextEditorViewportRaf = null;
+        }
+        if (this._boundActiveDetailTextEditorViewportSync) {
+          window.removeEventListener('resize', this._boundActiveDetailTextEditorViewportSync);
+          window.removeEventListener('scroll', this._boundActiveDetailTextEditorViewportSync);
+          if (window.visualViewport) {
+            window.visualViewport.removeEventListener('resize', this._boundActiveDetailTextEditorViewportSync);
+            window.visualViewport.removeEventListener('scroll', this._boundActiveDetailTextEditorViewportSync);
+          }
+          this._boundActiveDetailTextEditorViewportSync = null;
+        }
+        return;
+      }
+
+      if (this._boundActiveDetailTextEditorViewportSync) return;
+
+      this._boundActiveDetailTextEditorViewportSync = () => {
+        if (this._activeDetailTextEditorViewportRaf) {
+          cancelAnimationFrame(this._activeDetailTextEditorViewportRaf);
+        }
+        this._activeDetailTextEditorViewportRaf = requestAnimationFrame(() => {
+          this._activeDetailTextEditorViewportRaf = null;
+          this.syncActiveDetailTextEditorLayout();
+        });
+      };
+
+      window.addEventListener('resize', this._boundActiveDetailTextEditorViewportSync);
+      window.addEventListener('scroll', this._boundActiveDetailTextEditorViewportSync);
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', this._boundActiveDetailTextEditorViewportSync);
+        window.visualViewport.addEventListener('scroll', this._boundActiveDetailTextEditorViewportSync);
+      }
     },
 
     drawDetailView(maxRadius) {
@@ -919,6 +978,7 @@ Object.assign(SpiralCalendar.prototype, {
       const existingEditor = document.getElementById('titleEditor');
       if (existingEditor) {
         existingEditor.remove();
+        this.updateActiveDetailTextEditorViewportSyncState();
       }
       const detailLayout = this.getDetailViewLayout();
       
@@ -982,6 +1042,7 @@ Object.assign(SpiralCalendar.prototype, {
       // Add to page
       document.body.appendChild(input);
       this.updateActiveTitleEditorLayout(detailLayout);
+      this.updateActiveDetailTextEditorViewportSyncState();
       input.focus();
       input.select();
       
@@ -997,6 +1058,7 @@ Object.assign(SpiralCalendar.prototype, {
         // Mark that changes have been made
         this._detailViewHasChanges = true;
         input.remove();
+        this.updateActiveDetailTextEditorViewportSyncState();
         this.hideTitleWhileEditing = false;
         this.drawSpiral();
         // Save events to localStorage
@@ -1010,6 +1072,7 @@ Object.assign(SpiralCalendar.prototype, {
           saveTitle();
         } else if (e.key === 'Escape') {
           input.remove();
+          this.updateActiveDetailTextEditorViewportSyncState();
           this.hideTitleWhileEditing = false;
           this.drawSpiral();
         }
@@ -1349,6 +1412,7 @@ Object.assign(SpiralCalendar.prototype, {
       const existingEditor = document.getElementById('descEditor');
       if (existingEditor) {
         existingEditor.remove();
+        this.updateActiveDetailTextEditorViewportSyncState();
       }
       const detailLayout = this.getDetailViewLayout();
       // Create textarea element
@@ -1413,6 +1477,7 @@ Object.assign(SpiralCalendar.prototype, {
       // Add to page
       document.body.appendChild(textarea);
       this.updateActiveDescriptionEditorLayout(detailLayout);
+      this.updateActiveDetailTextEditorViewportSyncState();
       textarea.focus();
       textarea.select();
       
@@ -1433,6 +1498,7 @@ Object.assign(SpiralCalendar.prototype, {
         // Mark that changes have been made
         this._detailViewHasChanges = true;
         textarea.remove();
+        this.updateActiveDetailTextEditorViewportSyncState();
         this.hideDescriptionWhileEditing = false;
         this.drawSpiral();
         // Save events to localStorage
@@ -1449,6 +1515,7 @@ Object.assign(SpiralCalendar.prototype, {
           saveDescription();
         } else if (e.key === 'Escape') {
           textarea.remove();
+          this.updateActiveDetailTextEditorViewportSyncState();
           this.hideDescriptionWhileEditing = false;
           this.drawSpiral();
         }
