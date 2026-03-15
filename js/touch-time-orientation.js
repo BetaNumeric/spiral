@@ -234,14 +234,21 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   getTouchJoystickConfig() {
+    const canvasWidth = this.canvas ? this.canvas.clientWidth : 0;
+    const canvasHeight = this.canvas ? this.canvas.clientHeight : 0;
+    const minDimension = Math.max(0, Math.min(canvasWidth, canvasHeight));
+    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+    const axialEnterRadius = Math.round(clamp(minDimension * 0.22, 96, 180));
+    const maxTravel = Math.round(clamp(minDimension * 0.3, axialEnterRadius + 36, 250));
+
     return {
       deadZone: 1,
-      maxTravel: 250,
-      axialEnterRadius: 180,
-      axialExitRadius: 140,
+      maxTravel,
+      axialEnterRadius,
+      axialExitRadius: Math.round(axialEnterRadius * 0.78),
       dayStepVerticalRatio: 0.9,
-      circularGuideRadius: 20,
-      knobRadius: 20
+      circularGuideRadius: Math.round(clamp(minDimension * 0.024, 16, 28)),
+      knobRadius: Math.round(clamp(minDimension * 0.022, 16, 22))
     };
   },
 
