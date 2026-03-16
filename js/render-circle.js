@@ -1279,12 +1279,18 @@ Object.assign(SpiralCalendar.prototype, {
             const dayStartAngle = day * 2 * Math.PI;
             const segmentStartAngle = dayStartAngle + segment * segmentAngle;
             const segmentEndAngle = segmentStartAngle + segmentAngle;
-            
+            const circleSegmentStartAngle = segment * segmentAngle;
+            const circleSegmentEndAngle = circleSegmentStartAngle + segmentAngle;
+             
             // Check if this segment is within the visible range (same as spiral mode)
             const segmentStart = Math.max(segmentStartAngle, visibilityRange.min);
             const segmentEnd = Math.min(segmentEndAngle, visibilityRange.max);
-            
+             
             if (segmentEnd <= segmentStart) continue; // segment is fully hidden
+            const visibleStartOffset = segmentStart - segmentStartAngle;
+            const visibleEndOffset = segmentEnd - segmentStartAngle;
+            const circleSegmentStart = circleSegmentStartAngle + visibleStartOffset;
+            const circleSegmentEnd = circleSegmentStartAngle + visibleEndOffset;
           
           // Get base color for this segment.
           const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
@@ -1332,7 +1338,7 @@ Object.assign(SpiralCalendar.prototype, {
             const skipForHourOverlap = (this.state.hideDayWhenHourInside && this.state.hourNumbersInsideSegment && this.state.showHourNumbers && isOutermostTwoDays);
             if (!skipForHourOverlap && segmentStart === segmentStartAngle && segmentEnd === segmentEndAngle) {
             const dayNumber = this.getDayNumber(day, segment);
-            const centerAngle = (segmentStart + segmentEnd) / 2;
+            const centerAngle = (circleSegmentStart + circleSegmentEnd) / 2;
             const centerRadius = (innerRadius + outerRadius) / 2;
             // Build weekday + day label (e.g., Mon 28)
             // Defaults in case of errors (circle mode)
@@ -1374,7 +1380,7 @@ Object.assign(SpiralCalendar.prototype, {
             }
             
             // Calculate font size based on segment dimensions in circle mode
-            const segmentAngleSize = segmentEnd - segmentStart;
+            const segmentAngleSize = circleSegmentEnd - circleSegmentStart;
             const radialHeight = outerRadius - innerRadius;
             const arcWidth = centerRadius * segmentAngleSize;
             
@@ -1395,14 +1401,14 @@ Object.assign(SpiralCalendar.prototype, {
             }
           }
         // Draw as a ring segment with inner and outer radius
-        this.drawCircleSegment(innerRadius, outerRadius, -segmentStart, -segmentEnd, color, isMidnightSegment, isAfterMidnightSegment, isHovered, isSelected, segmentStartAngle, segmentEndAngle, isFirstDayOfMonth, true, false, isNoonSegment, isSixAMSegment, isSixPMSegment, day, segment);
+        this.drawCircleSegment(innerRadius, outerRadius, -circleSegmentStart, -circleSegmentEnd, color, isMidnightSegment, isAfterMidnightSegment, isHovered, isSelected, circleSegmentStartAngle, circleSegmentEndAngle, isFirstDayOfMonth, true, false, isNoonSegment, isSixAMSegment, isSixPMSegment, day, segment);
         
         // Draw hour numbers inside outermost segments if enabled
         if (this.state.showHourNumbers && (this.state.hourNumbersOutward || this.state.hourNumbersInsideSegment)) {
           // Check if this segment should show numbers
           const segmentKey = `${day}-${segment}`;
           if (segmentsToShowNumbersSet.has(segmentKey)) {
-            this.collectHourNumberInSegment(segmentStart, segmentEnd, radiusFunction, segment, day, segmentStartAngle, segmentEndAngle, innerRadius, outerRadius);
+            this.collectHourNumberInSegment(circleSegmentStart, circleSegmentEnd, radiusFunction, segment, day, circleSegmentStartAngle, circleSegmentEndAngle, innerRadius, outerRadius);
           }
         }
           
@@ -1490,13 +1496,13 @@ Object.assign(SpiralCalendar.prototype, {
                     const sliceOuterRadius = innerRadius + (eventSliceEnd * totalRadialHeight);
                     const edgeInnerRadius = innerRadius + ((rank / m) * totalRadialHeight);
                     const edgeOuterRadius = innerRadius + (((rank + 1) / m) * totalRadialHeight);
-                    const segmentAngleSize = segmentEndAngle - segmentStartAngle;
-                    const rawTimeStartAngle = segmentStartAngle + (1 - subEnd) * segmentAngleSize;
-                    const rawTimeEndAngle = segmentStartAngle + (1 - subStart) * segmentAngleSize;
-                    const canDrawStartEdge = rawTimeStartAngle >= segmentStart && rawTimeStartAngle <= segmentEnd;
-                    const canDrawEndEdge = rawTimeEndAngle >= segmentStart && rawTimeEndAngle <= segmentEnd;
-                    let timeStartAngle = Math.max(rawTimeStartAngle, segmentStart);
-                    let timeEndAngle = Math.min(rawTimeEndAngle, segmentEnd);
+                    const segmentAngleSize = circleSegmentEndAngle - circleSegmentStartAngle;
+                    const rawTimeStartAngle = circleSegmentStartAngle + (1 - subEnd) * segmentAngleSize;
+                    const rawTimeEndAngle = circleSegmentStartAngle + (1 - subStart) * segmentAngleSize;
+                    const canDrawStartEdge = rawTimeStartAngle >= circleSegmentStart && rawTimeStartAngle <= circleSegmentEnd;
+                    const canDrawEndEdge = rawTimeEndAngle >= circleSegmentStart && rawTimeEndAngle <= circleSegmentEnd;
+                    let timeStartAngle = Math.max(rawTimeStartAngle, circleSegmentStart);
+                    let timeEndAngle = Math.min(rawTimeEndAngle, circleSegmentEnd);
                     if (timeEndAngle > timeStartAngle) {
                       this.eventSegments.push({
                         timeStartTheta: timeStartAngle,
@@ -1522,8 +1528,8 @@ Object.assign(SpiralCalendar.prototype, {
                         outerRadius: sliceOuterRadius,
                         color: eventData.color,
                         event: eventData.event,
-                        rawStartAngle: segmentStartAngle,
-                        rawEndAngle: segmentEndAngle,
+                        rawStartAngle: circleSegmentStartAngle,
+                        rawEndAngle: circleSegmentEndAngle,
                         day: day,
                         segment: segment,
                         isCircleMode: true
@@ -1581,16 +1587,16 @@ Object.assign(SpiralCalendar.prototype, {
               const edgeOuterRadius = sliceOuterRadius;
               
             // Use the full segment's angular range for partial event overlay
-            const segmentAngleSize = segmentEndAngle - segmentStartAngle;
-            const rawTimeStartAngle = segmentStartAngle + (1 - minuteEnd) * segmentAngleSize;
-            const rawTimeEndAngle = segmentStartAngle + (1 - minuteStart) * segmentAngleSize;
-            const canDrawStartEdge = rawTimeStartAngle >= segmentStart && rawTimeStartAngle <= segmentEnd;
-            const canDrawEndEdge = rawTimeEndAngle >= segmentStart && rawTimeEndAngle <= segmentEnd;
+            const segmentAngleSize = circleSegmentEndAngle - circleSegmentStartAngle;
+            const rawTimeStartAngle = circleSegmentStartAngle + (1 - minuteEnd) * segmentAngleSize;
+            const rawTimeEndAngle = circleSegmentStartAngle + (1 - minuteStart) * segmentAngleSize;
+            const canDrawStartEdge = rawTimeStartAngle >= circleSegmentStart && rawTimeStartAngle <= circleSegmentEnd;
+            const canDrawEndEdge = rawTimeEndAngle >= circleSegmentStart && rawTimeEndAngle <= circleSegmentEnd;
             let timeStartAngle = rawTimeStartAngle;
             let timeEndAngle = rawTimeEndAngle;
             // Clamp event arc to visible segment range
-            timeStartAngle = Math.max(timeStartAngle, segmentStart);
-            timeEndAngle = Math.min(timeEndAngle, segmentEnd);
+            timeStartAngle = Math.max(timeStartAngle, circleSegmentStart);
+            timeEndAngle = Math.min(timeEndAngle, circleSegmentEnd);
             if (timeEndAngle > timeStartAngle) {
               // Store event for drawing later (circle mode)
               this.eventSegments.push({
@@ -1617,8 +1623,8 @@ Object.assign(SpiralCalendar.prototype, {
                 outerRadius: sliceOuterRadius,
                 color: eventData.color,
                 event: eventData.event,
-                rawStartAngle: segmentStartAngle,
-                rawEndAngle: segmentEndAngle,
+                rawStartAngle: circleSegmentStartAngle,
+                rawEndAngle: circleSegmentEndAngle,
                 day: day,
                 segment: segment,
                 isCircleMode: true
@@ -1657,12 +1663,12 @@ Object.assign(SpiralCalendar.prototype, {
             overlayStartFrac = Math.max(0, (overlapStart - segStartNorm) / (segEnd - segStart));
             overlayEndFrac = Math.min(1, (overlapEnd - segStartNorm) / (segEnd - segStart));
             // Use the full segment's angular range for partial overlay
-            const segmentAngleSize = segmentEndAngle - segmentStartAngle;
-            let timeStartAngle = segmentStartAngle + (1 - overlayEndFrac) * segmentAngleSize;
-            let timeEndAngle = segmentStartAngle + (1 - overlayStartFrac) * segmentAngleSize;
+            const segmentAngleSize = circleSegmentEndAngle - circleSegmentStartAngle;
+            let timeStartAngle = circleSegmentStartAngle + (1 - overlayEndFrac) * segmentAngleSize;
+            let timeEndAngle = circleSegmentStartAngle + (1 - overlayStartFrac) * segmentAngleSize;
             // Clamp overlay to visible segment range (same as main segments)
-            timeStartAngle = Math.max(timeStartAngle, segmentStart);
-            timeEndAngle = Math.min(timeEndAngle, segmentEnd);
+            timeStartAngle = Math.max(timeStartAngle, circleSegmentStart);
+            timeEndAngle = Math.min(timeEndAngle, circleSegmentEnd);
             if (timeEndAngle > timeStartAngle) {
               // Store night overlay data for drawing after events (circle mode)
               this.nightOverlays.push({
@@ -1709,10 +1715,10 @@ Object.assign(SpiralCalendar.prototype, {
           this.dayOverlays.push({
             innerRadius: innerRadius,
             outerRadius: outerRadius,
-            startTheta: -segmentStart,
-            endTheta: -segmentEnd,
-            segmentStartAngle: segmentStartAngle,
-            segmentEndAngle: segmentEndAngle,
+            startTheta: -circleSegmentStart,
+            endTheta: -circleSegmentEnd,
+            segmentStartAngle: circleSegmentStartAngle,
+            segmentEndAngle: circleSegmentEndAngle,
             color: dayOverlayColor,
             isCircleMode: true,
             day: day,
@@ -1737,10 +1743,10 @@ Object.assign(SpiralCalendar.prototype, {
           this.gradientOverlays.push({
             innerRadius: innerRadius,
             outerRadius: outerRadius,
-            startTheta: -segmentStart,
-            endTheta: -segmentEnd,
-            segmentStartAngle: segmentStartAngle,
-            segmentEndAngle: segmentEndAngle,
+            startTheta: -circleSegmentStart,
+            endTheta: -circleSegmentEnd,
+            segmentStartAngle: circleSegmentStartAngle,
+            segmentEndAngle: circleSegmentEndAngle,
             color: gradientOverlayColor,
             isCircleMode: true,
             day: day,

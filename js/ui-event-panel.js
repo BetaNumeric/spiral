@@ -608,6 +608,132 @@ Object.assign(SpiralCalendar.prototype, {
       return allLi;
     };
       
+    const ISO_EVENT_DATE_RE = /^([+-]?\d{1,6})-(\d{2})-(\d{2})(?:[T\s](\d{2})(?::?(\d{2}))(?::?(\d{2}))?(?:\.(\d{1,3}))?(Z|[+-]\d{2}:?\d{2})?)?$/;
+    const buildUTCDate = (year, monthIndex, day, hour = 0, minute = 0, second = 0, millisecond = 0) => {
+      const date = new Date(0);
+      date.setUTCHours(0, 0, 0, 0);
+      date.setUTCFullYear(year, monthIndex, day);
+      date.setUTCHours(hour, minute, second, millisecond);
+      return date;
+    };
+    const buildLocalDate = (year, monthIndex, day, hour = 0, minute = 0, second = 0, millisecond = 0) => {
+      const date = new Date(0);
+      date.setHours(0, 0, 0, 0);
+      date.setFullYear(year, monthIndex, day);
+      date.setHours(hour, minute, second, millisecond);
+      return date;
+    };
+    const matchesUTCDateParts = (date, year, monthIndex, day, hour, minute, second, millisecond) => (
+      date.getUTCFullYear() === year &&
+      date.getUTCMonth() === monthIndex &&
+      date.getUTCDate() === day &&
+      date.getUTCHours() === hour &&
+      date.getUTCMinutes() === minute &&
+      date.getUTCSeconds() === second &&
+      date.getUTCMilliseconds() === millisecond
+    );
+    const matchesLocalDateParts = (date, year, monthIndex, day, hour, minute, second, millisecond) => (
+      date.getFullYear() === year &&
+      date.getMonth() === monthIndex &&
+      date.getDate() === day &&
+      date.getHours() === hour &&
+      date.getMinutes() === minute &&
+      date.getSeconds() === second &&
+      date.getMilliseconds() === millisecond
+    );
+    const parseTimezoneOffsetMinutes = (offset) => {
+      if (!offset || offset === 'Z') return 0;
+      const sign = offset[0] === '-' ? -1 : 1;
+      const normalized = offset.slice(1).replace(':', '');
+      const hours = Number(normalized.slice(0, 2));
+      const minutes = Number(normalized.slice(2, 4) || '0');
+      if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return NaN;
+      return sign * (hours * 60 + minutes);
+    };
+    const parseEventDateValue = (value) => {
+      if (value instanceof Date) {
+        const cloned = new Date(value.getTime());
+        return Number.isFinite(cloned.getTime()) ? cloned : null;
+      }
+      if (typeof value === 'number') {
+        const date = new Date(value);
+        return Number.isFinite(date.getTime()) ? date : null;
+      }
+      if (typeof value === 'string') {
+        const raw = value.trim();
+        if (!raw) return null;
+        const match = raw.match(ISO_EVENT_DATE_RE);
+        if (match) {
+          const [, yearStr, monthStr, dayStr, hourStr, minuteStr, secondStr, millisecondStr, timezoneStr] = match;
+          const year = Number(yearStr);
+          const monthIndex = Number(monthStr) - 1;
+          const day = Number(dayStr);
+          const hasTime = Boolean(hourStr);
+          const hour = hasTime ? Number(hourStr) : 0;
+          const minute = hasTime ? Number(minuteStr || '0') : 0;
+          const second = hasTime ? Number(secondStr || '0') : 0;
+          const millisecond = hasTime && millisecondStr ? Number(millisecondStr.padEnd(3, '0')) : 0;
+          if (![year, monthIndex, day, hour, minute, second, millisecond].every(Number.isFinite)) {
+            return null;
+          }
+          if (timezoneStr) {
+            const wallClockUTC = buildUTCDate(year, monthIndex, day, hour, minute, second, millisecond);
+            if (!matchesUTCDateParts(wallClockUTC, year, monthIndex, day, hour, minute, second, millisecond)) {
+              return null;
+            }
+            const offsetMinutes = parseTimezoneOffsetMinutes(timezoneStr);
+            if (!Number.isFinite(offsetMinutes)) return null;
+            return timezoneStr === 'Z'
+              ? wallClockUTC
+              : new Date(wallClockUTC.getTime() - offsetMinutes * 60 * 1000);
+          }
+          if (!hasTime) {
+            const utcDate = buildUTCDate(year, monthIndex, day, 0, 0, 0, 0);
+            return matchesUTCDateParts(utcDate, year, monthIndex, day, 0, 0, 0, 0) ? utcDate : null;
+          }
+          const localDate = buildLocalDate(year, monthIndex, day, hour, minute, second, millisecond);
+          return matchesLocalDateParts(localDate, year, monthIndex, day, hour, minute, second, millisecond)
+            ? localDate
+            : null;
+        }
+        const date = new Date(raw);
+        return Number.isFinite(date.getTime()) ? date : null;
+      }
+      const date = new Date(value);
+      return Number.isFinite(date.getTime()) ? date : null;
+    };
+    const getEventDateSortValue = (value) => {
+      const date = value instanceof Date ? value : parseEventDateValue(value);
+      return date ? date.getTime() : Number.POSITIVE_INFINITY;
+    };
+    const compareEventDateValues = (valueA, valueB) => {
+      const sortValueA = getEventDateSortValue(valueA);
+      const sortValueB = getEventDateSortValue(valueB);
+      if (sortValueA === sortValueB) return 0;
+      if (!Number.isFinite(sortValueA)) return 1;
+      if (!Number.isFinite(sortValueB)) return -1;
+      return sortValueA - sortValueB;
+    };
+    const makeEventDayKey = (value) => {
+      const date = value instanceof Date ? value : parseEventDateValue(value);
+      return date ? `${date.getUTCFullYear()}|${date.getUTCMonth()}|${date.getUTCDate()}` : null;
+    };
+    const parseEventDayKey = (dayKey) => {
+      const [yearStr, monthStr, dayStr] = String(dayKey).split('|');
+      const year = Number(yearStr);
+      const month = Number(monthStr);
+      const day = Number(dayStr);
+      return [year, month, day].every(Number.isFinite) ? { year, month, day } : null;
+    };
+    const compareEventDayKeys = (dayKeyA, dayKeyB) => {
+      const partsA = parseEventDayKey(dayKeyA);
+      const partsB = parseEventDayKey(dayKeyB);
+      if (!partsA || !partsB) return String(dayKeyA).localeCompare(String(dayKeyB));
+      if (partsA.year !== partsB.year) return partsA.year - partsB.year;
+      if (partsA.month !== partsB.month) return partsA.month - partsB.month;
+      return partsA.day - partsB.day;
+    };
+
     // Helper function to create event list item with all handlers
     const createEventListItem = (ev, isBottomList = false, heightScale = 1.0) => {
         const li = document.createElement('li');
@@ -657,9 +783,9 @@ Object.assign(SpiralCalendar.prototype, {
       leftContent.style.cssText = 'display: flex; align-items: center; ' + leftWidth + 'min-width: ' + (isDesktopEventPanel ? '48px' : ((isMobile || isEventPanel) ? '60px' : '0')) + '; flex-shrink: 1;';
         
         // Format time using UTC to avoid DST issues (date is shown in day header)
-        const eventDate = new Date(ev.start);
-        const hours = pad2(eventDate.getUTCHours());
-        const minutes = pad2(eventDate.getUTCMinutes());
+        const eventDate = parseEventDateValue(ev.start);
+        const hours = eventDate ? pad2(eventDate.getUTCHours()) : '--';
+        const minutes = eventDate ? pad2(eventDate.getUTCMinutes()) : '--';
         const dateStr = `${hours}:${minutes}`;
       
       const colorDot = document.createElement('span');
@@ -1137,7 +1263,7 @@ Object.assign(SpiralCalendar.prototype, {
     window.renderEventList = () => {
       // Sort events by start date and apply calendar visibility filter and search query
       const searchQuery = (this.eventListSearchQuery || '').toLowerCase().trim();
-      const sorted = this.events
+      const sortedEntries = this.events
         .filter(e => {
           // Filter by visible calendars
           if (!this.state.visibleCalendars.includes((e.calendar || 'Home'))) return false;
@@ -1150,7 +1276,19 @@ Object.assign(SpiralCalendar.prototype, {
           }
           return true;
         })
-        .sort((a, b) => new Date(a.start) - new Date(b.start));
+        .map(event => ({
+          event,
+          startDate: parseEventDateValue(event.start),
+          endDate: parseEventDateValue(event.end)
+        }))
+        .sort((a, b) => {
+          const startDiff = compareEventDateValues(a.startDate, b.startDate);
+          if (startDiff !== 0) return startDiff;
+          const endDiff = compareEventDateValues(a.endDate, b.endDate);
+          if (endDiff !== 0) return endDiff;
+          return String(a.event.title || '').localeCompare(String(b.event.title || ''));
+        });
+      const sorted = sortedEntries.map(entry => entry.event);
       
       // Preserve search input on mobile to prevent keyboard from closing
       // Check both search inputs (main panel and bottom list)
@@ -1268,11 +1406,9 @@ Object.assign(SpiralCalendar.prototype, {
       
       // First, check for all currently happening events (start <= displayTime < end)
       // Handle overlapping events by highlighting all of them
-      const currentEvents = sorted.filter(e => {
-        const eventStart = new Date(e.start);
-        const eventEnd = new Date(e.end);
-        return eventStart <= displayTime && displayTime < eventEnd;
-      });
+      const currentEvents = sortedEntries
+        .filter(({ startDate, endDate }) => startDate && endDate && startDate <= displayTime && displayTime < endDate)
+        .map(({ event }) => event);
       
       // Create a Set of highlighted event IDs (for fast lookup)
       const highlightedEventIds = new Set();
@@ -1287,9 +1423,9 @@ Object.assign(SpiralCalendar.prototype, {
         });
       } else {
         // No current event, find the next upcoming event
-        const upcomingEvents = sorted.filter(e => new Date(e.start) > displayTime);
-        if (upcomingEvents.length > 0) {
-          const eventId = upcomingEvents[0].id || upcomingEvents[0].start;
+        const upcomingEvent = sortedEntries.find(({ startDate }) => startDate && startDate > displayTime);
+        if (upcomingEvent) {
+          const eventId = upcomingEvent.event.id || upcomingEvent.event.start;
           highlightedEventIds.add(eventId);
         }
       }
@@ -1309,13 +1445,13 @@ Object.assign(SpiralCalendar.prototype, {
       
       // Group events by day (using UTC date to avoid timezone issues)
       const eventsByDay = new Map();
-      for (const ev of sorted) {
-        const eventDate = new Date(ev.start);
-        const dayKey = `${eventDate.getUTCFullYear()}-${eventDate.getUTCMonth()}-${eventDate.getUTCDate()}`;
+      for (const entry of sortedEntries) {
+        const dayKey = makeEventDayKey(entry.startDate);
+        if (!dayKey) continue;
         if (!eventsByDay.has(dayKey)) {
           eventsByDay.set(dayKey, []);
         }
-        eventsByDay.get(dayKey).push(ev);
+        eventsByDay.get(dayKey).push(entry.event);
       }
       
       // Helper function to create day header
@@ -1328,11 +1464,12 @@ Object.assign(SpiralCalendar.prototype, {
         const isDarkMode = document.body.classList.contains('dark-mode');
         const gapSize = (isMobile || isEventPanel) ? '0.5em' : '1em';
         
-        // Parse dayKey (format: YYYY-M-D)
-        const [year, month, day] = dayKey.split('-').map(Number);
-        const dateObj = new Date(Date.UTC(year, month, day));
+        const dayParts = parseEventDayKey(dayKey);
+        if (!dayParts) return li;
+        const { year, month, day } = dayParts;
+        const dateObj = buildUTCDate(year, month, day);
         const today = new Date();
-        const todayKey = `${today.getUTCFullYear()}-${today.getUTCMonth()}-${today.getUTCDate()}`;
+        const todayKey = makeEventDayKey(today);
         const isToday = dayKey === todayKey;
         
         // Format date string (e.g., "Monday, Jan 15, 2025" or "Today, Jan 15, 2025")
@@ -1396,13 +1533,7 @@ Object.assign(SpiralCalendar.prototype, {
       let firstHighlightedItemBottom = null;
       
       // Sort day keys chronologically
-      const sortedDayKeys = Array.from(eventsByDay.keys()).sort((a, b) => {
-        const [yearA, monthA, dayA] = a.split('-').map(Number);
-        const [yearB, monthB, dayB] = b.split('-').map(Number);
-        const dateA = new Date(Date.UTC(yearA, monthA, dayA));
-        const dateB = new Date(Date.UTC(yearB, monthB, dayB));
-        return dateA - dateB;
-      });
+      const sortedDayKeys = Array.from(eventsByDay.keys()).sort(compareEventDayKeys);
       
       // Render events grouped by day
       const dayHeaders = [];
@@ -1876,8 +2007,7 @@ Object.assign(SpiralCalendar.prototype, {
       return events;
     };
     const toValidDate = (value) => {
-      const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
-      return Number.isFinite(date.getTime()) ? date : null;
+      return parseEventDateValue(value);
     };
     const normalizeImportedColor = (value, calendar, startDate) => {
       if (typeof value === 'string') {
@@ -2907,19 +3037,11 @@ Object.assign(SpiralCalendar.prototype, {
       const now = new Date();
       const nextHour = new Date(now);
       nextHour.setHours(now.getHours() + 1, 0, 0, 0); // Set to next full hour in local time
-      const formatLocalDateTime = (date) => {
-        const year = date.getFullYear();
-        const month = pad2(date.getMonth() + 1);
-        const day = pad2(date.getDate());
-        const hours = pad2(date.getHours());
-        const minutes = pad2(date.getMinutes());
-        return `${year}-${month}-${day}T${hours}:${minutes}`;
-      };
-      const nextHourString = formatLocalDateTime(nextHour);
+      const nextHourString = formatDateTimeLocalForInput(nextHour);
       eventStart.value = nextHourString;
       const endTime = new Date(nextHour);
       endTime.setHours(nextHour.getHours() + 1); // Add 1 hour in local time
-      eventEnd.value = formatLocalDateTime(endTime);
+      eventEnd.value = formatDateTimeLocalForInput(endTime);
       if (typeof syncEventBoxes === 'function') syncEventBoxes();
       if (this.state.colorMode === 'seasonal') {
         eventColor.value = getSeasonalSuggestedColor();

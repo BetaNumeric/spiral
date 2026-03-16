@@ -70,12 +70,28 @@ function getDeviceTimezoneOffsetHours(date = new Date()) {
 
 // Helper function to parse datetime-local input as UTC
 function parseDateTimeLocalAsUTC(dateTimeString) {
-// datetime-local format is YYYY-MM-DDTHH:MM
-// We need to parse this as UTC to avoid DST issues
-const [datePart, timePart] = dateTimeString.split('T');
-const [year, month, day] = datePart.split('-').map(Number);
-const [hour, minute] = timePart.split(':').map(Number);
-return new Date(Date.UTC(year, month - 1, day, hour, minute, 0, 0));
+// datetime-local format is YYYY-MM-DDTHH:MM with a 4+ digit year
+// Parse it explicitly so years below 100 are preserved correctly.
+const match = typeof dateTimeString === 'string'
+  ? dateTimeString.trim().match(/^([+-]?\d+)-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/)
+  : null;
+if (!match) return new Date(NaN);
+const [, yearStr, monthStr, dayStr, hourStr, minuteStr, secondStr, millisecondStr] = match;
+const year = Number(yearStr);
+const month = Number(monthStr) - 1;
+const day = Number(dayStr);
+const hour = Number(hourStr);
+const minute = Number(minuteStr);
+const second = Number(secondStr || '0');
+const millisecond = Number((millisecondStr || '0').padEnd(3, '0'));
+if (![year, month, day, hour, minute, second, millisecond].every(Number.isFinite)) {
+  return new Date(NaN);
+}
+const date = new Date(0);
+date.setUTCHours(0, 0, 0, 0);
+date.setUTCFullYear(year, month, day);
+date.setUTCHours(hour, minute, second, millisecond);
+return date;
 }
 
 function calculateSunTimes(date, coords = LOCATION_COORDS, timezoneOffsetHours = null) {
@@ -191,8 +207,12 @@ function generateEventSequence(event) {
 // Format a Date for <input type="datetime-local"> using local time
 function formatDateTimeLocalForInput(date) {
   const d = new Date(date);
+  if (!Number.isFinite(d.getTime())) return '';
   const pad = (n) => String(n).padStart(2, '0');
-  const yyyy = d.getFullYear();
+  const year = d.getFullYear();
+  const yyyy = year < 0
+    ? `-${String(Math.abs(year)).padStart(4, '0')}`
+    : String(year).padStart(4, '0');
   const mm = pad(d.getMonth() + 1);
   const dd = pad(d.getDate());
   const hh = pad(d.getHours());

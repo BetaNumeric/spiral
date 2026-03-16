@@ -1,17 +1,220 @@
 // Date/Color Pickers and Calendar Selection
 Object.assign(SpiralCalendar.prototype, {
+  supportsNativeDateTimeLocalValue(value) {
+    if (typeof value !== 'string' || !value) return false;
+    const probe = document.createElement('input');
+    probe.type = 'datetime-local';
+    probe.value = value;
+    return probe.value === value;
+  },
+
+  applyEventDateTimeInputValue(event, type, rawValue) {
+    if (!event || typeof rawValue !== 'string' || !rawValue.trim()) return false;
+    const parsedValue = parseDateTimeLocalAsUTC(rawValue.trim());
+    if (!(parsedValue instanceof Date) || !Number.isFinite(parsedValue.getTime())) {
+      return false;
+    }
+
+    if (type === 'start') {
+      event.start = parsedValue;
+      if (parsedValue >= event.end) {
+        const newEnd = new Date(parsedValue);
+        newEnd.setUTCHours(parsedValue.getUTCHours() + 1);
+        event.end = newEnd;
+      }
+    } else {
+      if (parsedValue < event.start) {
+        const adjustedEnd = new Date(event.start);
+        adjustedEnd.setUTCHours(event.start.getUTCHours() + 1);
+        event.end = adjustedEnd;
+      } else {
+        event.end = parsedValue;
+      }
+    }
+
+    event.lastModified = Date.now();
+    this._detailViewHasChanges = true;
+    if (event.isDraft && this.draftEvent && this.draftEvent.segmentId === event.segmentId) {
+      this.draftEvent = event;
+    }
+    this.drawSpiral();
+    this.saveEventsToStorage();
+    setTimeout(() => renderEventList(), 0);
+    this._ensureSelectedSegmentContainsEventOrJump(event);
+    return true;
+  },
+
+  openExtendedDateTimeEditor(event, type, initialValue, anchorBox = null) {
+    const isMobile = isMobileDevice();
+    const isDarkMode = document.body.classList.contains('dark-mode');
+    if (typeof this._cleanupExtendedDateTimeEditor === 'function') {
+      this._cleanupExtendedDateTimeEditor();
+    }
+
+    const panel = document.createElement('div');
+    panel.id = 'extendedDateTimeEditor';
+    panel.style.position = 'fixed';
+    panel.style.zIndex = '10001';
+    panel.style.width = isMobile ? 'min(320px, calc(100vw - 24px))' : '280px';
+    panel.style.maxWidth = 'calc(100vw - 24px)';
+    panel.style.padding = '12px';
+    panel.style.borderRadius = '10px';
+    panel.style.boxShadow = '0 10px 28px rgba(0, 0, 0, 0.22)';
+    panel.style.boxSizing = 'border-box';
+    panel.style.background = isDarkMode ? 'var(--dark-bg-secondary)' : 'rgba(255, 255, 255, 0.98)';
+    panel.style.border = `1px solid ${isDarkMode ? 'var(--dark-border)' : 'rgba(0, 0, 0, 0.12)'}`;
+
+    if (isMobile || !anchorBox) {
+      panel.style.left = '50%';
+      panel.style.top = '50%';
+      panel.style.transform = 'translate(-50%, -50%)';
+    } else {
+      const canvasRect = this.canvas.getBoundingClientRect();
+      const left = Math.round(canvasRect.left + anchorBox.x + (anchorBox.width / 2) - 140);
+      const top = Math.round(canvasRect.top + anchorBox.y + anchorBox.height + 8);
+      panel.style.left = `${Math.max(12, Math.min(window.innerWidth - 292, left))}px`;
+      panel.style.top = `${Math.max(12, Math.min(window.innerHeight - 120, top))}px`;
+    }
+
+    const label = document.createElement('div');
+    label.textContent = type === 'start' ? 'Edit start date/time' : 'Edit end date/time';
+    label.style.cssText = `font-size: 0.9em; font-weight: 600; margin-bottom: 8px; color: ${isDarkMode ? 'var(--dark-text-primary)' : '#222'};`;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = initialValue;
+    input.autocapitalize = 'off';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.placeholder = '0000-01-01T00:00';
+    input.style.cssText = `
+      width: 100%;
+      height: 38px;
+      padding: 0 10px;
+      border-radius: 8px;
+      border: 1px solid ${isDarkMode ? 'var(--dark-border)' : '#cfcfcf'};
+      background: ${isDarkMode ? 'var(--dark-bg-primary)' : '#fff'};
+      color: ${isDarkMode ? 'var(--dark-text-primary)' : '#111'};
+      font: inherit;
+      box-sizing: border-box;
+    `;
+
+    const hint = document.createElement('div');
+    hint.textContent = 'Format: YYYY-MM-DDTHH:MM';
+    hint.style.cssText = `font-size: 0.78em; line-height: 1.35; margin-top: 8px; color: ${isDarkMode ? 'var(--dark-text-primary)' : '#666'}; opacity: 0.9;`;
+
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex; justify-content:flex-end; gap:8px; margin-top:12px;';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.cssText = `
+      height: 34px;
+      padding: 0 12px;
+      border-radius: 8px;
+      border: 1px solid ${isDarkMode ? 'var(--dark-border)' : '#cfcfcf'};
+      background: ${isDarkMode ? 'var(--dark-bg-primary)' : '#f5f5f5'};
+      color: ${isDarkMode ? 'var(--dark-text-primary)' : '#333'};
+      cursor: pointer;
+    `;
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.textContent = 'Set';
+    saveBtn.style.cssText = `
+      height: 34px;
+      padding: 0 14px;
+      border-radius: 8px;
+      border: none;
+      background: #4CAF50;
+      color: white;
+      cursor: pointer;
+    `;
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(saveBtn);
+    panel.appendChild(label);
+    panel.appendChild(input);
+    panel.appendChild(hint);
+    panel.appendChild(actions);
+    document.body.appendChild(panel);
+
+    let outsideCloseArmed = false;
+    const handleDocumentPointerDown = (e) => {
+      if (!outsideCloseArmed || panel.contains(e.target)) return;
+      cleanup();
+    };
+    const cleanup = () => {
+      document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
+      if (this._cleanupExtendedDateTimeEditor === cleanup) {
+        this._cleanupExtendedDateTimeEditor = null;
+      }
+      if (panel.parentNode) panel.remove();
+    };
+    this._cleanupExtendedDateTimeEditor = cleanup;
+    const showInvalidState = () => {
+      input.style.borderColor = '#e53935';
+      hint.textContent = 'Invalid date/time. Use YYYY-MM-DDTHH:MM, for example 0000-01-01T00:00 or -0044-03-15T12:00.';
+      hint.style.color = '#e53935';
+      input.focus();
+      input.select();
+    };
+    const save = () => {
+      if (this.applyEventDateTimeInputValue(event, type, input.value)) {
+        cleanup();
+      } else {
+        showInvalidState();
+      }
+    };
+
+    cancelBtn.addEventListener('click', cleanup);
+    saveBtn.addEventListener('click', save);
+    input.addEventListener('input', () => {
+      input.style.borderColor = isDarkMode ? 'var(--dark-border)' : '#cfcfcf';
+      hint.textContent = 'Format: YYYY-MM-DDTHH:MM';
+      hint.style.color = isDarkMode ? 'var(--dark-text-primary)' : '#666';
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        save();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        cleanup();
+      }
+    });
+
+    document.addEventListener('pointerdown', handleDocumentPointerDown, true);
+    requestAnimationFrame(() => {
+      outsideCloseArmed = true;
+    });
+    input.focus();
+    input.select();
+  },
+
   openDateTimePicker(event, type, anchorBox = null) {
+    // Convert UTC event time to local time for the input picker
+    const eventTime = new Date(type === 'start' ? event.start : event.end);
+    const deviceOffsetHours = (typeof getDeviceTimezoneOffsetHours === 'function')
+      ? getDeviceTimezoneOffsetHours(eventTime)
+      : (eventTime.getTimezoneOffset() / -60);
+    const localTime = new Date(eventTime.getTime() - (deviceOffsetHours * 60 * 60 * 1000));
+    const localValue = formatDateTimeLocalForInput(localTime);
+    if (!this.supportsNativeDateTimeLocalValue(localValue)) {
+      this.openExtendedDateTimeEditor(event, type, localValue, anchorBox);
+      return;
+    }
+
     const input = document.createElement('input');
     input.type = 'datetime-local';
     input.style.position = 'fixed';
-    // On mobile, always center for reliability
     const isMobile = isMobileDevice();
     if (isMobile) {
-    input.style.top = '50%';
-    input.style.left = '50%';
-    input.style.transform = 'translate(-50%, -50%)';
+      input.style.top = '50%';
+      input.style.left = '50%';
+      input.style.transform = 'translate(-50%, -50%)';
     } else if (anchorBox) {
-      // Desktop: anchor under the clicked canvas box
       const canvasRect = this.canvas.getBoundingClientRect();
       const left = Math.round(canvasRect.left + anchorBox.x);
       const top = Math.round(canvasRect.top + anchorBox.y + anchorBox.height + 2);
@@ -27,15 +230,7 @@ Object.assign(SpiralCalendar.prototype, {
     input.style.pointerEvents = 'auto';
     input.style.width = '2px';
     input.style.height = '2px';
-    
-    // Convert UTC event time to local time for the input picker
-    const eventTime = new Date(type === 'start' ? event.start : event.end);
-    // Apply timezone offset to convert from UTC (display) to local time (picker)
-    const deviceOffsetHours = (typeof getDeviceTimezoneOffsetHours === 'function')
-      ? getDeviceTimezoneOffsetHours(eventTime)
-      : (eventTime.getTimezoneOffset() / -60);
-    const localTime = new Date(eventTime.getTime() - (deviceOffsetHours * 60 * 60 * 1000));
-    input.value = formatDateTimeLocalForInput(localTime);
+    input.value = localValue;
     
     document.body.appendChild(input);
     
@@ -56,42 +251,7 @@ Object.assign(SpiralCalendar.prototype, {
     
     const handleChange = () => {
       if (input.value) {
-        if (type === 'start') {
-        const newStart = parseDateTimeLocalAsUTC(input.value);
-          event.start = newStart;
-          // Auto-update end time if start time is later than or equal to end time
-          if (newStart >= event.end) {
-            const newEnd = new Date(newStart);
-          newEnd.setUTCHours(newStart.getUTCHours() + 1);
-            event.end = newEnd;
-          }
-        } else {
-        const newEnd = parseDateTimeLocalAsUTC(input.value);
-          // Prevent end date from being earlier than start date
-          if (newEnd < event.start) {
-            // Auto-adjust end time to be 1 hour after start time
-            const adjustedEnd = new Date(event.start);
-          adjustedEnd.setUTCHours(event.start.getUTCHours() + 1);
-            event.end = adjustedEnd;
-          } else {
-            event.end = newEnd;
-          }
-        }
-        event.lastModified = Date.now();
-        // Mark that changes have been made
-        this._detailViewHasChanges = true;
-        // If this is a draft event, make sure it's still the active one
-        if (event.isDraft && this.draftEvent && this.draftEvent.segmentId === event.segmentId) {
-          this.draftEvent = event; // Update the stored draft event
-        }
-        this.drawSpiral();
-        // Save events to localStorage
-        this.saveEventsToStorage();
-        // Update event list to show new icon state (with delay to ensure properties are saved)
-        setTimeout(() => renderEventList(), 0);
-
-        // If current selection no longer includes this event, jump to event start
-        this._ensureSelectedSegmentContainsEventOrJump(event);
+        this.applyEventDateTimeInputValue(event, type, input.value);
       }
       if (input.parentNode) {
         input.remove();

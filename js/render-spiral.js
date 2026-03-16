@@ -1131,21 +1131,11 @@ Object.assign(SpiralCalendar.prototype, {
       this.persistentInputsState.inputsCreated = true;
       this._detailViewHasChanges = false; // Reset changes when opening detail view
 
-      // Format datetime for input
-      const formatLocalDateTime = (date) => {
-        const year = date.getFullYear();
-        const month = pad2(date.getMonth() + 1);
-        const day = pad2(date.getDate());
-        const hours = pad2(date.getHours());
-        const minutes = pad2(date.getMinutes());
-        return `${year}-${month}-${day}T${hours}:${minutes}`;
-      };
-
       // Create start time input
       const startInput = document.createElement('input');
       startInput.id = 'persistentStartDateTime';
       startInput.type = 'datetime-local';
-      startInput.value = formatLocalDateTime(new Date(event.start));
+      startInput.value = formatDateTimeLocalForInput(new Date(event.start));
       
       const inputWidth = circleRadius * 1.2; // Scale with circle size
       const inputHeight = baseFontSize * 1.2;
@@ -1173,7 +1163,7 @@ Object.assign(SpiralCalendar.prototype, {
       const endInput = document.createElement('input');
       endInput.id = 'persistentEndDateTime';
       endInput.type = 'datetime-local';
-      endInput.value = formatLocalDateTime(new Date(event.end));
+      endInput.value = formatDateTimeLocalForInput(new Date(event.end));
       
       const endInputTop = dateTimeY + inputHeight * 0.6;
       
@@ -1233,7 +1223,7 @@ Object.assign(SpiralCalendar.prototype, {
             // Auto-adjust end time to be 1 hour after start time
             const adjustedEnd = new Date(newStart);
           adjustedEnd.setUTCHours(newStart.getUTCHours() + 1);
-            endInput.value = formatLocalDateTime(adjustedEnd);
+            endInput.value = formatDateTimeLocalForInput(adjustedEnd);
             event.start = newStart;
             event.end = adjustedEnd;
           } else {
@@ -1278,7 +1268,7 @@ Object.assign(SpiralCalendar.prototype, {
         const startDate = parseDateTimeLocalAsUTC(startInput.value);
           const endDate = new Date(startDate);
         endDate.setUTCHours(startDate.getUTCHours() + 1); // Add 1 hour
-          endInput.value = formatLocalDateTime(endDate);
+          endInput.value = formatDateTimeLocalForInput(endDate);
           updateEvent(); // Update the event with new end time
         }
       });
@@ -1302,16 +1292,7 @@ Object.assign(SpiralCalendar.prototype, {
       
       // Format current start time for input
       const startDate = new Date(event.start);
-      const formatLocalDateTime = (date) => {
-        const year = date.getFullYear();
-        const month = pad2(date.getMonth() + 1);
-        const day = pad2(date.getDate());
-        const hours = pad2(date.getHours());
-        const minutes = pad2(date.getMinutes());
-        return `${year}-${month}-${day}T${hours}:${minutes}`;
-      };
-      
-      startInput.value = formatLocalDateTime(startDate);
+      startInput.value = formatDateTimeLocalForInput(startDate);
       
       const inputWidth = 180;
       const inputHeight = baseFontSize * 1.5;
@@ -1341,7 +1322,7 @@ Object.assign(SpiralCalendar.prototype, {
       endInput.type = 'datetime-local';
       
       const endDate = new Date(event.end);
-      endInput.value = formatLocalDateTime(endDate);
+      endInput.value = formatDateTimeLocalForInput(endDate);
       
       const endInputTop = dateTimeY + inputHeight / 4;
       
