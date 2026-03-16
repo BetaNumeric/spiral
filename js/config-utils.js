@@ -38,8 +38,8 @@ const DEV_MODE = true;
 // Study mode flag - set to true to enable study session controls
 const STUDY_MODE = true;
 
-// Runtime DEV_MODE override (for toggle button)
-let runtimeDevModeOverride = null;
+// Runtime DEV_MODE override (for toggle button). Default to hidden.
+let runtimeDevModeOverride = false;
 
 // Helper function to get effective DEV_MODE state
 function getEffectiveDevMode() {
