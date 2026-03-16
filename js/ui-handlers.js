@@ -1184,6 +1184,8 @@ Object.assign(SpiralCalendar.prototype, {
         longPressPendingTouchId: null,
         longPressStartTouchX: 0,
         longPressStartTouchY: 0,
+        longPressCurrentTouchX: 0,
+        longPressCurrentTouchY: 0,
         joystickActive: false,
         joystickConsumedTouch: false,
         joystickTouchId: null,

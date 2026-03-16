@@ -772,9 +772,11 @@ Object.assign(SpiralCalendar.prototype, {
           : (isDarkMode ? '0.20' : '0.12');
         selectedRowStyle = `background-color: rgba(${r}, ${g}, ${b}, ${fillAlpha});`;
       }
-      const horizontalMargin = (useFullRowHighlight && !isEventPanel) ? 'margin-left: -0.5em; margin-right: -0.5em; padding-left: 0.5em; padding-right: 0.5em; width: calc(100% + 1em);' : '';
+      const rowBleedStyle = !isEventPanel
+        ? 'margin-left: -0.5em; margin-right: -0.5em; padding-left: 0.5em; padding-right: 0.5em; width: calc(100% + 1em);'
+        : '';
       // Apply scaled padding for proximity-based height scaling
-      li.style.cssText = `padding: ${scaledPadding}em 0; ${horizontalMargin} border-bottom: 1px solid #eee; display: flex; justify-content: ${isMobile || isEventPanel ? 'space-between' : 'center'}; align-items: center; gap: ${gapSize}; overflow: hidden; ${!horizontalMargin ? 'max-width: 100%; width: 100%;' : ''} box-sizing: border-box; transition: padding 0.3s ease, background-color 0.2s ease; ${selectedRowStyle}`;
+      li.style.cssText = `padding: ${scaledPadding}em 0; ${rowBleedStyle} border-bottom: 1px solid #eee; display: flex; justify-content: ${isMobile || isEventPanel ? 'space-between' : 'center'}; align-items: center; gap: ${gapSize}; overflow: hidden; ${!rowBleedStyle ? 'max-width: 100%; width: 100%;' : ''} box-sizing: border-box; transition: padding 0.3s ease, background-color 0.2s ease; ${selectedRowStyle}`;
       
       // Left side with color dot and title
         const leftContent = document.createElement('div');

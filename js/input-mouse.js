@@ -155,9 +155,8 @@ Object.assign(SpiralCalendar.prototype, {
       }
 
       if (this.touchState && this.touchState.longPressPendingTouchId === 'mouse') {
-        const dx = mouseX - this.touchState.longPressStartTouchX;
-        const dy = mouseY - this.touchState.longPressStartTouchY;
-        if (Math.hypot(dx, dy) > 12) {
+        const cancelledForDrag = this.trackPendingJoystickMotion(mouseX, mouseY);
+        if (cancelledForDrag) {
           this.resetPendingTouchJoystick();
           this.beginPointerRotationDragAtPoint(mouseX, mouseY);
         } else {

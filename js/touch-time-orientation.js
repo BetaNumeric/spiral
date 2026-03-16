@@ -217,6 +217,8 @@ Object.assign(SpiralCalendar.prototype, {
     this.touchState.longPressPendingTouchId = null;
     this.touchState.longPressStartTouchX = 0;
     this.touchState.longPressStartTouchY = 0;
+    this.touchState.longPressCurrentTouchX = 0;
+    this.touchState.longPressCurrentTouchY = 0;
   },
 
   clearTouchTapSequence() {
@@ -291,6 +293,58 @@ Object.assign(SpiralCalendar.prototype, {
     this.playFeedback(0.15, 10);
   },
 
+  getTouchJoystickLongPressConfig() {
+    return {
+      activationDelayMs: 440,
+      dragCancelDistance: 12,
+      motionResetDistance: 3
+    };
+  },
+
+  schedulePendingJoystickActivation(pointerId) {
+    if (!this.touchState || this.touchState.longPressPendingTouchId !== pointerId) return;
+
+    this.clearTouchJoystickTimer();
+    const { activationDelayMs } = this.getTouchJoystickLongPressConfig();
+
+    this.touchState.longPressTimerId = setTimeout(() => {
+      if (!this.touchState || this.touchState.longPressPendingTouchId !== pointerId) {
+        return;
+      }
+      this.activatePendingJoystick(
+        pointerId,
+        this.touchState.longPressCurrentTouchX,
+        this.touchState.longPressCurrentTouchY
+      );
+    }, activationDelayMs);
+  },
+
+  trackPendingJoystickMotion(pointX, pointY) {
+    if (!this.touchState || this.touchState.longPressPendingTouchId === null) {
+      return false;
+    }
+
+    const {
+      dragCancelDistance,
+      motionResetDistance
+    } = this.getTouchJoystickLongPressConfig();
+    const dxFromStart = pointX - this.touchState.longPressStartTouchX;
+    const dyFromStart = pointY - this.touchState.longPressStartTouchY;
+    if (Math.hypot(dxFromStart, dyFromStart) > dragCancelDistance) {
+      return true;
+    }
+
+    const dxFromCurrent = pointX - this.touchState.longPressCurrentTouchX;
+    const dyFromCurrent = pointY - this.touchState.longPressCurrentTouchY;
+    if (Math.hypot(dxFromCurrent, dyFromCurrent) > motionResetDistance) {
+      this.touchState.longPressCurrentTouchX = pointX;
+      this.touchState.longPressCurrentTouchY = pointY;
+      this.schedulePendingJoystickActivation(this.touchState.longPressPendingTouchId);
+    }
+
+    return false;
+  },
+
   getTouchJoystickTravel(dx, dy, maxTravel = 68) {
     const distance = Math.hypot(dx, dy);
     if (!distance || distance <= maxTravel) {
@@ -321,6 +375,30 @@ Object.assign(SpiralCalendar.prototype, {
       dayStepVerticalRatio: 0.9,
       circularGuideRadius: Math.round(clamp(minDimension * 0.024, 16, 28)),
       knobRadius: Math.round(clamp(minDimension * 0.022, 16, 22))
+    };
+  },
+
+  getTouchJoystickOverlayPalette(circularActive, axialActive) {
+    const isDarkCanvas = !!(document.body && document.body.classList.contains('dark-mode'));
+    const alpha = (lightModeAlpha, darkModeAlpha = lightModeAlpha) =>
+      isDarkCanvas ? darkModeAlpha : lightModeAlpha;
+
+    // The spiral canvas is CSS-inverted in dark mode, so these stay in
+    // pre-inversion dark colors to display as light overlays on screen.
+    return {
+      centerDotRadius: 3,
+      angularAreaFill: circularActive
+        ? `rgba(28,36,48,${alpha('0.04', '0.08')})`
+        : `rgba(28,36,48,${alpha('0.02', '0.04')})`,
+      guideStroke: circularActive
+        ? `rgba(28,36,48,${alpha('0.18', '0.32')})`
+        : `rgba(19,29,42,${alpha('0.06', '0.14')})`,
+      centerDotColor: axialActive
+        ? `rgba(28,36,48,${alpha('0.14', '0.24')})`
+        : `rgba(28,36,48,${alpha('0.1', '0.18')})`,
+      knobFill: circularActive
+        ? `rgba(28,36,48,${alpha('0.88', '0.94')})`
+        : `rgba(28,36,48,${alpha('0.8', '0.86')})`
     };
   },
 
@@ -456,13 +534,9 @@ Object.assign(SpiralCalendar.prototype, {
     this.touchState.longPressPendingTouchId = pointerId;
     this.touchState.longPressStartTouchX = originX;
     this.touchState.longPressStartTouchY = originY;
-
-    this.touchState.longPressTimerId = setTimeout(() => {
-      if (!this.touchState || this.touchState.longPressPendingTouchId !== pointerId) {
-        return;
-      }
-      this.activatePendingJoystick(pointerId, originX, originY);
-    }, 360);
+    this.touchState.longPressCurrentTouchX = originX;
+    this.touchState.longPressCurrentTouchY = originY;
+    this.schedulePendingJoystickActivation(pointerId);
 
     return true;
   },
@@ -1131,9 +1205,8 @@ Object.assign(SpiralCalendar.prototype, {
           this.resetPendingTouchJoystick();
         } else {
           const { touchX, touchY } = this._touchToCanvasPoint(activeTouch);
-          const dx = touchX - this.touchState.longPressStartTouchX;
-          const dy = touchY - this.touchState.longPressStartTouchY;
-          if (Math.hypot(dx, dy) > 12) {
+          const cancelledForDrag = this.trackPendingJoystickMotion(touchX, touchY);
+          if (cancelledForDrag) {
             this.resetPendingTouchJoystick();
             this.beginSingleTouchRotationDrag(activeTouch);
           } else {
@@ -1510,24 +1583,22 @@ Object.assign(SpiralCalendar.prototype, {
       : this.touchState.joystickMode;
     const circularActive = joystickMode === 'circular';
     const axialActive = joystickMode === 'axial';
-    const isDark = !!this.state.darkMode;
-    const centerDotRadius = 3;
-    const centerDotColor = axialActive
-      ? (isDark ? 'rgba(255,255,255,0.18)' : 'rgba(28,36,48,0.14)')
-      : (isDark ? 'rgba(255,255,255,0.14)' : 'rgba(28,36,48,0.1)');
+    const {
+      centerDotRadius,
+      angularAreaFill,
+      guideStroke,
+      centerDotColor,
+      knobFill
+    } = this.getTouchJoystickOverlayPalette(circularActive, axialActive);
 
     this.ctx.save();
-    this.ctx.fillStyle = circularActive
-      ? (isDark ? 'rgba(255,255,255,0.055)' : 'rgba(28,36,48,0.04)')
-      : (isDark ? 'rgba(255,255,255,0.028)' : 'rgba(28,36,48,0.02)');
+    this.ctx.fillStyle = angularAreaFill;
     this.ctx.beginPath();
     this.ctx.arc(baseX, baseY, axialEnterRadius, 0, Math.PI * 2);
     this.ctx.fill();
 
     this.ctx.lineWidth = 1.5;
-    this.ctx.strokeStyle = circularActive
-      ? (isDark ? 'rgba(255,255,255,0.22)' : 'rgba(28,36,48,0.18)')
-      : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(19,29,42,0.06)');
+    this.ctx.strokeStyle = guideStroke;
     this.ctx.beginPath();
     this.ctx.arc(baseX, baseY, circularGuideRadius, 0, Math.PI * 2);
     this.ctx.stroke();
@@ -1540,9 +1611,7 @@ Object.assign(SpiralCalendar.prototype, {
     this.ctx.lineTo(knobX, knobY);
     this.ctx.stroke();
 
-    this.ctx.fillStyle = circularActive
-      ? (isDark ? 'rgba(255,255,255,0.92)' : 'rgba(28,36,48,0.88)')
-      : (isDark ? 'rgba(255,255,255,0.86)' : 'rgba(28,36,48,0.8)');
+    this.ctx.fillStyle = knobFill;
     this.ctx.beginPath();
     this.ctx.arc(knobX, knobY, knobRadius, 0, Math.PI * 2);
     this.ctx.fill();
