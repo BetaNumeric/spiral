@@ -1474,12 +1474,19 @@ Object.assign(SpiralCalendar.prototype, {
           if (allEvents.length > 0) {
             // Use cached layout for speed
             this.ensureLayoutCache();
-            const { eventToLane } = this.layoutCache;
+            const { eventToLane, eventToComponent, componentLaneCount } = this.layoutCache;
             // Compute lane assignment inside the hour for non-overlapping sharing within same lane
             const { lanes: hourLanes, numLanes: hourLaneCount } = this.computeEventLanes(allEvents);
 
             const getLaneCountForEvent = (evData) => {
               if (!CONFIG.UNIFORM_EVENT_THICKNESS) return Math.max(1, hourLaneCount);
+              const componentId = eventToComponent ? eventToComponent.get(evData.event) : undefined;
+              const componentCount = componentId !== undefined && componentLaneCount
+                ? componentLaneCount.get(componentId)
+                : null;
+              if (Number.isFinite(componentCount) && componentCount > 0) {
+                return componentCount;
+              }
               return this.getMaxOverlapForEventAcrossHours(evData.event);
             };
 

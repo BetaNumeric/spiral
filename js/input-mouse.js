@@ -643,6 +643,11 @@ Object.assign(SpiralCalendar.prototype, {
                     })
                   };
                   this.events.push(newEvent);
+                  this._eventsVersion++;
+                  this.saveEventsToStorage();
+                  if (typeof window.renderEventList === 'function') {
+                    window.renderEventList();
+                  }
                   this.draftEvent = null; // Clear draft event
                   
                 // Reset auto-activated settings
@@ -673,6 +678,11 @@ Object.assign(SpiralCalendar.prototype, {
                 const eventIndex = this.events.indexOf(btn.event);
                 if (eventIndex > -1) {
                   this.events.splice(eventIndex, 1);
+                  this._eventsVersion++;
+                  this.saveEventsToStorage();
+                  if (typeof window.renderEventList === 'function') {
+                    window.renderEventList();
+                  }
                   this.deleteButtonInfo = null;
                   this.addButtonInfo = null;
                   this.titleClickArea = null;

@@ -460,12 +460,17 @@ Object.assign(SpiralCalendar.prototype, {
       // Collect window-overlapping events and give them indices
       const nodes = [];
       const eventIndex = new Map();
+      const eventBounds = new Map();
       for (const ev of this.events) {
         const s = new Date(ev.start);
         const e = new Date(ev.end);
         if (s < windowEnd && e > windowStart) {
           eventIndex.set(ev, nodes.length);
           nodes.push(ev);
+          eventBounds.set(ev, {
+            startMs: s.getTime(),
+            endMs: e.getTime()
+          });
         }
       }
       const n = nodes.length;
@@ -474,23 +479,34 @@ Object.assign(SpiralCalendar.prototype, {
       // Disjoint set
       const { parent, find, unite } = createUnionFind(n);
 
-      // Build co-occurrence by iterating each hour segment in window
+      // Build actual overlap connectivity by iterating each hour segment in window
       const totalHours = this.state.days * CONFIG.SEGMENTS_PER_DAY;
       for (let h = 0; h < totalHours; h++) {
         const hourStart = new Date(windowStart.getTime() + h * 60 * 60 * 1000);
         const hourEnd = new Date(hourStart.getTime() + 60 * 60 * 1000);
+        const hourStartMs = hourStart.getTime();
+        const hourEndMs = hourEnd.getTime();
         // Gather events in this hour
         const present = [];
         for (const ev of nodes) {
-          const s = new Date(ev.start);
-          const e = new Date(ev.end);
-          if (s < hourEnd && e > hourStart) present.push(ev);
+          const bounds = eventBounds.get(ev);
+          if (bounds && bounds.startMs < hourEndMs && bounds.endMs > hourStartMs) {
+            present.push(ev);
+          }
         }
         if (present.length > 1) {
-          const baseIdx = eventIndex.get(present[0]);
-          for (let i = 1; i < present.length; i++) {
-            const idx = eventIndex.get(present[i]);
-            unite(baseIdx, idx);
+          for (let i = 0; i < present.length; i++) {
+            const eventA = present[i];
+            const boundsA = eventBounds.get(eventA);
+            if (!boundsA) continue;
+            for (let j = i + 1; j < present.length; j++) {
+              const eventB = present[j];
+              const boundsB = eventBounds.get(eventB);
+              if (!boundsB) continue;
+              if (boundsA.startMs < boundsB.endMs && boundsA.endMs > boundsB.startMs) {
+                unite(eventIndex.get(eventA), eventIndex.get(eventB));
+              }
+            }
           }
         }
       }
