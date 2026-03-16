@@ -1274,6 +1274,25 @@ Object.assign(SpiralCalendar.prototype, {
     return this.getCurrentRenderedSpiralScale();
   },
 
+  isDetailViewPreviewActive() {
+    return !!(
+      this.modeTransitionState &&
+      this.modeTransitionState.active &&
+      this.modeTransitionState.targetCircleMode &&
+      this.modeTransitionState.alignVisibilityToMidnight &&
+      this.modeTransitionState.detailViewPreviewSegment &&
+      this.state.detailViewDay === null
+    );
+  },
+
+  getDetailViewPreviewProgress() {
+    if (!this.isDetailViewPreviewActive()) {
+      return 0;
+    }
+
+    return Math.max(0, Math.min(1, this.getModeMorphProgress()));
+  },
+
   cancelModeTransition() {
     if (!this.modeTransitionState) return;
     if (this.modeTransitionState.animationId) {
@@ -1283,6 +1302,7 @@ Object.assign(SpiralCalendar.prototype, {
     this.modeTransitionState.active = false;
     this.modeTransitionState.startRadialOffset = 0;
     this.modeTransitionState.endRadialOffset = 0;
+    this.modeTransitionState.detailViewPreviewSegment = null;
   },
 
   startModeTransition(toCircleMode, options = {}) {
@@ -1303,6 +1323,12 @@ Object.assign(SpiralCalendar.prototype, {
       : null;
     const persistScaleState = options.persistScaleState !== false;
     const alignVisibilityToMidnight = !!options.alignVisibilityToMidnight;
+    const detailViewPreviewSegment = options.detailViewPreviewSegment
+      ? {
+          day: options.detailViewPreviewSegment.day,
+          segment: options.detailViewPreviewSegment.segment
+        }
+      : null;
 
     const fromProgress = this.isModeTransitionActive()
       ? this.getModeMorphProgress()
@@ -1361,6 +1387,7 @@ Object.assign(SpiralCalendar.prototype, {
     transition.targetCircleMode = !!toCircleMode;
     transition.restoreScaleOnExit = restoreScaleOnExit;
     transition.alignVisibilityToMidnight = alignVisibilityToMidnight;
+    transition.detailViewPreviewSegment = detailViewPreviewSegment;
     transition.progress = fromProgress;
 
     if (prefersReducedMotion || Math.abs(targetProgress - fromProgress) < 0.001) {
@@ -1369,6 +1396,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (onComplete) {
         onComplete();
       }
+      transition.detailViewPreviewSegment = null;
       if (!toCircleMode && persistScaleState && restoreScaleOnExit) {
         this.restoreOriginalSpiralScale();
         this.saveSettingsToStorage();
@@ -1402,6 +1430,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (onComplete) {
         onComplete();
       }
+      transition.detailViewPreviewSegment = null;
       if (!toCircleMode && persistScaleState && restoreScaleOnExit) {
         this.restoreOriginalSpiralScale();
         this.saveSettingsToStorage();
@@ -1548,6 +1577,7 @@ Object.assign(SpiralCalendar.prototype, {
         fromProgress: 0,
         persistScaleState: false,
         alignVisibilityToMidnight: true,
+        detailViewPreviewSegment: nextSegment,
         onComplete: applyDetailViewState
       });
     } else {
@@ -2113,7 +2143,8 @@ Object.assign(SpiralCalendar.prototype, {
     }
   },
 
-  drawDateTimeAndColorBoxes(event, centerX, dateTimeY, baseFontSize, circleRadius, buttonY = null) {
+  drawDateTimeAndColorBoxes(event, centerX, dateTimeY, baseFontSize, circleRadius, buttonY = null, options = {}) {
+    const interactive = options.interactive !== false;
     // Make boxes smaller and arrange side by side like in Event Panel
     const boxWidth = circleRadius * 0.75; // Much smaller width for compact layout
     const boxHeight = baseFontSize * 1.8; // Slightly smaller height
@@ -2123,29 +2154,37 @@ Object.assign(SpiralCalendar.prototype, {
     
     // Start date box (left side)
     const startBoxX = centerX - totalWidth / 2 + boxWidth / 2;
-    const isHoverStart = this.mouseState.lastMouseX && this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: startBoxX - boxWidth / 2, y: dateTimeY - boxHeight / 2, width: boxWidth, height: boxHeight });
+    const isHoverStart = interactive &&
+      this.mouseState.lastMouseX &&
+      this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: startBoxX - boxWidth / 2, y: dateTimeY - boxHeight / 2, width: boxWidth, height: boxHeight });
     this.drawClickableBox(startBoxX, dateTimeY, boxWidth, boxHeight, 
                          this.formatDateTimeCompact(new Date(event.start)), fontSize, '#f0f0f0', isHoverStart);
-    this.canvasClickAreas.startDateBox = {
-      x: startBoxX - boxWidth / 2,
-      y: dateTimeY - boxHeight / 2,
-      width: boxWidth,
-      height: boxHeight,
-      event: event
-    };
+    if (interactive) {
+      this.canvasClickAreas.startDateBox = {
+        x: startBoxX - boxWidth / 2,
+        y: dateTimeY - boxHeight / 2,
+        width: boxWidth,
+        height: boxHeight,
+        event: event
+      };
+    }
     
     // End date box (right side)
     const endBoxX = centerX + totalWidth / 2 - boxWidth / 2;
-    const isHoverEnd = this.mouseState.lastMouseX && this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: endBoxX - boxWidth / 2, y: dateTimeY - boxHeight / 2, width: boxWidth, height: boxHeight });
+    const isHoverEnd = interactive &&
+      this.mouseState.lastMouseX &&
+      this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: endBoxX - boxWidth / 2, y: dateTimeY - boxHeight / 2, width: boxWidth, height: boxHeight });
     this.drawClickableBox(endBoxX, dateTimeY, boxWidth, boxHeight, 
                          this.formatDateTimeCompact(new Date(event.end)), fontSize, '#f0f0f0', isHoverEnd);
-    this.canvasClickAreas.endDateBox = {
-      x: endBoxX - boxWidth / 2,
-      y: dateTimeY - boxHeight / 2,
-      width: boxWidth,
-      height: boxHeight,
-      event: event
-    };
+    if (interactive) {
+      this.canvasClickAreas.endDateBox = {
+        x: endBoxX - boxWidth / 2,
+        y: dateTimeY - boxHeight / 2,
+        width: boxWidth,
+        height: boxHeight,
+        event: event
+      };
+    }
     
     // Small connector between start and end boxes
     const dashLength = boxSpacing * 1.0; // Scale with box spacing
@@ -2163,16 +2202,20 @@ Object.assign(SpiralCalendar.prototype, {
     const calendarBoxHeight = boxHeight; // Same height as date boxes
     const calendarFontSize = fontSize; // Same font size as date boxes
     
-    const isHoverCalendar = this.mouseState.lastMouseX && this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: centerX - calendarBoxWidth / 2, y: calendarBoxY - calendarBoxHeight / 2, width: calendarBoxWidth, height: calendarBoxHeight });
+    const isHoverCalendar = interactive &&
+      this.mouseState.lastMouseX &&
+      this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: centerX - calendarBoxWidth / 2, y: calendarBoxY - calendarBoxHeight / 2, width: calendarBoxWidth, height: calendarBoxHeight });
     this.drawClickableBox(centerX, calendarBoxY, calendarBoxWidth, calendarBoxHeight, 
                          `${calendarText}`, calendarFontSize, '#ffffff', isHoverCalendar);
-    this.canvasClickAreas.calendarBox = {
-      x: centerX - calendarBoxWidth / 2,
-      y: calendarBoxY - calendarBoxHeight / 2,
-      width: calendarBoxWidth,
-      height: calendarBoxHeight,
-      event: event
-    };
+    if (interactive) {
+      this.canvasClickAreas.calendarBox = {
+        x: centerX - calendarBoxWidth / 2,
+        y: calendarBoxY - calendarBoxHeight / 2,
+        width: calendarBoxWidth,
+        height: calendarBoxHeight,
+        event: event
+      };
+    }
     
     // Color box removed - now using outer ring for color selection
   },

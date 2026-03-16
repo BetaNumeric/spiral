@@ -315,7 +315,8 @@ class SpiralCalendar {
         durationMs: 650,
         targetCircleMode: false,
         restoreScaleOnExit: true,
-        alignVisibilityToMidnight: false
+        alignVisibilityToMidnight: false,
+        detailViewPreviewSegment: null
       };
 
       // Auto time align state

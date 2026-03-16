@@ -679,7 +679,7 @@ Object.assign(SpiralCalendar.prototype, {
       }
     },
 
-    drawDetailView(maxRadius) {
+    drawDetailView(maxRadius, options = {}) {
       const detailLayout = this.getDetailViewLayout(maxRadius);
       const {
         centerX,
@@ -698,49 +698,66 @@ Object.assign(SpiralCalendar.prototype, {
         maxDescriptionHeight,
         buttonY
       } = detailLayout;
-    
-    // Clear previous button info to prevent stale references
-    this.deleteButtonInfo = null;
-    this.addButtonInfo = null;
-    this.canvasClickAreas.prevEventChevron = null;
-    this.canvasClickAreas.nextEventChevron = null;
-      
+      const entranceProgress = Number.isFinite(options.entranceProgress)
+        ? Math.max(0, Math.min(1, options.entranceProgress))
+        : 1;
+      const isPreview = !!options.preview && entranceProgress < 0.999;
+      const allowInteraction = !isPreview;
+      const panelScale = isPreview ? Math.max(0.001, entranceProgress) : 1;
+      const panelAlpha = 1;
+      const contentProgress = 1;
+
+      // Clear previous button info to prevent stale references
+      this.deleteButtonInfo = null;
+      this.addButtonInfo = null;
+      this.canvasClickAreas.prevEventChevron = null;
+      this.canvasClickAreas.nextEventChevron = null;
+      this.canvasClickAreas.colorRing = null;
+      this.canvasClickAreas.startDateBox = null;
+      this.canvasClickAreas.endDateBox = null;
+      this.canvasClickAreas.calendarBox = null;
+      this.titleClickArea = null;
+      this.descClickArea = null;
+
       this.ctx.save();
+      if (isPreview) {
+        this.ctx.globalAlpha *= panelAlpha;
+        this.ctx.translate(centerX, centerY);
+        this.ctx.scale(panelScale, panelScale);
+        this.ctx.translate(-centerX, -centerY);
+      }
+
       const detailEventState = this.mouseState.selectedSegment
         ? this.getDetailViewEventState({ ensureDraft: true })
         : null;
-      
+
       // Draw the colored outer ring and white inner circle first (before content)
       if (this.mouseState.selectedSegment) {
         const segment = this.mouseState.selectedSegment;
-        // Determine the color for the outer ring
         const outerRingColor = this.calculateSelectedSegmentColor(segment.day, segment.segment);
-        
-        // Store the calculated color in the selected segment for use by stroke
+
         this.mouseState.selectedSegment.calculatedColor = outerRingColor;
-        
-        // Draw the colored outer circle (full size)
+
         this.ctx.fillStyle = outerRingColor;
         this.ctx.beginPath();
         this.ctx.arc(centerX, centerY, outerRadius, 0, 2 * Math.PI);
         this.ctx.fill();
-        
-        // Draw the white inner circle
+
         this.ctx.fillStyle = '#fff';
         this.ctx.beginPath();
         this.ctx.arc(centerX, centerY, circleRadius, 0, 2 * Math.PI);
         this.ctx.fill();
-        
-        // Store the clickable area for the color ring
-        this.canvasClickAreas.colorRing = {
-          centerX: centerX,
-          centerY: centerY,
-          outerRadius: outerRadius,
-          innerRadius: circleRadius,
-          event: detailEventState ? detailEventState.detailEvent : null
-        };
+
+        if (allowInteraction) {
+          this.canvasClickAreas.colorRing = {
+            centerX: centerX,
+            centerY: centerY,
+            outerRadius: outerRadius,
+            innerRadius: circleRadius,
+            event: detailEventState ? detailEventState.detailEvent : null
+          };
+        }
       } else {
-        // Fallback: draw a simple white circle if no segment is selected
         this.ctx.fillStyle = 'white';
         this.ctx.strokeStyle = '#444';
         this.ctx.lineWidth = 2;
@@ -749,12 +766,12 @@ Object.assign(SpiralCalendar.prototype, {
         this.ctx.fill();
         this.ctx.stroke();
       }
-      
-      // --- DYNAMICALLY UPDATE PERSISTENT INPUTS IF THEY EXIST ---
+
       const persistentStartInput = document.getElementById('persistentStartDateTime');
       const persistentEndInput = document.getElementById('persistentEndDateTime');
       const persistentColorPicker = document.getElementById('persistentColorPicker');
-      if (persistentStartInput && persistentEndInput && persistentColorPicker && 
+      if (allowInteraction &&
+          persistentStartInput && persistentEndInput && persistentColorPicker &&
           !this.editingState.isEditingTitle && !this.editingState.isEditingDescription) {
         const inputLayout = this.getDetailViewInputLayout(detailLayout);
         persistentStartInput.style.left = `${inputLayout.inputLeft}px`;
@@ -773,27 +790,27 @@ Object.assign(SpiralCalendar.prototype, {
         persistentColorPicker.style.height = `${inputLayout.inputHeight}px`;
       }
 
-      // Draw segment information
       if (this.mouseState.selectedSegment) {
         if (!detailEventState || !detailEventState.detailEvent) {
           this.ctx.restore();
           return;
         }
+
         const {
           selectedEventCount,
           activeEventIndex,
           detailEvent,
           isDraftEventActive
         } = detailEventState;
-        
-        // Draw text on top of the circle
+
+        this.ctx.save();
+        this.ctx.globalAlpha *= contentProgress;
         this.ctx.fillStyle = '#000';
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
-        
+
         const smallLineHeight = smallFontSize;
 
-        // Event counter for real events with multiples
         if (!isDraftEventActive && selectedEventCount > 1) {
           const eventCounterText = `Event ${activeEventIndex + 1} of ${selectedEventCount}`;
           this.ctx.fillStyle = '#666';
@@ -806,59 +823,65 @@ Object.assign(SpiralCalendar.prototype, {
           const chevronGap = chevronSize * 0.8;
           const prevChevronX = centerX - counterWidth / 2 - chevronGap;
           const nextChevronX = centerX + counterWidth / 2 + chevronGap;
-
-          this.canvasClickAreas.prevEventChevron = this.drawDetailViewChevronButton(
+          const prevChevronArea = this.drawDetailViewChevronButton(
             prevChevronX,
             counterY,
             chevronSize,
             -1,
-            this.mouseState.hoveredDetailElement === 'prevEventChevron'
+            allowInteraction && this.mouseState.hoveredDetailElement === 'prevEventChevron'
           );
-          this.canvasClickAreas.nextEventChevron = this.drawDetailViewChevronButton(
+          const nextChevronArea = this.drawDetailViewChevronButton(
             nextChevronX,
             counterY,
             chevronSize,
             1,
-            this.mouseState.hoveredDetailElement === 'nextEventChevron'
+            allowInteraction && this.mouseState.hoveredDetailElement === 'nextEventChevron'
           );
+
+          if (allowInteraction) {
+            this.canvasClickAreas.prevEventChevron = prevChevronArea;
+            this.canvasClickAreas.nextEventChevron = nextChevronArea;
+          }
 
           this.ctx.fillText(eventCounterText, centerX, counterY);
         }
-          
-        // Draw title (fitted) and set click area
+
         const displayTitle = isDraftEventActive ? (detailEvent.title || 'Click to add title...') : detailEvent.title;
         const color = isDraftEventActive && !detailEvent.title ? '#999' : '#000';
         const { width: fittedWidth, height: fittedHeight, fontSizeUsed, maxTitleWidth } = this.measureTitleFitted(displayTitle, circleRadius, titleFontSize, true);
         const titleBoxWidth = maxTitleWidth + baseFontSize * 0.9;
         const titleBoxHeight = Math.max(fontSizeUsed * 1.7, baseFontSize * 1.7);
-        this.titleClickArea = {
-          x: centerX - titleBoxWidth / 2,
-          y: titleY - titleBoxHeight / 2,
-          width: titleBoxWidth,
-          height: titleBoxHeight,
-          event: detailEvent,
-          centerY: titleY,
-          fontSizeUsed,
-          textWidth: fittedWidth,
-          textHeight: fittedHeight,
-          maxTextWidth: maxTitleWidth
-        };
+        if (allowInteraction) {
+          this.titleClickArea = {
+            x: centerX - titleBoxWidth / 2,
+            y: titleY - titleBoxHeight / 2,
+            width: titleBoxWidth,
+            height: titleBoxHeight,
+            event: detailEvent,
+            centerY: titleY,
+            fontSizeUsed,
+            textWidth: fittedWidth,
+            textHeight: fittedHeight,
+            maxTextWidth: maxTitleWidth
+          };
+        }
         if (!this.hideTitleWhileEditing) {
           this.drawTitleFitted(displayTitle, centerX, titleY, circleRadius, titleFontSize, color, true);
         }
 
-        // Description height and static date/time Y (center)
         const maxWidth = circleRadius * 1.6;
-        this.drawDateTimeAndColorBoxes(detailEvent, centerX, dateTimeY, baseFontSize, circleRadius, buttonY);
+        this.drawDateTimeAndColorBoxes(detailEvent, centerX, dateTimeY, baseFontSize, circleRadius, buttonY, {
+          interactive: allowInteraction
+        });
 
-        // Description click area uses the body zone between the header and metadata row.
-        this.descClickArea = {
-          ...this.buildDescriptionClickArea(centerX, descriptionTop, descriptionBottom, circleRadius),
-          event: detailEvent,
-          centerY: descriptionY
-        };
+        if (allowInteraction) {
+          this.descClickArea = {
+            ...this.buildDescriptionClickArea(centerX, descriptionTop, descriptionBottom, circleRadius),
+            event: detailEvent,
+            centerY: descriptionY
+          };
+        }
 
-        // Draw description or placeholder
         if (!this.hideDescriptionWhileEditing) {
           this.ctx.font = getFontString(smallFontSize);
           if (detailEvent.description) {
@@ -884,31 +907,33 @@ Object.assign(SpiralCalendar.prototype, {
             this.ctx.fillText('Click to add description...', centerX, descriptionY);
           }
         }
-          
-        // Click background for description
-        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.00)';
-        this.ctx.fillRect(this.descClickArea.x, this.descClickArea.y, this.descClickArea.width, this.descClickArea.height);
 
-        this.updateActiveTitleEditorLayout(detailLayout);
-        this.updateActiveDescriptionEditorLayout(detailLayout);
-          
-        // Buttons: draft => single "Add Event"; real => "+ New" and "Delete"
+        if (allowInteraction && this.descClickArea) {
+          this.ctx.fillStyle = 'rgba(0, 0, 0, 0.00)';
+          this.ctx.fillRect(this.descClickArea.x, this.descClickArea.y, this.descClickArea.width, this.descClickArea.height);
+          this.updateActiveTitleEditorLayout(detailLayout);
+          this.updateActiveDescriptionEditorLayout(detailLayout);
+        }
+
         if (isDraftEventActive) {
           const buttonWidth = baseFontSize * 5.5;
           const buttonHeight = baseFontSize * 2.5;
           const buttonRadius = buttonHeight / 2;
           const buttonX = centerX - buttonWidth / 2;
           const deleteButtonY = buttonY - buttonHeight / 2;
-          this.deleteButtonInfo = {
-            x: buttonX,
-            y: deleteButtonY,
-            width: buttonWidth,
-            height: buttonHeight,
-            event: detailEvent,
-            isAddButton: true
-          };
-          // Hover effect for single center button
-          const isHoverButton = this.mouseState.lastMouseX && this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: buttonX, y: deleteButtonY, width: buttonWidth, height: buttonHeight });
+          if (allowInteraction) {
+            this.deleteButtonInfo = {
+              x: buttonX,
+              y: deleteButtonY,
+              width: buttonWidth,
+              height: buttonHeight,
+              event: detailEvent,
+              isAddButton: true
+            };
+          }
+          const isHoverButton = allowInteraction &&
+            this.mouseState.lastMouseX &&
+            this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: buttonX, y: deleteButtonY, width: buttonWidth, height: buttonHeight });
           this.ctx.fillStyle = isHoverButton ? '#43A047' : '#4CAF50';
           this.ctx.beginPath();
           this.ctx.roundRect(buttonX, deleteButtonY, buttonWidth, buttonHeight, buttonRadius);
@@ -927,19 +952,21 @@ Object.assign(SpiralCalendar.prototype, {
           const buttonsStartX = centerX - totalButtonWidth / 2;
           const deleteButtonY = buttonY - buttonHeight / 2;
           const addButtonX = buttonsStartX;
-          this.addButtonInfo = {
-            x: addButtonX,
-            y: deleteButtonY,
-            width: buttonWidth,
-            height: buttonHeight,
-            event: detailEvent,
-            isAddButton: true,
-            isAddAnotherButton: true
-          };
-          // Hover effect for "+ New" or "Done" button
-          const isHoverAdd = this.mouseState.lastMouseX && this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: addButtonX, y: deleteButtonY, width: buttonWidth, height: buttonHeight });
+          if (allowInteraction) {
+            this.addButtonInfo = {
+              x: addButtonX,
+              y: deleteButtonY,
+              width: buttonWidth,
+              height: buttonHeight,
+              event: detailEvent,
+              isAddButton: true,
+              isAddAnotherButton: true
+            };
+          }
+          const isHoverAdd = allowInteraction &&
+            this.mouseState.lastMouseX &&
+            this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: addButtonX, y: deleteButtonY, width: buttonWidth, height: buttonHeight });
           const buttonText = this._detailViewHasChanges ? 'Done' : '+ New';
-          //this.ctx.fillStyle = isHoverAdd ? '#43A047' : '#4CAF50';
           this.ctx.fillStyle = isHoverAdd ? '#666666' : '#888888';
           this.ctx.beginPath();
           this.ctx.roundRect(addButtonX, deleteButtonY, buttonWidth, buttonHeight, buttonRadius);
@@ -949,16 +976,20 @@ Object.assign(SpiralCalendar.prototype, {
           this.ctx.textAlign = 'center';
           this.ctx.textBaseline = 'middle';
           this.ctx.fillText(buttonText, addButtonX + buttonWidth / 2, deleteButtonY + buttonHeight / 2);
+
           const deleteButtonX = buttonsStartX + buttonWidth + buttonSpacing;
-          this.deleteButtonInfo = {
-            x: deleteButtonX,
-            y: deleteButtonY,
-            width: buttonWidth,
-            height: buttonHeight,
-            event: detailEvent
-          };
-          // Hover effect for delete button
-          const isHoverDelete = this.mouseState.lastMouseX && this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: deleteButtonX, y: deleteButtonY, width: buttonWidth, height: buttonHeight });
+          if (allowInteraction) {
+            this.deleteButtonInfo = {
+              x: deleteButtonX,
+              y: deleteButtonY,
+              width: buttonWidth,
+              height: buttonHeight,
+              event: detailEvent
+            };
+          }
+          const isHoverDelete = allowInteraction &&
+            this.mouseState.lastMouseX &&
+            this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: deleteButtonX, y: deleteButtonY, width: buttonWidth, height: buttonHeight });
           this.ctx.fillStyle = isHoverDelete ? '#e53935' : '#ff4444';
           this.ctx.beginPath();
           this.ctx.roundRect(deleteButtonX, deleteButtonY, buttonWidth, buttonHeight, buttonRadius);
@@ -969,7 +1000,10 @@ Object.assign(SpiralCalendar.prototype, {
           this.ctx.textBaseline = 'middle';
           this.ctx.fillText('Delete', deleteButtonX + buttonWidth / 2, deleteButtonY + buttonHeight / 2);
         }
+
+        this.ctx.restore();
       }
+
       this.ctx.restore();
     },
 
@@ -2410,9 +2444,13 @@ Object.assign(SpiralCalendar.prototype, {
       // Draw tooltip on top of everything (not affected by transforms)
       this.drawTooltip();
       
-      // Draw detail view if in detail view (after all other drawing)
-      if (this.state.detailViewDay !== null && !this.mouseState.isHandleDragging) {
-        this.drawDetailView(maxRadius);
+      // Draw detail view if in detail view, or preview it during the opening morph.
+      if ((this.state.detailViewDay !== null || this.isDetailViewPreviewActive()) && !this.mouseState.isHandleDragging) {
+        const previewActive = this.isDetailViewPreviewActive();
+        this.drawDetailView(maxRadius, {
+          preview: previewActive,
+          entranceProgress: previewActive ? this.getDetailViewPreviewProgress() : 1
+        });
       }
     
     // Draw current time/date display if enabled
