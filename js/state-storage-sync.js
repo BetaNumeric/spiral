@@ -1016,10 +1016,138 @@ Object.assign(SpiralCalendar.prototype, {
       const baseSpiralScale = this._originalSpiralScale !== null
         ? this._originalSpiralScale
         : this.state.spiralScale;
-      return this.getAlignedCircleModeScaleForSegment(this.mouseState.selectedSegment, baseSpiralScale);
+      return this.getMidnightAlignedCircleScale(baseSpiralScale, {
+        segment: this.mouseState.selectedSegment,
+        outerRingPaddingMultiplier: 0.5
+      });
     }
 
     return this.state.spiralScale;
+  },
+
+  getCurrentRenderedRadialOffset() {
+    const shouldAnchorSelectedSegment = !!(
+      this.mouseState.selectedSegment &&
+      (
+        this.isDetailViewCircleModeActive() ||
+        (
+          this.isModeTransitionActive() &&
+          this.modeTransitionState &&
+          this.modeTransitionState.targetCircleMode &&
+          this.modeTransitionState.alignVisibilityToMidnight
+        )
+      )
+    );
+
+    if (shouldAnchorSelectedSegment) {
+      const segment = this.mouseState.selectedSegment;
+      const baseSpiralScale = this._originalSpiralScale !== null
+        ? this._originalSpiralScale
+        : this.state.spiralScale;
+      const renderScale = this.getCurrentRenderedSpiralScale();
+      const thetaMax = this.state.days * 2 * Math.PI;
+      const minDimension = Math.min(this.canvas.clientWidth, this.canvas.clientHeight);
+      const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
+      const segmentTheta = segment.day * 2 * Math.PI + (segment.segment + 0.5) * segmentAngle;
+      const desiredRadiusFunction = this.createRadiusFunction(
+        minDimension * baseSpiralScale,
+        thetaMax,
+        this.state.radiusExponent,
+        this.state.rotation,
+        {
+          circleMode: false,
+          modeMorphProgress: 0,
+          radialOffset: 0
+        }
+      );
+      const currentRadiusFunction = this.createRadiusFunction(
+        minDimension * renderScale,
+        thetaMax,
+        this.state.radiusExponent,
+        this.state.rotation,
+        {
+          circleMode: this.isDetailViewCircleModeActive() && !this.isModeTransitionActive(),
+          modeMorphProgress: this.isModeTransitionActive() ? this.getModeMorphProgress() : 0,
+          radialOffset: 0
+        }
+      );
+      const desiredInnerRadius = desiredRadiusFunction(segmentTheta);
+      const desiredOuterRadius = desiredRadiusFunction(segmentTheta + 2 * Math.PI);
+      const desiredCenterRadius = (desiredInnerRadius + desiredOuterRadius) * 0.5;
+      const currentInnerRadius = currentRadiusFunction(segmentTheta);
+      const currentOuterRadius = currentRadiusFunction(segmentTheta + 2 * Math.PI);
+      const currentCenterRadius = (currentInnerRadius + currentOuterRadius) * 0.5;
+      return desiredCenterRadius - currentCenterRadius;
+    }
+
+    if (this.isModeTransitionActive()) {
+      const startOffset = Number.isFinite(this.modeTransitionState.startRadialOffset)
+        ? this.modeTransitionState.startRadialOffset
+        : 0;
+      const endOffset = Number.isFinite(this.modeTransitionState.endRadialOffset)
+        ? this.modeTransitionState.endRadialOffset
+        : startOffset;
+      const progress = this.getModeMorphProgress();
+      return startOffset + (endOffset - startOffset) * progress;
+    }
+
+    if (this.isDetailViewCircleModeActive()) {
+      const baseSpiralScale = this._originalSpiralScale !== null
+        ? this._originalSpiralScale
+        : this.state.spiralScale;
+      return this.getAlignedCircleModeLayoutForSegment(
+        this.mouseState.selectedSegment,
+        baseSpiralScale,
+        {
+          alignVisibilityToMidnight: true,
+          outerRingPaddingMultiplier: 0.5
+        }
+      ).radialOffset;
+    }
+
+    return 0;
+  },
+
+  getMidnightAlignedCircleScale(baseSpiralScale = this.state.spiralScale, options = {}) {
+    const outerRingPaddingMultiplier = Number.isFinite(options.outerRingPaddingMultiplier)
+      ? Math.max(0, options.outerRingPaddingMultiplier)
+      : 0.5;
+    if (!(outerRingPaddingMultiplier > 0)) {
+      return baseSpiralScale;
+    }
+
+    const dayCount = this.state.days;
+    const daySpan = 2 * Math.PI;
+    const epsilon = 1e-9;
+    const thetaMax = dayCount * daySpan;
+    const rotationTurns = this.state.rotation / daySpan;
+    const baseVisibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
+    const segment = options.segment || this.mouseState.selectedSegment;
+    const selectedDayStart = segment ? segment.day * daySpan : null;
+    const outerDayStart = Math.floor((baseVisibilityRange.max - epsilon) / daySpan) * daySpan;
+    const outerDayEnd = outerDayStart + daySpan;
+    const visibleOuterFraction = Math.max(0, Math.min(1, (baseVisibilityRange.max - outerDayStart) / daySpan));
+    const isSelectedOutermostDay = selectedDayStart !== null &&
+      Math.abs(selectedDayStart - outerDayStart) < epsilon * 10;
+    const effectiveVisibilityMax = isSelectedOutermostDay || visibleOuterFraction >= 0.5
+      ? outerDayEnd
+      : outerDayStart;
+
+    const outerVisibleDayIndex = Math.floor((effectiveVisibilityMax - epsilon) / daySpan);
+    const outerInnerT = Math.max(0, Math.min(1, (outerVisibleDayIndex + rotationTurns) / dayCount));
+    const outerOuterT = Math.max(0, Math.min(1, (outerVisibleDayIndex + 1 + rotationTurns) / dayCount));
+    const outerInnerFactor = Math.pow(outerInnerT, this.state.radiusExponent);
+    const outerOuterFactor = Math.pow(outerOuterT, this.state.radiusExponent);
+    const outerRingFactor = Math.max(0, outerOuterFactor - outerInnerFactor);
+
+    if (!(outerOuterFactor > 0) || !(outerRingFactor > 0)) {
+      return baseSpiralScale;
+    }
+
+    const scaleBoost = 1 + (outerRingFactor * outerRingPaddingMultiplier) / outerOuterFactor;
+    const minScale = 0.1;
+    const maxScale = 1.0;
+    return Math.max(minScale, Math.min(maxScale, baseSpiralScale * scaleBoost));
   },
 
   getRenderCircleMode() {
@@ -1029,24 +1157,40 @@ Object.assign(SpiralCalendar.prototype, {
     return this.state.circleMode || this.isDetailViewCircleModeActive();
   },
 
-  getAlignedCircleModeScaleForSegment(segment = this.mouseState.selectedSegment, baseSpiralScale = this.state.spiralScale) {
-    if (!segment) return baseSpiralScale;
+  getAlignedCircleModeLayoutForSegment(
+    segment = this.mouseState.selectedSegment,
+    baseSpiralScale = this.state.spiralScale,
+    options = {}
+  ) {
+    if (!segment) {
+      return {
+        scale: baseSpiralScale,
+        radialOffset: 0
+      };
+    }
 
     const canvasWidth = this.canvas.clientWidth;
     const canvasHeight = this.canvas.clientHeight;
-    const thetaMax = this.state.days * 2 * Math.PI;
-    const currentMaxRadius = Math.min(canvasWidth, canvasHeight) * baseSpiralScale;
+    const dayCount = this.state.days;
+    const minDimension = Math.min(canvasWidth, canvasHeight);
+    const thetaMax = dayCount * 2 * Math.PI;
+    const currentMaxRadius = minDimension * baseSpiralScale;
     const spiralRadiusFunction = this.createRadiusFunction(
       currentMaxRadius,
       thetaMax,
       this.state.radiusExponent,
       this.state.rotation,
-      { circleMode: false }
+      {
+        circleMode: false,
+        radialOffset: 0
+      }
     );
 
     const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
     const segmentTheta = segment.day * 2 * Math.PI + (segment.segment + 0.5) * segmentAngle;
-    const spiralRadius = spiralRadiusFunction(segmentTheta);
+    const spiralInnerRadius = spiralRadiusFunction(segmentTheta);
+    const spiralOuterRadius = spiralRadiusFunction(segmentTheta + 2 * Math.PI);
+    const spiralBandCenterRadius = (spiralInnerRadius + spiralOuterRadius) * 0.5;
     const rotationTurns = this.state.rotation / (2 * Math.PI);
     const innerT = Math.max(0, Math.min(1, (segment.day + rotationTurns) / this.state.days));
     const outerT = Math.max(0, Math.min(1, (segment.day + 1 + rotationTurns) / this.state.days));
@@ -1055,14 +1199,75 @@ Object.assign(SpiralCalendar.prototype, {
       Math.pow(outerT, this.state.radiusExponent)
     ) / 2;
 
-    if (!(discreteRadiusFactor > 0)) return baseSpiralScale;
+    if (!(discreteRadiusFactor > 0)) {
+      return {
+        scale: baseSpiralScale,
+        radialOffset: 0
+      };
+    }
 
-    const targetMaxRadius = spiralRadius / discreteRadiusFactor;
-    const newSpiralScale = targetMaxRadius / Math.min(canvasWidth, canvasHeight);
-    if (!Number.isFinite(newSpiralScale)) return baseSpiralScale;
+    const targetMaxRadius = spiralBandCenterRadius / discreteRadiusFactor;
+    let newSpiralScale = targetMaxRadius / minDimension;
+    if (!Number.isFinite(newSpiralScale)) {
+      return {
+        scale: baseSpiralScale,
+        radialOffset: 0
+      };
+    }
+
+    const alignVisibilityToMidnight = options.alignVisibilityToMidnight === true ||
+      this.state.detailViewDay !== null;
+    const outerRingPaddingMultiplier = Number.isFinite(options.outerRingPaddingMultiplier)
+      ? Math.max(0, options.outerRingPaddingMultiplier)
+      : (alignVisibilityToMidnight ? 0.5 : 0);
+
+    if (outerRingPaddingMultiplier > 0) {
+      const daySpan = 2 * Math.PI;
+      const epsilon = 1e-9;
+      const baseVisibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
+      let effectiveVisibilityMax = baseVisibilityRange.max;
+
+      if (alignVisibilityToMidnight) {
+        const selectedDayStart = segment.day * daySpan;
+        const outerDayStart = Math.floor((baseVisibilityRange.max - epsilon) / daySpan) * daySpan;
+        const outerDayEnd = outerDayStart + daySpan;
+        const visibleOuterFraction = Math.max(0, Math.min(1, (baseVisibilityRange.max - outerDayStart) / daySpan));
+        const isSelectedOutermostDay = Math.abs(selectedDayStart - outerDayStart) < epsilon * 10;
+        effectiveVisibilityMax = isSelectedOutermostDay || visibleOuterFraction >= 0.5
+          ? outerDayEnd
+          : outerDayStart;
+      }
+
+      const outerVisibleDayIndex = Math.floor((effectiveVisibilityMax - epsilon) / daySpan);
+      const outerInnerT = Math.max(0, Math.min(1, (outerVisibleDayIndex + rotationTurns) / dayCount));
+      const outerOuterT = Math.max(0, Math.min(1, (outerVisibleDayIndex + 1 + rotationTurns) / dayCount));
+      const outerInnerFactor = Math.pow(outerInnerT, this.state.radiusExponent);
+      const outerOuterFactor = Math.pow(outerOuterT, this.state.radiusExponent);
+      const outerRingFactor = Math.max(0, outerOuterFactor - outerInnerFactor);
+
+      if (outerOuterFactor > 0 && outerRingFactor > 0) {
+        const scaleBoost = 1 + (outerRingFactor * outerRingPaddingMultiplier) / outerOuterFactor;
+        newSpiralScale *= scaleBoost;
+      }
+    }
+
     const minScale = 0.1;
     const maxScale = 1.0;
-    return Math.max(minScale, Math.min(maxScale, newSpiralScale));
+    const clampedScale = Math.max(minScale, Math.min(maxScale, newSpiralScale));
+    const scaledSelectedRadius = minDimension * clampedScale * discreteRadiusFactor;
+
+    return {
+      scale: clampedScale,
+      radialOffset: spiralBandCenterRadius - scaledSelectedRadius
+    };
+  },
+
+  getAlignedCircleModeScaleForSegment(
+    segment = this.mouseState.selectedSegment,
+    baseSpiralScale = this.state.spiralScale,
+    options = {}
+  ) {
+    return this.getAlignedCircleModeLayoutForSegment(segment, baseSpiralScale, options).scale;
   },
 
   getRenderSpiralScale() {
@@ -1076,6 +1281,8 @@ Object.assign(SpiralCalendar.prototype, {
       this.modeTransitionState.animationId = null;
     }
     this.modeTransitionState.active = false;
+    this.modeTransitionState.startRadialOffset = 0;
+    this.modeTransitionState.endRadialOffset = 0;
   },
 
   startModeTransition(toCircleMode, options = {}) {
@@ -1105,10 +1312,12 @@ Object.assign(SpiralCalendar.prototype, {
     const targetProgress = toCircleMode ? 1 : 0;
     const restoreScaleOnExit = options.restoreScale !== false;
     const currentScale = this.getCurrentRenderedSpiralScale();
+    const currentRadialOffset = this.getCurrentRenderedRadialOffset();
 
     this.cancelModeTransition();
 
     let targetScale = currentScale;
+    let targetRadialOffset = 0;
     if (toCircleMode) {
       if (this.mouseState.selectedSegment) {
         if (persistScaleState && this._originalSpiralScale === null) {
@@ -1117,10 +1326,23 @@ Object.assign(SpiralCalendar.prototype, {
         const alignmentBaseScale = (persistScaleState && this._originalSpiralScale !== null)
           ? this._originalSpiralScale
           : this.state.spiralScale;
-        targetScale = this.getAlignedCircleModeScaleForSegment(
-          this.mouseState.selectedSegment,
-          alignmentBaseScale
-        );
+        if (alignVisibilityToMidnight) {
+          targetScale = this.getMidnightAlignedCircleScale(alignmentBaseScale, {
+            segment: this.mouseState.selectedSegment,
+            outerRingPaddingMultiplier: 0.5
+          });
+        } else {
+          const targetLayout = this.getAlignedCircleModeLayoutForSegment(
+            this.mouseState.selectedSegment,
+            alignmentBaseScale,
+            {
+              alignVisibilityToMidnight: false,
+              outerRingPaddingMultiplier: 0
+            }
+          );
+          targetScale = targetLayout.scale;
+          targetRadialOffset = targetLayout.radialOffset;
+        }
         if (persistScaleState) {
           this.state.spiralScale = targetScale;
           this.updateSpiralScaleUI();
@@ -1134,6 +1356,8 @@ Object.assign(SpiralCalendar.prototype, {
     transition.toProgress = targetProgress;
     transition.startScale = currentScale;
     transition.endScale = targetScale;
+    transition.startRadialOffset = currentRadialOffset;
+    transition.endRadialOffset = targetRadialOffset;
     transition.targetCircleMode = !!toCircleMode;
     transition.restoreScaleOnExit = restoreScaleOnExit;
     transition.alignVisibilityToMidnight = alignVisibilityToMidnight;

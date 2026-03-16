@@ -309,6 +309,8 @@ class SpiralCalendar {
         toProgress: 0,
         startScale: this.state.spiralScale,
         endScale: this.state.spiralScale,
+        startRadialOffset: 0,
+        endRadialOffset: 0,
         animationId: null,
         durationMs: 650,
         targetCircleMode: false,

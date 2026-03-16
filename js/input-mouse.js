@@ -1281,12 +1281,16 @@ Object.assign(SpiralCalendar.prototype, {
       const modeMorphProgress = Number.isFinite(options.modeMorphProgress)
         ? Math.max(0, Math.min(1, options.modeMorphProgress))
         : this.getModeMorphProgress();
+      const radialOffset = Number.isFinite(options.radialOffset)
+        ? options.radialOffset
+        : this.getCurrentRenderedRadialOffset();
       const turnsPerDay = 2 * Math.PI;
       const rotationTurns = rotation / turnsPerDay;
-      return (theta) => {
+      const computeBaseRadius = (theta) => {
         // Adjust theta to maintain constant spiral size during rotation
         const adjustedTheta = theta + rotation;
         const normalizedTheta = adjustedTheta / thetaMax;
+        let radius = 0;
         
         if (circleMode) {
           // Anchor the day seam to actual midnight boundaries instead of the
@@ -1295,8 +1299,8 @@ Object.assign(SpiralCalendar.prototype, {
           const dayIndex = Math.floor(rawDayTurns + 1e-9);
           const dayStartTurns = dayIndex + rotationTurns;
           const discreteT = Math.max(0, Math.min(1, dayStartTurns / dayCount));
-          
-          return maxRadius * Math.pow(discreteT, exponent);
+          radius = maxRadius * Math.pow(discreteT, exponent);
+          return Math.max(0, radius);
         }
 
         if (modeMorphProgress > 0) {
@@ -1309,7 +1313,8 @@ Object.assign(SpiralCalendar.prototype, {
           const morphedT = allowSpiralOverflow && modeMorphProgress < 1
             ? Math.max(0, morphedTurns / dayCount)
             : Math.max(0, Math.min(1, morphedTurns / dayCount));
-          return maxRadius * Math.pow(morphedT, exponent);
+          radius = maxRadius * Math.pow(morphedT, exponent);
+          return Math.max(0, radius);
         }
 
         // Spiral mode: Keep the gradual growth, but allow temporary
@@ -1317,7 +1322,33 @@ Object.assign(SpiralCalendar.prototype, {
         const t = allowSpiralOverflow
           ? Math.max(0, normalizedTheta)
           : Math.max(0, Math.min(1, normalizedTheta));
-        return maxRadius * Math.pow(t, exponent);
+        radius = maxRadius * Math.pow(t, exponent);
+        return Math.max(0, radius);
+      };
+
+      let selectedReferenceRadius = null;
+      if (radialOffset !== 0 && this.mouseState.selectedSegment) {
+        const segment = this.mouseState.selectedSegment;
+        const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
+        const segmentTheta = segment.day * 2 * Math.PI + (segment.segment + 0.5) * segmentAngle;
+        const innerRadius = computeBaseRadius(segmentTheta);
+        const outerRadius = computeBaseRadius(segmentTheta + 2 * Math.PI);
+        selectedReferenceRadius = Math.max(1e-6, (innerRadius + outerRadius) * 0.5);
+      }
+
+      return (theta) => {
+        const radius = computeBaseRadius(theta);
+        if (!(radialOffset !== 0)) {
+          return radius;
+        }
+
+        let effectiveOffset = radialOffset;
+        if (selectedReferenceRadius !== null) {
+          const offsetWeight = Math.max(0, Math.min(1, radius / selectedReferenceRadius));
+          effectiveOffset *= offsetWeight;
+        }
+
+        return Math.max(0, radius + effectiveOffset);
       };
     },
 
