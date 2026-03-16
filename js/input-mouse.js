@@ -287,6 +287,8 @@ Object.assign(SpiralCalendar.prototype, {
         }
         // If a handle is hovered, suppress segment hover checks
         if (this.mouseState.hoveredHandle) {
+          this.mouseState.hoveredSegment = null;
+          this.mouseState.hoveredEvent = null;
           shouldCheckHover = false;
         }
       } else if (this.mouseState.hoveredHandle) {
@@ -303,8 +305,9 @@ Object.assign(SpiralCalendar.prototype, {
       if (distanceFromCenter <= outerRadius) {
         shouldCheckHover = false;
         // Clear any existing hover state
-        if (this.mouseState.hoveredSegment !== null) {
+        if (this.mouseState.hoveredSegment !== null || this.mouseState.hoveredEvent !== null) {
           this.mouseState.hoveredSegment = null;
+          this.mouseState.hoveredEvent = null;
           this.drawSpiral(); // Redraw to remove hover highlight
         }
         
@@ -1251,9 +1254,10 @@ Object.assign(SpiralCalendar.prototype, {
             
             // Check if within the angular range of this segment
             if (normalizedAngle >= startTheta && normalizedAngle <= endTheta) {
-              // Check radius bounds more carefully
-              const minCheckRadius = Math.max(0, radiusFunction(startTheta));
-              const maxCheckRadius = radiusFunction(endTheta + 2 * Math.PI);
+              // Match the rendered segment band at the cursor's actual angle
+              // instead of using the whole segment's broad start/end extrema.
+              const minCheckRadius = Math.max(0, radiusFunction(normalizedAngle));
+              const maxCheckRadius = radiusFunction(normalizedAngle + 2 * Math.PI);
               
               if (radius >= minCheckRadius && radius <= maxCheckRadius) {
                 return {
