@@ -1887,7 +1887,11 @@ Object.assign(SpiralCalendar.prototype, {
     let outerRadius = radiusFunction(visibilityRange.max);
     if (this.mouseState.selectedSegment) {
       const segment = this.mouseState.selectedSegment;
-      if (this.getRenderCircleMode()) {
+      const useDayAnchoredDetailRadius = this.getRenderCircleMode() || this.isDetailViewPreviewActive();
+      if (useDayAnchoredDetailRadius) {
+        // Keep the preview and final detail view sized from the same
+        // midnight-anchored day ring so the first hour segment does not
+        // overshoot by one hour band and then snap back at the end.
         outerRadius = radiusFunction(segment.day * 2 * Math.PI);
       } else {
         const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;

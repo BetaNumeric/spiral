@@ -185,6 +185,30 @@ Object.assign(SpiralCalendar.prototype, {
           
           this.ctx.closePath();
           this.ctx.stroke();
+
+          if (segment.isSelected) {
+            // Re-stroke both radial edges explicitly so the selected outline
+            // stays complete even when the seam-aligned edge gets visually
+            // softened by neighboring fills.
+            this.ctx.beginPath();
+            this.ctx.moveTo(
+              segment.innerRadius * Math.cos(segment.startAngle),
+              segment.innerRadius * Math.sin(segment.startAngle)
+            );
+            this.ctx.lineTo(
+              segment.outerRadius * Math.cos(segment.startAngle),
+              segment.outerRadius * Math.sin(segment.startAngle)
+            );
+            this.ctx.moveTo(
+              segment.innerRadius * Math.cos(segment.endAngle),
+              segment.innerRadius * Math.sin(segment.endAngle)
+            );
+            this.ctx.lineTo(
+              segment.outerRadius * Math.cos(segment.endAngle),
+              segment.outerRadius * Math.sin(segment.endAngle)
+            );
+            this.ctx.stroke();
+          }
         } else {
           // Spiral mode highlight
           // Redraw the segment path for highlighting
@@ -232,23 +256,56 @@ Object.assign(SpiralCalendar.prototype, {
           
           // Draw the segment outline
           this.ctx.stroke();
+
+          if (segment.isSelected) {
+            this.ctx.beginPath();
+
+            const startAngle = -segment.startTheta + CONFIG.INITIAL_ROTATION_OFFSET;
+            const startInnerRadius = segment.radiusFunction(segment.startTheta);
+            const startOuterRadius = segment.radiusFunction(segment.startTheta + 2 * Math.PI);
+            this.ctx.moveTo(
+              startInnerRadius * Math.cos(startAngle),
+              startInnerRadius * Math.sin(startAngle)
+            );
+            this.ctx.lineTo(
+              startOuterRadius * Math.cos(startAngle),
+              startOuterRadius * Math.sin(startAngle)
+            );
+
+            const endAngle = -segment.endTheta + CONFIG.INITIAL_ROTATION_OFFSET;
+            const endInnerRadius = segment.radiusFunction(segment.endTheta);
+            const endOuterRadius = segment.radiusFunction(segment.endTheta + 2 * Math.PI);
+            this.ctx.moveTo(
+              endInnerRadius * Math.cos(endAngle),
+              endInnerRadius * Math.sin(endAngle)
+            );
+            this.ctx.lineTo(
+              endOuterRadius * Math.cos(endAngle),
+              endOuterRadius * Math.sin(endAngle)
+            );
+
+            this.ctx.stroke();
+          }
           
-          // Draw the leading edge only for highlighted segments
-          this.ctx.beginPath();
-          const leadingAngle = -segment.startTheta + CONFIG.INITIAL_ROTATION_OFFSET;
-          const innerRadius = segment.radiusFunction(segment.startTheta);
-          const outerRadius = segment.radiusFunction(segment.startTheta + 2 * Math.PI);
-          
-          this.ctx.moveTo(
-            innerRadius * Math.cos(leadingAngle),
-            innerRadius * Math.sin(leadingAngle)
-          );
-          this.ctx.lineTo(
-            outerRadius * Math.cos(leadingAngle),
-            outerRadius * Math.sin(leadingAngle)
-          );
-          
-          this.ctx.stroke();
+          // If the outline path stayed open, draw the start radial edge
+          // explicitly so the highlighted segment still reads as a closed band.
+          if (!segment.drawLeadingEdge) {
+            this.ctx.beginPath();
+            const leadingAngle = -segment.startTheta + CONFIG.INITIAL_ROTATION_OFFSET;
+            const innerRadius = segment.radiusFunction(segment.startTheta);
+            const outerRadius = segment.radiusFunction(segment.startTheta + 2 * Math.PI);
+            
+            this.ctx.moveTo(
+              innerRadius * Math.cos(leadingAngle),
+              innerRadius * Math.sin(leadingAngle)
+            );
+            this.ctx.lineTo(
+              outerRadius * Math.cos(leadingAngle),
+              outerRadius * Math.sin(leadingAngle)
+            );
+            
+            this.ctx.stroke();
+          }
         }
       }
     },

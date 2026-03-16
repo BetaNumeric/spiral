@@ -2390,13 +2390,16 @@ Object.assign(SpiralCalendar.prototype, {
       this._startupHourRevealCount = null;
       this.drawDayNumbers();
       
+      const detailPreviewActive = this.isDetailViewPreviewActive();
+      const detailOverlayActive = (this.state.detailViewDay !== null || detailPreviewActive) &&
+        !this.mouseState.isHandleDragging;
+
       // Draw month lines on top of all segments
       this.drawMonthLines();
 
       // Draw arc lines on top of everything
       this.drawArcLines();
       
-      // Draw midnight lines on top of all segments
       this.drawMidnightLines();
       
       // Draw overlays on top of everything
@@ -2410,7 +2413,7 @@ Object.assign(SpiralCalendar.prototype, {
         this.mouseState.selectedSegment.calculatedColor = this.calculateSelectedSegmentColor(segment.day, segment.segment);
       }
       
-      // Draw highlighted segments on top of everything
+      // Draw highlighted segments on top of everything.
       this.drawHighlightedSegments();
 
       this.ctx.restore();
@@ -2419,8 +2422,8 @@ Object.assign(SpiralCalendar.prototype, {
       this.drawTooltip();
       
       // Draw detail view if in detail view, or preview it during the opening morph.
-      if ((this.state.detailViewDay !== null || this.isDetailViewPreviewActive()) && !this.mouseState.isHandleDragging) {
-        const previewActive = this.isDetailViewPreviewActive();
+      if (detailOverlayActive) {
+        const previewActive = detailPreviewActive;
         this.drawDetailView(maxRadius, {
           preview: previewActive,
           entranceProgress: previewActive ? this.getDetailViewPreviewProgress() : 1
