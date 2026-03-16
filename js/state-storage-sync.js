@@ -1280,7 +1280,7 @@ Object.assign(SpiralCalendar.prototype, {
       this.modeTransitionState.active &&
       this.modeTransitionState.targetCircleMode &&
       this.modeTransitionState.alignVisibilityToMidnight &&
-      this.modeTransitionState.detailViewPreviewSegment &&
+      this.modeTransitionState.showDetailViewPreview &&
       this.state.detailViewDay === null
     );
   },
@@ -1302,7 +1302,7 @@ Object.assign(SpiralCalendar.prototype, {
     this.modeTransitionState.active = false;
     this.modeTransitionState.startRadialOffset = 0;
     this.modeTransitionState.endRadialOffset = 0;
-    this.modeTransitionState.detailViewPreviewSegment = null;
+    this.modeTransitionState.showDetailViewPreview = false;
   },
 
   startModeTransition(toCircleMode, options = {}) {
@@ -1323,12 +1323,7 @@ Object.assign(SpiralCalendar.prototype, {
       : null;
     const persistScaleState = options.persistScaleState !== false;
     const alignVisibilityToMidnight = !!options.alignVisibilityToMidnight;
-    const detailViewPreviewSegment = options.detailViewPreviewSegment
-      ? {
-          day: options.detailViewPreviewSegment.day,
-          segment: options.detailViewPreviewSegment.segment
-        }
-      : null;
+    const showDetailViewPreview = !!options.detailViewPreview;
 
     const fromProgress = this.isModeTransitionActive()
       ? this.getModeMorphProgress()
@@ -1387,7 +1382,7 @@ Object.assign(SpiralCalendar.prototype, {
     transition.targetCircleMode = !!toCircleMode;
     transition.restoreScaleOnExit = restoreScaleOnExit;
     transition.alignVisibilityToMidnight = alignVisibilityToMidnight;
-    transition.detailViewPreviewSegment = detailViewPreviewSegment;
+    transition.showDetailViewPreview = showDetailViewPreview;
     transition.progress = fromProgress;
 
     if (prefersReducedMotion || Math.abs(targetProgress - fromProgress) < 0.001) {
@@ -1396,7 +1391,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (onComplete) {
         onComplete();
       }
-      transition.detailViewPreviewSegment = null;
+      transition.showDetailViewPreview = false;
       if (!toCircleMode && persistScaleState && restoreScaleOnExit) {
         this.restoreOriginalSpiralScale();
         this.saveSettingsToStorage();
@@ -1430,7 +1425,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (onComplete) {
         onComplete();
       }
-      transition.detailViewPreviewSegment = null;
+      transition.showDetailViewPreview = false;
       if (!toCircleMode && persistScaleState && restoreScaleOnExit) {
         this.restoreOriginalSpiralScale();
         this.saveSettingsToStorage();
@@ -1577,7 +1572,7 @@ Object.assign(SpiralCalendar.prototype, {
         fromProgress: 0,
         persistScaleState: false,
         alignVisibilityToMidnight: true,
-        detailViewPreviewSegment: nextSegment,
+        detailViewPreview: true,
         onComplete: applyDetailViewState
       });
     } else {

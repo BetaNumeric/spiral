@@ -642,17 +642,13 @@ Object.assign(SpiralCalendar.prototype, {
         const g = parseInt(hex.substring(2, 4), 16);
         const b = parseInt(hex.substring(4, 6), 16);
         const fillAlpha = isSelectedEvent
-          ? (isDarkMode ? '0.22' : '0.14')
-          : (isDarkMode ? '0.16' : '0.10');
-        const outlineAlpha = isSelectedEvent
-          ? (isDarkMode ? '0.40' : '0.28')
-          : (isDarkMode ? '0.26' : '0.18');
-        const outlineWidth = isSelectedEvent ? 1.5 : 1;
-        selectedRowStyle = `background-color: rgba(${r}, ${g}, ${b}, ${fillAlpha}); box-shadow: inset 0 0 0 ${outlineWidth}px rgba(${r}, ${g}, ${b}, ${outlineAlpha}); border-radius: 0.55em;`;
+          ? (isDarkMode ? '0.28' : '0.18')
+          : (isDarkMode ? '0.20' : '0.12');
+        selectedRowStyle = `background-color: rgba(${r}, ${g}, ${b}, ${fillAlpha});`;
       }
       const horizontalMargin = (useFullRowHighlight && !isEventPanel) ? 'margin-left: -0.5em; margin-right: -0.5em; padding-left: 0.5em; padding-right: 0.5em; width: calc(100% + 1em);' : '';
       // Apply scaled padding for proximity-based height scaling
-      li.style.cssText = `padding: ${scaledPadding}em 0; ${horizontalMargin} border-bottom: 1px solid #eee; display: flex; justify-content: ${isMobile || isEventPanel ? 'space-between' : 'center'}; align-items: center; gap: ${gapSize}; overflow: hidden; ${!horizontalMargin ? 'max-width: 100%; width: 100%;' : ''} box-sizing: border-box; transition: padding 0.3s ease, background-color 0.2s ease, box-shadow 0.2s ease; ${selectedRowStyle}`;
+      li.style.cssText = `padding: ${scaledPadding}em 0; ${horizontalMargin} border-bottom: 1px solid #eee; display: flex; justify-content: ${isMobile || isEventPanel ? 'space-between' : 'center'}; align-items: center; gap: ${gapSize}; overflow: hidden; ${!horizontalMargin ? 'max-width: 100%; width: 100%;' : ''} box-sizing: border-box; transition: padding 0.3s ease, background-color 0.2s ease; ${selectedRowStyle}`;
       
       // Left side with color dot and title
         const leftContent = document.createElement('div');
@@ -1346,14 +1342,15 @@ Object.assign(SpiralCalendar.prototype, {
         
         // Use same layout structure as event rows: flex with leftContent, calendarContent, middleContent, rightContent
         const horizontalMargin = !isEventPanel ? 'margin-left: -0.5em; margin-right: -0.5em; padding-left: 0.5em; padding-right: 0.5em; width: calc(100% + 1em);' : '';
-        // Sticky day header - sticks to top while day's events are visible
-        // Use same background as header for seamless coverage
-        const headerBg = isDarkMode ? 'var(--dark-bg-panel)' : (isEventPanel ? 'rgba(222, 222, 222, 0.85)' : 'rgba(255, 255, 255, 0.95)');
+        // Sticky day header - sticks to top while day's events are visible.
+        // Let the row background act as the divider instead of a separate line.
+        const headerBg = isDarkMode
+          ? (isEventPanel ? 'rgba(70, 70, 70, 0.96)' : 'rgba(58, 58, 58, 0.96)')
+          : (isEventPanel ? 'rgba(214, 214, 214, 0.96)' : 'rgba(238, 238, 238, 0.96)');
         // Calculate sticky top offset (0 if no "All:" header, or account for it)
         // We'll update this dynamically after measuring the "All:" header
         const stickyTop = '0'; // Will be updated in a follow-up pass
-        // Thinner header with border on top, sticky positioning
-        li.style.cssText = `position: sticky; top: ${stickyTop}; z-index: 4; padding: 0.3em 0; ${horizontalMargin} border-top: 2px solid ${isDarkMode ? 'var(--dark-border)' : '#ccc'}; background: ${headerBg}; display: flex; justify-content: ${isMobile || isEventPanel ? 'space-between' : 'center'}; align-items: center; gap: ${gapSize}; overflow: hidden; ${!horizontalMargin ? 'max-width: 100%; width: 100%;' : ''} box-sizing: border-box;`;
+        li.style.cssText = `position: sticky; top: ${stickyTop}; z-index: 4; padding: 0.3em 0; ${horizontalMargin} background: ${headerBg}; display: flex; justify-content: ${isMobile || isEventPanel ? 'space-between' : 'center'}; align-items: center; gap: ${gapSize}; overflow: hidden; ${!horizontalMargin ? 'max-width: 100%; width: 100%;' : ''} box-sizing: border-box;`;
         
         // Left side - matches event title position (same width/style as leftContent in event rows)
         const leftContent = document.createElement('div');

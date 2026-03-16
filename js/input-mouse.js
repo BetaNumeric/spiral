@@ -1338,7 +1338,7 @@ Object.assign(SpiralCalendar.prototype, {
 
       return (theta) => {
         const radius = computeBaseRadius(theta);
-        if (!(radialOffset !== 0)) {
+        if (radialOffset === 0) {
           return radius;
         }
 

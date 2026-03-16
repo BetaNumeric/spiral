@@ -704,8 +704,6 @@ Object.assign(SpiralCalendar.prototype, {
       const isPreview = !!options.preview && entranceProgress < 0.999;
       const allowInteraction = !isPreview;
       const panelScale = isPreview ? Math.max(0.001, entranceProgress) : 1;
-      const panelAlpha = 1;
-      const contentProgress = 1;
 
       // Clear previous button info to prevent stale references
       this.deleteButtonInfo = null;
@@ -721,7 +719,6 @@ Object.assign(SpiralCalendar.prototype, {
 
       this.ctx.save();
       if (isPreview) {
-        this.ctx.globalAlpha *= panelAlpha;
         this.ctx.translate(centerX, centerY);
         this.ctx.scale(panelScale, panelScale);
         this.ctx.translate(-centerX, -centerY);
@@ -803,8 +800,6 @@ Object.assign(SpiralCalendar.prototype, {
           isDraftEventActive
         } = detailEventState;
 
-        this.ctx.save();
-        this.ctx.globalAlpha *= contentProgress;
         this.ctx.fillStyle = '#000';
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
@@ -1000,8 +995,6 @@ Object.assign(SpiralCalendar.prototype, {
           this.ctx.textBaseline = 'middle';
           this.ctx.fillText('Delete', deleteButtonX + buttonWidth / 2, deleteButtonY + buttonHeight / 2);
         }
-
-        this.ctx.restore();
       }
 
       this.ctx.restore();
