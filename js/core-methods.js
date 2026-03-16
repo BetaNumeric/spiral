@@ -296,30 +296,47 @@ Object.assign(SpiralCalendar.prototype, {
 
     getMaxOverlapForEventAcrossHours(targetEvent) {
       if (!this.events || this.events.length === 0) return 1;
-      const start = new Date(targetEvent.start);
-      const end = new Date(targetEvent.end);
-      if (!(start < end)) return 1;
-
-      let hourCursor = this.getHourStartUtc(start);
-      const endHour = this.getHourStartUtc(end);
-      let maxOverlap = 1;
-      const oneHourMs = 60 * 60 * 1000;
-
-      // Iterate hour by hour including the last hour containing 'end' if it is exactly on hour
-      while (hourCursor <= endHour) {
-        const hourStart = new Date(hourCursor);
-        const hourEnd = new Date(hourCursor.getTime() + oneHourMs);
-        let overlapCount = 0;
-        for (const ev of this.events) {
-          const evStart = new Date(ev.start);
-          const evEnd = new Date(ev.end);
-          if (evStart < hourEnd && evEnd > hourStart) {
-            overlapCount++;
-          }
-        }
-        if (overlapCount > maxOverlap) maxOverlap = overlapCount;
-        hourCursor = new Date(hourCursor.getTime() + oneHourMs);
+      const targetStartMs = new Date(targetEvent.start).getTime();
+      const targetEndMs = new Date(targetEvent.end).getTime();
+      if (!Number.isFinite(targetStartMs) || !Number.isFinite(targetEndMs) || targetStartMs >= targetEndMs) {
+        return 1;
       }
+
+      const points = [];
+      for (const ev of this.events) {
+        const evStartMs = new Date(ev.start).getTime();
+        const evEndMs = new Date(ev.end).getTime();
+        if (!Number.isFinite(evStartMs) || !Number.isFinite(evEndMs)) continue;
+
+        const overlapStartMs = Math.max(targetStartMs, evStartMs);
+        const overlapEndMs = Math.min(targetEndMs, evEndMs);
+        if (overlapStartMs >= overlapEndMs) continue;
+
+        points.push({ t: overlapStartMs, type: 'start' });
+        points.push({ t: overlapEndMs, type: 'end' });
+      }
+
+      if (points.length === 0) return 1;
+
+      // Treat event ranges as [start, end), so a boundary touch does not count
+      // as an overlap. That means ends must be processed before starts.
+      points.sort((a, b) => {
+        if (a.t !== b.t) return a.t - b.t;
+        if (a.type === b.type) return 0;
+        return a.type === 'end' ? -1 : 1;
+      });
+
+      let currentOverlap = 0;
+      let maxOverlap = 1;
+      for (const point of points) {
+        if (point.type === 'end') {
+          currentOverlap = Math.max(0, currentOverlap - 1);
+        } else {
+          currentOverlap += 1;
+          if (currentOverlap > maxOverlap) maxOverlap = currentOverlap;
+        }
+      }
+
       return Math.max(1, maxOverlap);
     },
 

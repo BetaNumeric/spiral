@@ -2300,16 +2300,14 @@ Object.assign(SpiralCalendar.prototype, {
                   const pl = eventToLane.get(allEvents[i].event);
                   return (pl !== undefined) ? pl : (hourLanes[i] ?? 0);
                 });
-                const uniqueSorted = Array.from(new Set(persistentLanes)).sort((a, b) => a - b);
-                const laneToCompact = new Map(uniqueSorted.map((lane, i) => [lane, i]));
-                const compactLaneCount = uniqueSorted.length;
-                const groupLaneCount = Math.max(groupRequiredCount, compactLaneCount);
+                const maxPersistentLane = persistentLanes.reduce((maxLane, lane) => Math.max(maxLane, lane), 0);
+                const groupLaneCount = Math.max(groupRequiredCount, maxPersistentLane + 1);
                 for (let k = 0; k < idxList.length; k++) {
                   const i = idxList[k];
-                  const compactLane = laneToCompact.get(persistentLanes[k]) || 0;
+                  const persistentLane = persistentLanes[k];
                   const sliceH = 1 / groupLaneCount;
-                  eventSliceStartArr[i] = compactLane * sliceH;
-                  eventSliceEndArr[i] = (compactLane + 1) * sliceH;
+                  eventSliceStartArr[i] = persistentLane * sliceH;
+                  eventSliceEndArr[i] = (persistentLane + 1) * sliceH;
                 }
               }
 
