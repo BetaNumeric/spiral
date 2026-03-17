@@ -359,20 +359,172 @@ Object.assign(SpiralCalendar.prototype, {
     }
 
     document.addEventListener('keydown', (e) => {
-      if (e.key !== 'Escape' || e.defaultPrevented || this.state.detailViewDay === null) {
-        return;
-      }
-
       const target = e.target;
       const tagName = target && target.tagName ? target.tagName.toLowerCase() : '';
-      if (target && (target.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select')) {
+      const inInput = target && (target.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select');
+
+      // 1. Delete Event Handling via Delete or Backspace key
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !inInput) {
+        if (this.state.detailViewDay !== null && this.deleteButtonInfo && this.deleteButtonInfo.event) {
+          e.preventDefault();
+          const btn = this.deleteButtonInfo;
+          this.playFeedback(); // Add click sound
+          if (confirm(`Delete event "${btn.event.title}"? This action cannot be undone.`)) {
+            const eventIndex = this.events.indexOf(btn.event);
+            if (eventIndex > -1) {
+              this.runWithStudyEventSource('detail_view', () => {
+                this.events.splice(eventIndex, 1);
+                this._eventsVersion++;
+                this.saveEventsToStorage();
+              });
+              if (typeof window.renderEventList === 'function') {
+                window.renderEventList();
+              }
+              this.deleteButtonInfo = null;
+              this.addButtonInfo = null;
+              this.titleClickArea = null;
+              this.closeDetailView({ clearSelection: true });
+              
+              this.resetAutoActivatedSettings();
+              this.drawSpiral();
+            }
+          }
+          return;
+        }
+      }
+
+      // 2. Global Shortcuts (when not typing in an input)
+      if (!inInput) {
+        if (e.key === ' ' || e.key === 'Home') {
+          // Spacebar or Home: reset rotation to current time
+          e.preventDefault();
+          if (typeof this.resetToCurrentTimeFromTap === 'function') {
+            this.resetToCurrentTimeFromTap();
+          }
+          return;
+        }
+        
+        if (e.key === '+' || e.key === '=' || e.key.toLowerCase() === 'n') {
+          // '+', '=', or 'n': open New Event panel
+          e.preventDefault();
+          const addEventPanelBtn = document.getElementById('addEventPanelBtn');
+          if (addEventPanelBtn && addEventPanelBtn.offsetParent !== null) { // visible
+            addEventPanelBtn.click();
+          }
+          return;
+        }
+
+        if (e.key.toLowerCase() === 'f' || e.key === '/') {
+          // 'f' or '/': Open bottom slide and focus search
+          e.preventDefault();
+          const searchInput = document.getElementById('eventListSearchBottom') || document.getElementById('eventListSearch');
+          if (searchInput) {
+            // Expand the event list naturally up to 1/3 if bottom list
+            if (this.timeDisplayState && searchInput.id === 'eventListSearchBottom') {
+              const canvasHeight = this.canvas ? this.canvas.clientHeight : window.innerHeight;
+              const maxScreenHeight = canvasHeight * 0.6;
+              const minTopMargin = canvasHeight * 0.1;
+              const availableSpace = Math.max(0, canvasHeight - minTopMargin);
+              const maxAllowedHeight = Math.min(typeof this.getEventListMaxHeight === 'function' ? this.getEventListMaxHeight() : 300, maxScreenHeight, availableSpace);
+              this.timeDisplayState.pullUpOffset = maxAllowedHeight;
+              if (typeof this.showBottomEventList === 'function') {
+                this.showBottomEventList(maxAllowedHeight);
+              }
+              this.drawSpiral();
+            }
+            setTimeout(() => {
+              searchInput.focus();
+            }, 50); // delay focus to allow rendering
+          }
+          return;
+        }
+      }
+
+      if (e.key !== 'Escape' || e.defaultPrevented) {
         return;
       }
 
-      this.closeDetailView({ clearSelection: true, clearDraft: true });
-      this.resetAutoActivatedSettings();
-      this.drawSpiral();
-      e.preventDefault();
+      if (inInput) {
+        return;
+      }
+
+      let handled = false;
+      
+      // 1. Close specific dynamically generated dialogs first
+      const dynamicDialogs = ['newCalendarDialog', 'editCalendarDialog'];
+      for (const id of dynamicDialogs) {
+        const dialog = document.getElementById(id);
+        if (dialog && dialog.parentNode) {
+          const closeBtn = dialog.querySelector('button'); 
+          if(closeBtn) {
+            closeBtn.click();
+            handled = true;
+            break;
+          }
+        }
+      }
+      
+      if (handled) {
+        e.preventDefault();
+        return;
+      }
+
+      // 2. Settings Panel
+      const sp = document.getElementById('settingsPanel');
+      if (sp && sp.style.display !== 'none') {
+        const closeBtn = document.getElementById('closeSettingsPanelBtn');
+        if (closeBtn) {
+           closeBtn.click();
+           handled = true;
+        }
+      }
+
+      if (handled) {
+        e.preventDefault();
+        return;
+      }
+
+      // 3. Add Event Panel
+      const ep = document.getElementById('eventInputPanel');
+      if (ep && ep.style.display !== 'none') {
+        const closeBtn = document.getElementById('closeEventPanelBtn');
+        if (closeBtn) {
+           closeBtn.click();
+           handled = true;
+        }
+      }
+
+      if (handled) {
+        e.preventDefault();
+        return;
+      }
+      
+      // 4. Time Display / Bottom Event List
+      if (this.timeDisplayState && this.timeDisplayState.pullUpOffset > 0) {
+        this.timeDisplayState.pullUpOffset = 0;
+        if (typeof this.hideBottomEventList === 'function') {
+           this.hideBottomEventList();
+        }
+        this.drawSpiral();
+        handled = true;
+      }
+
+      if (handled) {
+        e.preventDefault();
+        return;
+      }
+
+      // 5. Detail View Day
+      if (this.state.detailViewDay !== null) {
+        this.closeDetailView({ clearSelection: true, clearDraft: true });
+        this.resetAutoActivatedSettings();
+        this.drawSpiral();
+        handled = true;
+      }
+
+      if (handled) {
+        e.preventDefault();
+      }
     });
 
     const gradientOverlayOpacitySlider = document.getElementById('gradientOverlayOpacitySlider');
@@ -1244,5 +1396,171 @@ Object.assign(SpiralCalendar.prototype, {
         }
       });
     }
+
+    this.setupKeyboardNavigation();
+  },
+
+  setupKeyboardNavigation() {
+    this.keyboardState = {
+      keys: {},
+      modifiers: { shift: false, alt: false, ctrl: false },
+      loopId: null,
+      lastFrameTs: 0,
+      dayAccumulator: 0,
+      lastDayDirection: 0
+    };
+
+    window.addEventListener('keydown', (e) => {
+      // Don't intercept if user is typing in an input field
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+      
+      // Track modifiers globally
+      this.keyboardState.modifiers.shift = e.shiftKey;
+      this.keyboardState.modifiers.alt = e.altKey;
+      this.keyboardState.modifiers.ctrl = e.ctrlKey;
+      
+      const key = e.key.toLowerCase();
+      if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+        if (!this.keyboardState.keys[key]) {
+          this.keyboardState.keys[key] = true;
+          this.startKeyboardLoop();
+        }
+        e.preventDefault(); // prevent scrolling the page
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      this.keyboardState.modifiers.shift = e.shiftKey;
+      this.keyboardState.modifiers.alt = e.altKey;
+      this.keyboardState.modifiers.ctrl = e.ctrlKey;
+
+      const key = e.key.toLowerCase();
+      if (typeof this.keyboardState.keys[key] !== 'undefined') {
+        this.keyboardState.keys[key] = false;
+        // Check if any tracked keys are still pressed
+        if (!Object.values(this.keyboardState.keys).some(Boolean)) {
+          this.stopKeyboardLoop();
+        }
+      }
+    });
+
+    window.addEventListener('blur', () => {
+      // Release all keys if window loses focus
+      this.keyboardState.keys = {};
+      this.keyboardState.modifiers.shift = false;
+      this.keyboardState.modifiers.alt = false;
+      this.keyboardState.modifiers.ctrl = false;
+      this.stopKeyboardLoop();
+    });
+  },
+
+  startKeyboardLoop() {
+    if (this.keyboardState.loopId) return;
+    
+    if (this.autoTimeAlignState && this.autoTimeAlignState.enabled) {
+      this.autoTimeAlignState.enabled = false;
+      if (typeof this.stopAutoTimeAlign === 'function') this.stopAutoTimeAlign();
+    }
+    
+    const step = (now) => {
+      const dtMs = Math.max(0, Math.min(80, now - (this.keyboardState.lastFrameTs || now)));
+      this.keyboardState.lastFrameTs = now;
+      
+      let rotationChanged = false;
+      const keys = this.keyboardState.keys;
+      const mods = this.keyboardState.modifiers;
+      
+      // Horizontal A/D and Left/Right -> Rotate
+      let x = 0;
+      if (keys['a'] || keys['arrowleft']) x -= 1;
+      if (keys['d'] || keys['arrowright']) x += 1;
+      
+      if (x !== 0) {
+        let multiplier = 1.0;
+        if (mods.alt && mods.shift) multiplier = 7.0; // Week scale
+        else if (mods.alt) multiplier = 0.25;         // Fine grained
+        
+        const angularVelocity = x * (Math.PI * 2.1) * multiplier; 
+        this.state.rotation += angularVelocity * (dtMs / 1000);
+        this._shouldUpdateEventList = true;
+        rotationChanged = true;
+      }
+      
+      // Vertical W/S and Up/Down -> Scroll days/hours
+      let y = 0;
+      if (keys['w'] || keys['arrowup']) y -= 1; // Scroll direction (Up)
+      if (keys['s'] || keys['arrowdown']) y += 1; // Scroll direction (Down)
+      
+      if (y !== 0) {
+        const direction = y > 0 ? -1 : 1; 
+        // Speed up repetition if we are doing small hour steps
+        const intervalMs = (mods.alt && !mods.shift) ? 120 : 250; 
+        
+        if (direction !== this.keyboardState.lastDayDirection || 
+            this.keyboardState.dayAccumulator >= intervalMs) {
+          
+          this.keyboardState.lastDayDirection = direction;
+          this.keyboardState.dayAccumulator = 0;
+          
+          if (mods.alt && mods.shift) {
+            // Alt + Shift: step by 7 days
+            if (typeof this.stepTouchJoystickDay === 'function') {
+               this.stepTouchJoystickDay(direction, 7);
+            } else {
+               this.state.rotation += (direction > 0 ? 1 : -1) * 7 * 2 * Math.PI;
+               this._shouldUpdateEventList = true;
+            }
+          } else if (mods.alt) {
+            // Alt: step by 1 hour and snap
+            const hourStep = Math.PI / 12; // 1 hour
+            this.state.rotation += (direction > 0 ? 1 : -1) * hourStep;
+            this.state.rotation = Math.round(this.state.rotation / hourStep) * hourStep;
+            this._shouldUpdateEventList = true;
+          } else {
+            // Default: step by 1 day
+            if (typeof this.stepTouchJoystickDay === 'function') {
+               this.stepTouchJoystickDay(direction, 1);
+            } else {
+               this.state.rotation += (direction > 0 ? 1 : -1) * 2 * Math.PI;
+               this._shouldUpdateEventList = true;
+            }
+          }
+          
+          rotationChanged = true;
+        } else {
+          this.keyboardState.dayAccumulator += dtMs;
+        }
+      } else {
+        this.keyboardState.lastDayDirection = 0;
+        this.keyboardState.dayAccumulator = 0;
+      }
+      
+      // Clamp the rotation so we don't spin endlessly past the visible limits if needed
+      if (this.state.detailViewDay !== null && this.mouseState && this.mouseState.selectedSegment) {
+          this.clampRotationToEventWindow();
+      }
+
+      if (rotationChanged) {
+        this.drawSpiral();
+      }
+      
+      if (Object.values(this.keyboardState.keys).some(Boolean)) {
+        this.keyboardState.loopId = requestAnimationFrame(step);
+      } else {
+        this.keyboardState.loopId = null;
+      }
+    };
+    
+    this.keyboardState.lastFrameTs = performance.now();
+    this.keyboardState.loopId = requestAnimationFrame(step);
+  },
+
+  stopKeyboardLoop() {
+    if (this.keyboardState.loopId) {
+      cancelAnimationFrame(this.keyboardState.loopId);
+      this.keyboardState.loopId = null;
+    }
+    this.keyboardState.lastDayDirection = 0;
+    this.keyboardState.dayAccumulator = 0;
   }
 });
