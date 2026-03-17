@@ -588,17 +588,9 @@ Object.assign(SpiralCalendar.prototype, {
       this.ctx.textBaseline = 'middle';
       this.ctx.fillStyle = CONFIG.LABEL_COLOR;
       
-      // Determine which hours to show
       const hoursToShow = [];
       for (let hour = 0; hour < CONFIG.SEGMENTS_PER_DAY; hour++) {
-        // Check if we should show this hour based on options
-        if (this.state.showEverySixthHour) {
-          // Only show every 6th hour (0, 6, 12, 18)
-          if (hour % 6 === 0) {
-            hoursToShow.push(hour);
-          }
-        } else {
-          // Show all hours
+        if (this.shouldShowHourNumber(hour, { includePositionShift: false })) {
           hoursToShow.push(hour);
         }
       }
@@ -641,13 +633,7 @@ Object.assign(SpiralCalendar.prototype, {
         this.ctx.rotate(Math.PI/2); // make numbers upright
         }
         
-        // Determine the display number based on startAtOne option
-        let displayNumber = hour;
-        if (this.state.hourNumbersStartAtOne) {
-          // Shift by 1: where 0 was, show 24; where 1 was, show 1, etc.
-          displayNumber = hour === 0 ? 24 : hour;
-        }
-        
+        const displayNumber = this.getHourNumberDisplayValue(hour, { includePositionShift: false });
         this.ctx.fillText(displayNumber.toString(), 0, 0);
         this.ctx.restore();
       }
@@ -664,6 +650,73 @@ Object.assign(SpiralCalendar.prototype, {
       return Math.max(8, Math.min(20, renderedFontSize * 0.8));
     },
 
+    getHourNumberDisplayValue(hour, options = {}) {
+      const includePositionShift = options.includePositionShift !== false;
+      let displayNumber = this.state.hourNumbersStartAtOne
+        ? (hour === 0 ? 24 : hour)
+        : hour;
+
+      if (includePositionShift && (this.state.hourNumbersPosition === 0 || this.state.hourNumbersPosition === 1)) {
+        if (this.state.hourNumbersOutward && !this.state.hourNumbersInsideSegment && this.state.hourNumbersPosition === 1) {
+          displayNumber = (displayNumber + 24) % 24;
+        } else {
+          displayNumber = (displayNumber + 1 + 24) % 24;
+        }
+      }
+
+      if (this.state.hourNumbersStartAtOne && displayNumber === 0) {
+        displayNumber = 24;
+      }
+
+      return displayNumber;
+    },
+
+    shouldShowHourNumber(hour, options = {}) {
+      if (!this.state.showEverySixthHour) return true;
+      return this.getHourNumberDisplayValue(hour, options) % 6 === 0;
+    },
+
+    getHourNumberCenterTheta(rawStartAngle, rawEndAngle) {
+      const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
+      if (this.state.hourNumbersPosition === 1) {
+        const positionOffset = this.state.hourNumbersInsideSegment ? -0.5 : 0.5;
+        return (rawStartAngle + rawEndAngle) / 2 + (positionOffset * segmentAngle);
+      }
+      return (rawStartAngle + rawEndAngle) / 2;
+    },
+
+    resolveHourNumberBounds(centerTheta, radiusFunction, innerRadius = null, outerRadius = null) {
+      if (innerRadius !== null && outerRadius !== null) {
+        return { computedInner: innerRadius, computedOuter: outerRadius };
+      }
+      return {
+        computedInner: radiusFunction(centerTheta),
+        computedOuter: radiusFunction(centerTheta + 2 * Math.PI)
+      };
+    },
+
+    getInsideHourNumberFontSize(computedInner, computedOuter, segmentAngle) {
+      const centerRadius = (computedInner + computedOuter) / 2;
+      const radialHeight = computedOuter - computedInner;
+      const arcWidth = centerRadius * segmentAngle;
+      const maxDimension = Math.min(radialHeight, arcWidth) * 0.4;
+      return Math.max(1, Math.min(24, maxDimension));
+    },
+
+    getHourNumberFontSize(computedInner, computedOuter, segmentAngle) {
+      if (this.state.hourNumbersOutward && !this.state.hourNumbersInsideSegment) {
+        return this.getOutsideHourNumberFontSize();
+      }
+      return this.getInsideHourNumberFontSize(computedInner, computedOuter, segmentAngle);
+    },
+
+    getHourNumberLabelRadius(computedInner, computedOuter, fontSize) {
+      if (this.state.hourNumbersOutward && !this.state.hourNumbersInsideSegment) {
+        return computedOuter + this.getOutsideHourNumberOffset(fontSize);
+      }
+      return (computedInner + computedOuter) / 2;
+    },
+
     drawHourNumberInSegment(startTheta, endTheta, radiusFunction, segment, day, rawStartAngle, rawEndAngle, innerRadius = null, outerRadius = null) {
       // Kept for direct drawing if needed; primary flow now collects and draws later
       this._renderHourNumberAtComputedPosition(startTheta, endTheta, radiusFunction, segment, day, rawStartAngle, rawEndAngle, innerRadius, outerRadius);
@@ -675,68 +728,27 @@ Object.assign(SpiralCalendar.prototype, {
       const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
       const actualHour = ((segmentId % CONFIG.SEGMENTS_PER_DAY) + CONFIG.SEGMENTS_PER_DAY) % CONFIG.SEGMENTS_PER_DAY;
 
-      // Calculate the final displayed hour (after position shifting)
-      let displayHour = actualHour;
-      if (this.state.hourNumbersPosition === 0 || this.state.hourNumbersPosition === 1) {
-        if(this.state.hourNumbersOutward && !this.state.hourNumbersInsideSegment && this.state.hourNumbersPosition === 1){
-          displayHour = (displayHour + 0 + 24) % 24;
-        } else {
-          displayHour = (displayHour + 1 + 24) % 24;
-        }
-      }
-
-      // Check "Show only every 6th hour" against the final displayed hour
-      let shouldShow = true;
-      if (this.state.showEverySixthHour) shouldShow = displayHour % 6 === 0;
-      if (!shouldShow) return;
+      if (!this.shouldShowHourNumber(actualHour)) return;
 
       const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
-      let centerTheta;
-      if (this.state.hourNumbersPosition === 1) {
-        const positionOffset = this.state.hourNumbersInsideSegment ? -0.5 : 0.5;
-        centerTheta = (rawStartAngle + rawEndAngle) / 2 + (positionOffset * segmentAngle);
-      } else {
-        centerTheta = (rawStartAngle + rawEndAngle) / 2;
-      }
-
-      let labelRadius;
-      let computedInner = innerRadius;
-      let computedOuter = outerRadius;
-      if (computedInner === null || computedOuter === null) {
-        computedInner = radiusFunction(centerTheta);
-        computedOuter = radiusFunction(centerTheta + 2 * Math.PI);
-      }
-      labelRadius = (computedInner + computedOuter) / 2;
-
-      const useOutsideLabelSizing = this.state.hourNumbersOutward && !this.state.hourNumbersInsideSegment;
-      let fontSize;
-      if (useOutsideLabelSizing) {
-        fontSize = this.getOutsideHourNumberFontSize();
-      } else {
-        // Keep inside-segment numbers constrained by the segment geometry.
-        const centerRadius = (computedInner + computedOuter) / 2;
-        const radialHeight = computedOuter - computedInner;
-        const arcWidth = centerRadius * segmentAngle;
-        const maxDimension = Math.min(radialHeight, arcWidth) * 0.4;
-        fontSize = Math.max(1, Math.min(24, maxDimension));
-      }
-
-      if (this.state.hourNumbersOutward && !this.state.hourNumbersInsideSegment) {
-        labelRadius = computedOuter + this.getOutsideHourNumberOffset(fontSize);
-      }
+      const centerTheta = this.getHourNumberCenterTheta(rawStartAngle, rawEndAngle);
+      const { computedInner, computedOuter } = this.resolveHourNumberBounds(centerTheta, radiusFunction, innerRadius, outerRadius);
+      const fontSize = this.getHourNumberFontSize(computedInner, computedOuter, segmentAngle);
+      const labelRadius = this.getHourNumberLabelRadius(computedInner, computedOuter, fontSize);
+      const displayNumber = this.getHourNumberDisplayValue(actualHour);
 
       const angle = -centerTheta + CONFIG.INITIAL_ROTATION_OFFSET;
       const x = labelRadius * Math.cos(angle);
       const y = labelRadius * Math.sin(angle);
 
       this.hourNumbersInSegments.push({
-        x, y, centerTheta, actualHour, fontSize
+        x, y, centerTheta, displayNumber, fontSize
       });
     },
 
     drawHourNumbersInSegments() {
       for (const item of this.hourNumbersInSegments) {
-        const { x, y, centerTheta, actualHour } = item;
+        const { x, y, centerTheta, displayNumber } = item;
         this.ctx.save();
         this.ctx.translate(x, y);
 
@@ -755,22 +767,6 @@ Object.assign(SpiralCalendar.prototype, {
           this.ctx.rotate(Math.PI/2);
         }
 
-        let displayNumber = actualHour;
-        if (this.state.hourNumbersStartAtOne) {
-          displayNumber = actualHour === 0 ? 24 : actualHour;
-        }
-        if (this.state.hourNumbersPosition === 0 || this.state.hourNumbersPosition === 1) {
-          if(this.state.hourNumbersOutward && !this.state.hourNumbersInsideSegment && this.state.hourNumbersPosition === 1){
-            displayNumber = (displayNumber + 0 + 24) % 24;
-          } else {
-            displayNumber = (displayNumber + 1 + 24) % 24;
-          }
-        }
-        // Apply start at one functionality to shifted numbers
-        if (this.state.hourNumbersStartAtOne && displayNumber === 0) {
-          displayNumber = 24;
-        }
-
         this.ctx.fillStyle = CONFIG.LABEL_COLOR;
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
@@ -787,71 +783,13 @@ Object.assign(SpiralCalendar.prototype, {
       const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
       const actualHour = ((segmentId % CONFIG.SEGMENTS_PER_DAY) + CONFIG.SEGMENTS_PER_DAY) % CONFIG.SEGMENTS_PER_DAY;
       
-      // Determine if this segment should show a number
-      // Calculate the final displayed hour (after position shifting) for the 6th hour check
-      let displayHour = actualHour;
-      if (this.state.hourNumbersPosition === 0 || this.state.hourNumbersPosition === 1) {
-        if(this.state.hourNumbersOutward && !this.state.hourNumbersInsideSegment && this.state.hourNumbersPosition === 1){
-          displayHour = (displayHour + 0 + 24) % 24;
-        } else {
-          displayHour = (displayHour + 1 + 24) % 24;
-        }
-      }
-      
-      let shouldShow = true;
-      if (this.state.showEverySixthHour) {
-        // Only show every 6th hour (0, 6, 12, 18)
-        shouldShow = displayHour % 6 === 0;
-      }
-      
-      if (!shouldShow) return;
-      
-      // Calculate the center of the segment
-      let centerTheta;
       const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
-      
-      // Apply position offset for middle position (1), keep others at center
-      if (this.state.hourNumbersPosition === 1) {
-        // Middle position: shift by half a segment
-        // Inside segment numbers: -0.5, Outside segment numbers: +0.5
-        const positionOffset = this.state.hourNumbersInsideSegment ? -0.5 : 0.5;
-        centerTheta = (rawStartAngle + rawEndAngle) / 2 + (positionOffset * segmentAngle);
-      } else {
-        // Other positions: always at center (no position offset)
-        centerTheta = (rawStartAngle + rawEndAngle) / 2;
-      }
-      // Position the number in the vertical center of the segment
-      // Use provided inner/outer radius for circle mode, or calculate for spiral mode
-      let labelRadius;
-      if (innerRadius !== null && outerRadius !== null) {
-        // Circle mode: use the provided inner and outer radius
-        if (this.state.hourNumbersOutward) {
-          if (this.state.hourNumbersInsideSegment) {
-            // Place numbers in the center of the segment (relative positioning)
-            labelRadius = (innerRadius + outerRadius) / 2;
-          } else {
-            // Place outward with a gap that scales down with the rendered font size.
-            labelRadius = outerRadius + this.getOutsideHourNumberOffset();
-          }
-        } else {
-          labelRadius = (innerRadius + outerRadius) / 2;
-        }
-      } else {
-        // Spiral mode: calculate both inner and outer radius to find the center
-        const innerRadius = radiusFunction(centerTheta);
-        const outerRadius = radiusFunction(centerTheta + 2 * Math.PI);
-        if (this.state.hourNumbersOutward) {
-          if (this.state.hourNumbersInsideSegment) {
-            // Place numbers in the center of the segment (relative positioning)
-            labelRadius = (innerRadius + outerRadius) / 2;
-          } else {
-            // Place outward with a gap that scales down with the rendered font size.
-            labelRadius = outerRadius + this.getOutsideHourNumberOffset();
-          }
-        } else {
-          labelRadius = (innerRadius + outerRadius) / 2; // Vertical center of the segment
-        }
-      }
+      if (!this.shouldShowHourNumber(actualHour)) return;
+
+      const centerTheta = this.getHourNumberCenterTheta(rawStartAngle, rawEndAngle);
+      const { computedInner, computedOuter } = this.resolveHourNumberBounds(centerTheta, radiusFunction, innerRadius, outerRadius);
+      const fontSize = this.getHourNumberFontSize(computedInner, computedOuter, segmentAngle);
+      const labelRadius = this.getHourNumberLabelRadius(computedInner, computedOuter, fontSize);
       const angle = -centerTheta + CONFIG.INITIAL_ROTATION_OFFSET;
       const x = labelRadius * Math.cos(angle);
       const y = labelRadius * Math.sin(angle);
@@ -878,32 +816,7 @@ Object.assign(SpiralCalendar.prototype, {
         this.ctx.rotate(Math.PI/2); // make numbers upright
       }
       
-      // Determine the display number based on the actual hour
-      let displayNumber = actualHour;
-      if (this.state.hourNumbersStartAtOne) {
-        // Shift by 1: where 0 was, show 24; where 1 was, show 1, etc.
-        displayNumber = actualHour === 0 ? 24 : actualHour;
-      }
-
-      // Rename the labels based on position (for both inside and outside segment numbers)
-      if (this.state.hourNumbersPosition === 0 || this.state.hourNumbersPosition === 1) {
-        // Position 0 and 1: shift back by 1 hour, wrapping around
-        if(this.state.hourNumbersOutward && !this.state.hourNumbersInsideSegment && this.state.hourNumbersPosition === 1){
-          displayNumber = (displayNumber + 0 + 24) % 24;
-        } else {
-          displayNumber = (displayNumber + 1 + 24) % 24;
-        }
-      }
-      // Position 2: no shift (keep original number)
-      
-      // Apply start at one functionality to shifted numbers
-      if (this.state.hourNumbersStartAtOne && displayNumber === 0) {
-        displayNumber = 24;
-      }
-
-      const fontSize = (this.state.hourNumbersOutward && !this.state.hourNumbersInsideSegment)
-        ? this.getOutsideHourNumberFontSize()
-        : Math.max(1, Math.min(24, Math.min(this.canvas.clientWidth, this.canvas.clientHeight) * this.state.spiralScale * 0.075));
+      const displayNumber = this.getHourNumberDisplayValue(actualHour);
       
       // Set text properties (same as regular hour numbers)
       this.ctx.textAlign = 'center';
