@@ -1741,6 +1741,16 @@ setGradientOverlayEnabled(enabled) {
 
 setTimeDisplayEnabled(enabled) {
   this.state.showTimeDisplay = enabled;
+
+  if (this.timeDisplayState) {
+    if (enabled) {
+      this.timeDisplayState.currentHeight = CONFIG.TIME_DISPLAY_HEIGHT;
+      this.timeDisplayState.targetHeight = CONFIG.TIME_DISPLAY_HEIGHT;
+      this.timeDisplayState.collapsed = false;
+    } else if (typeof this.resetTimeDisplayLayoutState === 'function') {
+      this.resetTimeDisplayLayoutState();
+    }
+  }
   
   // On mobile, update the stored state for orientation changes
   if (isMobileDevice()) {
@@ -1756,6 +1766,7 @@ setTimeDisplayEnabled(enabled) {
   }
   
   this.drawSpiral();
+  this.saveSettingsToStorage();
 },
 
 setSegmentEdgesEnabled(enabled) {

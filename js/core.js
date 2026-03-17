@@ -274,7 +274,8 @@ class SpiralCalendar {
       this.mobileOrientationState = {
         isLandscape: false,
         timeDisplayWasEnabled: false,
-        orientationChangeHandler: null
+        orientationChangeHandler: null,
+        orientationResizeHandler: null
       };
       
       // Overlay data to draw after events

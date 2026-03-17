@@ -389,6 +389,9 @@ Object.assign(SpiralCalendar.prototype, {
 
   saveSettingsToStorage() {
     try {
+      const persistedTimeDisplay = isMobileDevice()
+        ? this.mobileOrientationState.timeDisplayWasEnabled
+        : (this.state.originalTimeDisplay !== null ? this.state.originalTimeDisplay : this.state.showTimeDisplay);
       const settingsToSave = {
         days: this.state.days,
         // Only save original values if auto-activation is active, otherwise save current values
@@ -413,7 +416,7 @@ Object.assign(SpiralCalendar.prototype, {
         nightOverlayLng: this.state.nightOverlayLng,
         showDayOverlay: this.state.showDayOverlay,
         showGradientOverlay: this.state.showGradientOverlay,
-        showTimeDisplay: this.state.originalTimeDisplay !== null ? this.state.originalTimeDisplay : this.state.showTimeDisplay,
+        showTimeDisplay: persistedTimeDisplay,
         showSegmentEdges: this.state.showSegmentEdges,
         showArcLines: this.state.showArcLines,
         overlayStackMode: this.state.overlayStackMode,

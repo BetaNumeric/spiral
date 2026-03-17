@@ -566,25 +566,25 @@ Object.assign(SpiralCalendar.prototype, {
   setupMobileOrientationDetection() {
     // Only setup on mobile devices
     if (!isMobileDevice()) return;
-    
-    // Check if screen orientation API is available
-    if (!screen || !screen.orientation) {
-      this.setupMobileOrientationFallback();
-      return;
-    }
-    
+
     // Store the current time display state
     this.mobileOrientationState.timeDisplayWasEnabled = this.state.showTimeDisplay;
-    
-    // Create orientation change handler
-    this.mobileOrientationState.orientationChangeHandler = () => {
+
+    if (screen && screen.orientation && typeof screen.orientation.addEventListener === 'function') {
+      this.mobileOrientationState.orientationChangeHandler = () => {
+        this.handleMobileOrientationChange();
+      };
+      screen.orientation.addEventListener('change', this.mobileOrientationState.orientationChangeHandler);
+    } else {
+      this.mobileOrientationState.orientationChangeHandler = null;
+    }
+
+    this.mobileOrientationState.orientationResizeHandler = () => {
       this.handleMobileOrientationChange();
     };
-    
-    // Add event listener
-    screen.orientation.addEventListener('change', this.mobileOrientationState.orientationChangeHandler);
-    
-    // Check initial orientation
+    window.addEventListener('resize', this.mobileOrientationState.orientationResizeHandler);
+
+    this.mobileOrientationState.isLandscape = null;
     this.handleMobileOrientationChange();
   },
 
@@ -608,6 +608,13 @@ Object.assign(SpiralCalendar.prototype, {
       return this.timeDisplayState.collapseHeight || 12;
     }
     return CONFIG.TIME_DISPLAY_HEIGHT;
+  },
+
+  getCurrentMobileLandscapeState() {
+    const viewport = window.visualViewport;
+    const width = viewport && Number.isFinite(viewport.width) ? viewport.width : window.innerWidth;
+    const height = viewport && Number.isFinite(viewport.height) ? viewport.height : window.innerHeight;
+    return width > height;
   },
 
   getDisplayTime() {
@@ -807,7 +814,6 @@ Object.assign(SpiralCalendar.prototype, {
         const isLandscape = currentWidth > currentHeight;
         
         if (wasLandscape !== isLandscape) {
-          this.mobileOrientationState.isLandscape = isLandscape;
           this.handleMobileOrientationChange();
         }
         
@@ -817,48 +823,71 @@ Object.assign(SpiralCalendar.prototype, {
     };
     
     window.addEventListener('resize', resizeHandler);
-    
+
     // Store handler for cleanup
     this.mobileOrientationState.orientationChangeHandler = resizeHandler;
-    
+
     // Check initial orientation
-    this.mobileOrientationState.isLandscape = window.innerWidth > window.innerHeight;
+    this.mobileOrientationState.isLandscape = null;
     this.handleMobileOrientationChange();
+  },
+
+  resetTimeDisplayLayoutState() {
+    if (!this.timeDisplayState) return;
+
+    this.timeDisplayState.currentHeight = CONFIG.TIME_DISPLAY_HEIGHT;
+    this.timeDisplayState.targetHeight = CONFIG.TIME_DISPLAY_HEIGHT;
+    this.timeDisplayState.collapsed = false;
+    this.timeDisplayState.swipeActive = false;
+    this.timeDisplayState.swipeStartedInRenderRect = false;
+    this.timeDisplayState.swipeStartY = 0;
+    this.timeDisplayState.swipeLastY = 0;
+    this.timeDisplayState.swipeStartHeight = CONFIG.TIME_DISPLAY_HEIGHT;
+    this.timeDisplayState.swipeStartPullUpOffset = 0;
+    this.timeDisplayState.mouseActive = false;
+    this.timeDisplayState.mouseStartedInRenderRect = false;
+    this.timeDisplayState.mouseStartY = 0;
+    this.timeDisplayState.mouseLastY = 0;
+    this.timeDisplayState.mouseStartHeight = CONFIG.TIME_DISPLAY_HEIGHT;
+    this.timeDisplayState.mouseStartPullUpOffset = 0;
+    this.timeDisplayState.justFinishedDrag = false;
+    this.timeDisplayState.pullUpOffset = 0;
+
+    this.hideBottomEventList();
   },
 
   handleMobileOrientationChange() {
     if (!isMobileDevice()) return;
-    
-    let isLandscape = false;
-    
-    // Determine current orientation
-    if (screen && screen.orientation) {
-      // Use screen orientation API if available
-      const angle = screen.orientation.angle;
-      isLandscape = angle === 90 || angle === 270;
-    } else {
-      // Fallback to window dimensions
-      isLandscape = window.innerWidth > window.innerHeight;
+
+    const isLandscape = this.getCurrentMobileLandscapeState();
+    if (this.mobileOrientationState.isLandscape === isLandscape) {
+      return;
     }
-    
-    // Only act if orientation actually changed
-    if (this.mobileOrientationState.isLandscape !== isLandscape) {
-      this.mobileOrientationState.isLandscape = isLandscape;
-      
-      if (isLandscape) {
-        // Entering landscape mode - turn off time display
-        if (this.state.showTimeDisplay) {
-          this.mobileOrientationState.timeDisplayWasEnabled = true;
-          this.setTimeDisplayEnabled(false);
-          timeDisplayToggle.checked = this.state.showTimeDisplay;
-        }
+
+    this.mobileOrientationState.isLandscape = isLandscape;
+    const timeDisplayToggle = document.getElementById('timeDisplayToggle');
+
+    if (isLandscape) {
+      if (this.state.showTimeDisplay) {
+        this.mobileOrientationState.timeDisplayWasEnabled = true;
+      }
+      this.resetTimeDisplayLayoutState();
+      if (this.state.showTimeDisplay) {
+        this.setTimeDisplayEnabled(false);
       } else {
-        // Entering portrait mode - restore time display if it was enabled
-        if (this.mobileOrientationState.timeDisplayWasEnabled) {
-          this.setTimeDisplayEnabled(true);
-          timeDisplayToggle.checked = this.state.showTimeDisplay;
-        }
+        this.drawSpiral();
+      }
+    } else {
+      this.resetTimeDisplayLayoutState();
+      if (this.mobileOrientationState.timeDisplayWasEnabled) {
+        this.setTimeDisplayEnabled(true);
+      } else {
+        this.drawSpiral();
       }
     }
+
+    if (timeDisplayToggle) {
+      timeDisplayToggle.checked = this.state.showTimeDisplay;
     }
+  }
 });
