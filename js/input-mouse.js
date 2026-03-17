@@ -12,13 +12,12 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     syncViewportHostSize() {
-      const { width, height } = this.getViewportDimensions();
-      if (!width || !height) return;
+      const { height } = this.getViewportDimensions();
+      if (!height) return;
 
       const rootStyle = document.documentElement && document.documentElement.style;
       if (!rootStyle) return;
 
-      rootStyle.setProperty('--app-viewport-width', `${width}px`);
       rootStyle.setProperty('--app-viewport-height', `${height}px`);
     },
 
