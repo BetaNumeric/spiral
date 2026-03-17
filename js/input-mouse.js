@@ -36,6 +36,9 @@ Object.assign(SpiralCalendar.prototype, {
       if (this.timeDisplayState) {
         this.timeDisplayState.eventListMaxHeight = Math.floor(clientHeight / 3);
       }
+      if (typeof this.syncBottomEventListPosition === 'function') {
+        this.syncBottomEventListPosition();
+      }
       this.drawSpiral();
     },
 

@@ -709,6 +709,20 @@ Object.assign(SpiralCalendar.prototype, {
     }
   },
 
+  syncBottomEventListPosition() {
+    const bottomEventList = document.getElementById('bottomEventList');
+    if (!bottomEventList || !this.canvas) return;
+
+    const canvasHeight = this.canvas.clientHeight;
+    const pullUpOffset = this.timeDisplayState ? (this.timeDisplayState.pullUpOffset || 0) : 0;
+    const maxHeight = parseFloat(bottomEventList.style.maxHeight || '0');
+    const isVisible = Number.isFinite(maxHeight) && maxHeight > 0.5;
+
+    bottomEventList.style.bottom = 'auto';
+    bottomEventList.style.top = `${canvasHeight - pullUpOffset}px`;
+    bottomEventList.style.borderTopWidth = isVisible ? '1px' : '0px';
+  },
+
   showBottomEventList(height, skipRender = false) {
     const bottomEventList = document.getElementById('bottomEventList');
     const bottomEventListItems = document.getElementById('bottomEventListItems');
@@ -745,11 +759,7 @@ Object.assign(SpiralCalendar.prototype, {
       const displayHeight = Math.min(height, actualContentHeight + 10, maxAllowedHeight); // +10 for padding
       
       bottomEventList.style.maxHeight = displayHeight + 'px';
-      
-      // Position directly below time display
-      // List top edge should be at: canvasHeight - pullUpOffset
-      bottomEventList.style.bottom = 'auto';
-      bottomEventList.style.top = (canvasHeight - pullUpOffset) + 'px';
+      this.syncBottomEventListPosition();
       
       // Enable scrolling if content exceeds display height
       if (actualContentHeight > displayHeight) {
@@ -769,11 +779,7 @@ Object.assign(SpiralCalendar.prototype, {
     const bottomEventList = document.getElementById('bottomEventList');
     if (bottomEventList) {
       bottomEventList.style.maxHeight = '0px';
-      // Position top edge at time display bottom
-      const canvasHeight = this.canvas.clientHeight;
-      const pullUpOffset = this.timeDisplayState.pullUpOffset || 0;
-      bottomEventList.style.bottom = 'auto';
-      bottomEventList.style.top = (canvasHeight - pullUpOffset) + 'px';
+      this.syncBottomEventListPosition();
       // Clear stored height so time display returns to bottom
       this.timeDisplayState.eventListCurrentHeight = 0;
       this.timeDisplayState.eventListContentHeight = 0;
