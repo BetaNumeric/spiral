@@ -6,7 +6,7 @@
 This time-visualization application combines two time-measuring methods: the calendar and the clock. It uses the same motion we go through during a day as we move around Earth’s rotational axis. It doesn’t assume a circular repetition of days, as clocks do, but rather a continuous forward motion, as our planet does when it orbits the sun. The length of the solar illumination varies, since Earth's axis is tilted relative to the ecliptic (obliquity of the ecliptic). This is incorporated into the spiral with a subtle overlay that marks the time between sunset and sunrise for each day, based on the user’s location.
 
 
-https://github.com/user-attachments/assets/868b6aed-372f-4f0a-b018-442f5423f7c9
+
 
 
 ## **Controls and Usage**
@@ -22,9 +22,7 @@ The beginning of a new day is marked by a thicker stroke at the 24:00 / 0:00 seg
 Each day has its number and weekday written in the first segment; the first day of the month also has the month, and the first day of the year has the year number added to it. Around the outer segments are the hour numbers going from 0 to 23.
 Each revolution of the spiral is divided into 24 segments, representing the hours of a day. Hovering over them reveals the outline of the segment, and a tooltip text appears with the segment’s date and time. Clicking a segment opens a circular info screen in the middle. To properly accommodate the info circle, the calendar switches to a concentric-circle mode. It can be enlarged by zooming in, which maximizes its size in multiple steps. Clicking anywhere else closes the screen and returns to the spiral.
 
-
-https://github.com/user-attachments/assets/4cd393d3-172f-41a5-b7de-b9b2522e479f
-
+https://github.com/user-attachments/assets/25569a37-a7fb-4b82-8bc3-bdac0c8dc9c4
 
 ## **Adding and Editing Events**
 
