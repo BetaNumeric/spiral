@@ -347,6 +347,9 @@ Object.assign(SpiralCalendar.prototype, {
         end: event.end.toISOString()
       }));
       localStorage.setItem('spiralCalendarEvents', JSON.stringify(eventsData));
+      if (typeof this.recordStudyEventSnapshotDiff === 'function') {
+        this.recordStudyEventSnapshotDiff();
+      }
     } catch (error) {
       console.warn('Failed to save events to localStorage:', error);
     }
@@ -453,6 +456,9 @@ Object.assign(SpiralCalendar.prototype, {
         gradientOverlayOpacity: this.state.gradientOverlayOpacity,
       };
       localStorage.setItem('spiralCalendarSettings', JSON.stringify(settingsToSave));
+      if (typeof this.recordStudySettingsSnapshotDiff === 'function') {
+        this.recordStudySettingsSnapshotDiff(settingsToSave);
+      }
     } catch (error) {
       console.warn('Failed to save settings to localStorage:', error);
     }
@@ -1568,6 +1574,9 @@ Object.assign(SpiralCalendar.prototype, {
       this.state.detailViewDay = nextSegment.day;
       this._detailViewHasChanges = false;
       this.mouseState.hoveredDetailElement = null;
+      if (typeof this.recordStudyDetailViewOpened === 'function') {
+        this.recordStudyDetailViewOpened(nextSegment);
+      }
     };
 
     if (shouldAnimate) {
@@ -1590,6 +1599,20 @@ Object.assign(SpiralCalendar.prototype, {
       clearSelection = false,
       clearDraft = false
     } = options;
+
+    const wasDetailViewOpen = this.state.detailViewDay !== null;
+    const closingSegment = wasDetailViewOpen && this.mouseState.selectedSegment
+      ? this.getStudySegmentDescriptor(this.mouseState.selectedSegment)
+      : null;
+
+    if (wasDetailViewOpen && typeof this.recordStudyDetailViewClosed === 'function') {
+      this.recordStudyDetailViewClosed({
+        segment: closingSegment,
+        clearSelection,
+        clearDraft,
+        hadChanges: !!this._detailViewHasChanges
+      });
+    }
 
     if (clearDraft) {
       this.draftEvent = null;

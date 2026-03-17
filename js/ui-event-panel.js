@@ -996,7 +996,9 @@ Object.assign(SpiralCalendar.prototype, {
             // Mark event as added to calendar
             event.addedToCalendar = true;
             event.lastAddedToCalendar = Date.now();
-            this.saveEventsToStorage();
+            this.runWithStudyEventSource('calendar_sync', () => {
+              this.saveEventsToStorage();
+            });
             // Update event list to show new icon state (with delay to ensure properties are saved)
             setTimeout(() => renderEventList(), 0);
             return;
@@ -1075,7 +1077,9 @@ Object.assign(SpiralCalendar.prototype, {
             // Mark event as added to calendar
             event.addedToCalendar = true;
             event.lastAddedToCalendar = Date.now();
-            this.saveEventsToStorage();
+            this.runWithStudyEventSource('calendar_sync', () => {
+              this.saveEventsToStorage();
+            });
             // Update event list to show new icon state (with delay to ensure properties are saved)
             setTimeout(() => renderEventList(), 0);
             
@@ -1138,10 +1142,12 @@ Object.assign(SpiralCalendar.prototype, {
         if (confirm(`Delete event "${ev.title}"? This action cannot be undone.`)) {
           const idx = this.events.indexOf(ev);
           if (idx !== -1) {
-            this.events.splice(idx, 1);
-            this._eventsVersion++;
-            // Save events to localStorage
-            this.saveEventsToStorage();
+            this.runWithStudyEventSource('event_list', () => {
+              this.events.splice(idx, 1);
+              this._eventsVersion++;
+              // Save events to localStorage
+              this.saveEventsToStorage();
+            });
             this.drawSpiral();
             renderEventList();
           }
@@ -2218,8 +2224,10 @@ Object.assign(SpiralCalendar.prototype, {
 
               const mergeResult = mergeImportedEvents(newEvents);
               if (mergeResult.added > 0 || mergeResult.updated > 0) {
-                this._eventsVersion++; // Trigger layout cache rebuild
-                this.saveEventsToStorage();
+                this.runWithStudyEventSource('import', () => {
+                  this._eventsVersion++; // Trigger layout cache rebuild
+                  this.saveEventsToStorage();
+                });
                 this.drawSpiral();
                 renderEventList();
               }
@@ -2257,7 +2265,9 @@ Object.assign(SpiralCalendar.prototype, {
               });
               
               if (missingCalendars.size > 0) {
-                this.saveSettingsToStorage();
+                this.runWithStudyEventSource('import', () => {
+                  this.saveSettingsToStorage();
+                });
                 if (typeof this.buildCalendarMenu === 'function') {
                   this.buildCalendarMenu();
                 }
@@ -2265,8 +2275,10 @@ Object.assign(SpiralCalendar.prototype, {
 
               const mergeResult = mergeImportedEvents(importedEvents);
               if (mergeResult.added > 0 || mergeResult.updated > 0) {
-                this._eventsVersion++; // Trigger layout cache rebuild
-                this.saveEventsToStorage();
+                this.runWithStudyEventSource('import', () => {
+                  this._eventsVersion++; // Trigger layout cache rebuild
+                  this.saveEventsToStorage();
+                });
                 this.drawSpiral();
                 renderEventList();
               }
@@ -2416,20 +2428,6 @@ Object.assign(SpiralCalendar.prototype, {
     window.toggleRandomEvents = function() {
       const content = document.getElementById('randomEventsContent');
       const icon = document.getElementById('randToggleIcon');
-      
-      if (content.style.display === 'none') {
-        content.style.display = 'flex';
-        icon.textContent = '▲';
-      } else {
-        content.style.display = 'none';
-        icon.textContent = '▼';
-      }
-    };
-
-    // Study session toggle functionality
-    window.toggleStudySession = function() {
-      const content = document.getElementById('studySessionContent');
-      const icon = document.getElementById('studyToggleIcon');
       
       if (content.style.display === 'none') {
         content.style.display = 'flex';
@@ -2937,12 +2935,14 @@ Object.assign(SpiralCalendar.prototype, {
             calendar: 'Random'
             })
           };
-          this.events.push(ev);
-          this._eventsVersion++;
+        this.events.push(ev);
+        this._eventsVersion++;
         }
 
         // Save events to localStorage
-        this.saveEventsToStorage();
+        this.runWithStudyEventSource('random_generator', () => {
+          this.saveEventsToStorage();
+        });
 
         this.drawSpiral();
         renderEventList();
@@ -2974,11 +2974,15 @@ Object.assign(SpiralCalendar.prototype, {
             if (randomVisibleIndex !== -1) {
               this.state.visibleCalendars.splice(randomVisibleIndex, 1);
             }
-            this.saveSettingsToStorage();
+            this.runWithStudyEventSource('random_generator', () => {
+              this.saveSettingsToStorage();
+            });
           }
           
           // Save events to localStorage
-          this.saveEventsToStorage();
+          this.runWithStudyEventSource('random_generator', () => {
+            this.saveEventsToStorage();
+          });
           this.drawSpiral();
           renderEventList();
           alert(`Deleted ${randomEventCount} random event${randomEventCount !== 1 ? 's' : ''}.`);
@@ -3023,17 +3027,27 @@ Object.assign(SpiralCalendar.prototype, {
         this.clearTouchTapSequence();
       }
       syncPanelOpenState();
+      if (typeof this.recordStudyPanelClosed === 'function') {
+        this.recordStudyPanelClosed('eventInput');
+      }
     };
 
     const openEventPanel = () => {
+      const settingsWasOpen = settingsPanel && settingsPanel.style.display === 'block';
       if (settingsPanel) {
         settingsPanel.style.display = 'none';
+      }
+      if (settingsWasOpen && typeof this.recordStudyPanelClosed === 'function') {
+        this.recordStudyPanelClosed('settings');
       }
       eventInputPanel.style.display = 'block';
       if (typeof this.clearTouchTapSequence === 'function') {
         this.clearTouchTapSequence();
       }
       syncPanelOpenState();
+      if (typeof this.recordStudyPanelOpened === 'function') {
+        this.recordStudyPanelOpened('eventInput');
+      }
 
       renderEventList();
       const now = new Date();
@@ -3064,17 +3078,27 @@ Object.assign(SpiralCalendar.prototype, {
         this.clearTouchTapSequence();
       }
       syncPanelOpenState();
+      if (typeof this.recordStudyPanelClosed === 'function') {
+        this.recordStudyPanelClosed('settings');
+      }
     };
 
     const openSettingsPanel = () => {
       if (!settingsPanel) return;
       restorePreviousCalendarVisibility();
+      const eventPanelWasOpen = eventInputPanel.style.display === 'block';
       eventInputPanel.style.display = 'none';
+      if (eventPanelWasOpen && typeof this.recordStudyPanelClosed === 'function') {
+        this.recordStudyPanelClosed('eventInput');
+      }
       settingsPanel.style.display = 'block';
       if (typeof this.clearTouchTapSequence === 'function') {
         this.clearTouchTapSequence();
       }
       syncPanelOpenState();
+      if (typeof this.recordStudyPanelOpened === 'function') {
+        this.recordStudyPanelOpened('settings');
+      }
     };
 
     addEventPanelBtn.addEventListener('click', () => {
@@ -3165,10 +3189,12 @@ Object.assign(SpiralCalendar.prototype, {
         calendar: chosenCalendar
           })
         };
-        this.events.push(event);
-        this._eventsVersion++;
-        // Save events to localStorage
-        this.saveEventsToStorage();
+        this.runWithStudyEventSource('add_panel', () => {
+          this.events.push(event);
+          this._eventsVersion++;
+          // Save events to localStorage
+          this.saveEventsToStorage();
+        });
         this.drawSpiral();
         // Reset fields
         eventTitle.value = '';

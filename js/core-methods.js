@@ -896,6 +896,10 @@ Object.assign(SpiralCalendar.prototype, {
       timeDisplayToggle.checked = this.state.showTimeDisplay;
     }
 
+    if (typeof this.recordStudyOrientationChange === 'function') {
+      this.recordStudyOrientationChange(isLandscape);
+    }
+
     if (typeof this.scheduleViewportResize === 'function') {
       this.scheduleViewportResize();
     }

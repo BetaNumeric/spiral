@@ -244,13 +244,8 @@ class SpiralCalendar {
       // Store draft event for blank segments being edited
       this.draftEvent = null;
       
-      // Study session data collection (simplified)
-      this.studySession = {
-        isRecording: false,
-        participantName: '',
-        startTime: null,
-        endTime: null
-      };
+      // Study session state is managed in js/study-session.js
+      this.studySession = null;
 
       // Midnight lines to draw on top
       this.midnightLines = [];

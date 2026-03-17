@@ -1239,7 +1239,7 @@
         
         <!-- Study Session Controls (STUDY_MODE only) -->
         <div id="studySessionSection" style="margin-top: 0.8em; padding-top: 0.6em; border-top: 1px solid #ccc;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em; cursor: pointer;" onclick="toggleStudySession()">
+          <div id="studySessionToggle" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em; cursor: pointer;">
             <span style="font-weight: bold;">Study Session</span>
             <span id="studyToggleIcon" style="font-size: 1.2em; transition: transform 0.2s;">▼</span>
           </div>
@@ -1304,6 +1304,7 @@
   <script src="js/state-storage-sync.js"></script>
   <script src="js/pickers-calendars.js"></script>
   <script src="js/touch-time-orientation.js"></script>
+  <script src="js/study-session.js"></script>
   <script src="js/bootstrap.js"></script>
   <script>
     if (typeof APP_VERSION !== 'undefined') {
@@ -1399,14 +1400,6 @@
         }
         toggleDevModeVisibility();
       });
-    }
-    
-    // Hide Study Session section if STUDY_MODE is false
-    if (typeof STUDY_MODE !== 'undefined' && !STUDY_MODE) {
-      const studySessionSection = document.getElementById('studySessionSection');
-      if (studySessionSection) {
-        studySessionSection.style.display = 'none';
-      }
     }
     
     if ('serviceWorker' in navigator) {

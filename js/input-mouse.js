@@ -720,12 +720,14 @@ Object.assign(SpiralCalendar.prototype, {
                       description: btn.event.description || '',
                       start: new Date(btn.event.start),
                       end: new Date(btn.event.end),
-                    calendar: btn.event.calendar || 'Home'
+                      calendar: btn.event.calendar || 'Home'
                     })
                   };
-                  this.events.push(newEvent);
-                  this._eventsVersion++;
-                  this.saveEventsToStorage();
+                  this.runWithStudyEventSource('detail_view', () => {
+                    this.events.push(newEvent);
+                    this._eventsVersion++;
+                    this.saveEventsToStorage();
+                  });
                   if (typeof window.renderEventList === 'function') {
                     window.renderEventList();
                   }
@@ -758,9 +760,11 @@ Object.assign(SpiralCalendar.prototype, {
                 if (confirm(`Delete event "${btn.event.title}"? This action cannot be undone.`)) {
                 const eventIndex = this.events.indexOf(btn.event);
                 if (eventIndex > -1) {
-                  this.events.splice(eventIndex, 1);
-                  this._eventsVersion++;
-                  this.saveEventsToStorage();
+                  this.runWithStudyEventSource('detail_view', () => {
+                    this.events.splice(eventIndex, 1);
+                    this._eventsVersion++;
+                    this.saveEventsToStorage();
+                  });
                   if (typeof window.renderEventList === 'function') {
                     window.renderEventList();
                   }
