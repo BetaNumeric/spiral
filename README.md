@@ -13,7 +13,9 @@ This time-visualization application combines two time-measuring methods: the cal
 
 You navigate by performing a circular motion around the spiral's center. The spiral follows the finger/cursor and rotates with it: clockwise moves forward in time, counterclockwise rewinds. The spiral has inertia, so you can keep adding momentum by releasing it mid-motion, and it will keep rotating, slowing down until it stops. 
 Pinch-zooming or scrolling lets you move through time faster, skipping in steps of whole days. When moving the spiral manually, each hour produces a light click sound/vibration, and crossing midnight produces a stronger one.
-By default, the spiral shows the current time and adjusts its position every second. To reset to the current time after the spiral has been rotated, double-tap anywhere outside the spiral or tap the time display at the bottom of the screen. This box shows the date and time at which the calendar is currently scrolled to. Tapping it syncs the spiral to the device’s local time, resuming to update every second. It can be minimized by dragging it down.
+Alternatively, you can navigate using the keyboard. The classical `W`, `A`, `S`, `D`, or the arrow keys move the spiral. The left and right arrows sweep the rotation precisely (use `Alt` for fine-tuning or `Alt+Shift` for sweeping fast), while the up and down arrows allow you to scroll in entire day-steps (use `Alt` for hour steps or `Alt+Shift` for week steps) just like scrolling would. 
+
+By default, the spiral shows the current time and adjusts its position every second. To reset to the current time after the spiral has been rotated, double-tap anywhere outside the spiral. You can also quickly press the `Spacebar` or `Home` key to jump right back to the current time. The time display box at the bottom of the screen shows the date and time at which the calendar is currently scrolled to. Tapping it syncs the spiral to the device’s local time, resuming to update every second. It can be minimized by dragging it down.
 
 ## **Visual Structure of the Spiral**
 
