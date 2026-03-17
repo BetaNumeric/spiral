@@ -22,6 +22,10 @@ The beginning of a new day is marked by a thicker stroke at the 24:00 / 0:00 seg
 Each day has its number and weekday written in the first segment; the first day of the month also has the month, and the first day of the year has the year number added to it. Around the outer segments are the hour numbers going from 0 to 23.
 Each revolution of the spiral is divided into 24 segments, representing the hours of a day. Hovering over them reveals the outline of the segment, and a tooltip text appears with the segment’s date and time. Clicking a segment opens a circular info screen in the middle. To properly accommodate the info circle, the calendar switches to a concentric-circle mode. It can be enlarged by zooming in, which maximizes its size in multiple steps. Clicking anywhere else closes the screen and returns to the spiral.
 
+
+https://github.com/user-attachments/assets/4cd393d3-172f-41a5-b7de-b9b2522e479f
+
+
 ## **Adding and Editing Events**
 
 The info circle lets you add an event to the calendar. It contains several input fields and a button to add the event. In the center are two fields for setting the event’s start and end time and date, which defaults to the beginning and end of the selected segment. Above them, you can add a title and description. Below, you can choose which calendar the event belongs to. “Home” and “Work” are defaults, but custom calendars can be added.
