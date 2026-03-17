@@ -129,7 +129,14 @@ Object.assign(SpiralCalendar.prototype, {
           // Update event list visibility based on offset (skip rendering during drag to prevent flicker)
           this.updateBottomEventList(true);
         }
-        this.drawSpiral();
+        
+        // Throttle canvas drawing during Time Display drag to ~30 FPS
+        const now = performance.now();
+        if (!this._lastTimeDisplayDragDraw || now - this._lastTimeDisplayDragDraw > 33) {
+          this._lastTimeDisplayDragDraw = now;
+          this.drawSpiral();
+        }
+        
         return;
       }
       const rect = this.canvas.getBoundingClientRect();

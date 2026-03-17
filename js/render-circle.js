@@ -135,9 +135,10 @@ Object.assign(SpiralCalendar.prototype, {
       return eventInfo.color;
     } else if (segmentColor === CONFIG.BLANK_COLOR) {
       // Generate the same random color that would be used for a new event
-      const hue = (segmentId * 137.5) % 360;
-      const saturation = 60 + (segmentId % 3) * 15; // 60-90% saturation
-      const lightness = 70 + (segmentId % 2) * 10; // 70-80% lightness
+      const absId = Math.abs(segmentId);
+      const hue = (absId * 137.5) % 360;
+      const saturation = 60 + (absId % 3) * 15; // 60-90% saturation
+      const lightness = 70 + (absId % 2) * 10; // 70-80% lightness
       return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
     } else {
       return segmentColor;
@@ -1229,6 +1230,28 @@ Object.assign(SpiralCalendar.prototype, {
       
       const segmentsToShowNumbersSet = new Set(segmentsToShowNumbers.map(s => s.segmentKey));
       
+      // Cache for daily data (circle mode)
+      const dailyDataCache = new Map();
+      const getDailyData = (segmentId) => {
+        const dayOffset = Math.floor(segmentId / 24);
+        if (dailyDataCache.has(dayOffset)) return dailyDataCache.get(dayOffset);
+        
+        const segmentDate = new Date(this.referenceTime.getTime() + dayOffset * 24 * 60 * 60 * 1000);
+        const sunTimes = this.getSunTimesForDate(segmentDate);
+        
+        const dayOfWeek = segmentDate.getUTCDay();
+        let brightness;
+        if (dayOfWeek === 0) brightness = 0;
+        else if (dayOfWeek === 6) brightness = 50;
+        else brightness = 255 - (dayOfWeek - 1) * 35;
+        
+        const dayOverlayColor = `rgba(${brightness}, ${brightness}, ${brightness}, ${this.state.dayOverlayOpacity})`;
+        
+        const data = { sunTimes, dayOverlayColor, segmentDateBase: segmentDate };
+        dailyDataCache.set(dayOffset, data);
+        return data;
+      };
+      
       // Second pass: draw segments
       for (let day = startDay; day < endDay; day++) {
         // For each ring, use spiral's segment radii for the corresponding day
@@ -1395,18 +1418,41 @@ Object.assign(SpiralCalendar.prototype, {
 
             // Build local overlap groups within the hour (circle mode)
             const n = allEvents.length;
-            const uf = createUnionFind(n);
-            const overlapsInHour = (a, b) => !(a.endMinute <= b.startMinute || b.endMinute <= a.startMinute);
+            const parent = new Int32Array(n);
+            for (let i = 0; i < n; i++) parent[i] = i;
+            
+            const find = (i) => {
+              let root = i;
+              while (root !== parent[root]) root = parent[root];
+              let curr = i;
+              while (curr !== root) {
+                const nxt = parent[curr];
+                parent[curr] = root;
+                curr = nxt;
+              }
+              return root;
+            };
+
             for (let i = 0; i < n; i++) {
+              const a = allEvents[i];
               for (let j = i + 1; j < n; j++) {
-                if (overlapsInHour(allEvents[i], allEvents[j])) uf.unite(i, j);
+                const b = allEvents[j];
+                if (!(a.endMinute <= b.startMinute || b.endMinute <= a.startMinute)) {
+                  const rootI = find(i);
+                  const rootJ = find(j);
+                  if (rootI !== rootJ) parent[rootI] = rootJ;
+                }
               }
             }
             const groups = new Map();
             for (let i = 0; i < n; i++) {
-              const r = uf.find(i);
-              if (!groups.has(r)) groups.set(r, []);
-              groups.get(r).push(i);
+              const r = find(i);
+              let list = groups.get(r);
+              if (!list) {
+                list = [];
+                groups.set(r, list);
+              }
+              list.push(i);
             }
 
             if (this.state.overlayStackMode) {
@@ -1602,11 +1648,13 @@ Object.assign(SpiralCalendar.prototype, {
         {
           const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
           const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
-          const segmentDate = new Date(this.referenceTime.getTime() + segmentId * 60 * 60 * 1000);
-          let segStart = segmentDate.getUTCHours() + segmentDate.getUTCMinutes() / 60;
+          const dailyData = getDailyData(segmentId);
+          
+          let segStart = ((segmentId % 24) + 24) % 24;
           let segEnd = segStart + 1;
-          // Calculate sunrise/sunset times for this segment's date
-          const sunTimes = this.getSunTimesForDate(segmentDate);
+          
+          // Calculate sunrise/sunset times for this segment's date using cache
+          const sunTimes = dailyData.sunTimes;
           let nightStart = sunTimes.sunset;
           let nightEnd = sunTimes.sunrise;
           if (nightEnd <= nightStart) nightEnd += 24;
@@ -1653,28 +1701,9 @@ Object.assign(SpiralCalendar.prototype, {
 
         // --- WEEKDAY GRADIENT OVERLAY LOGIC FOR CIRCLE MODE ---
         if (this.state.showDayOverlay) {
-          // Calculate the date for this day to get the day of week
           const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
-          const segmentDate = new Date(this.referenceTime.getTime() + segmentId * 60 * 60 * 1000);
-          const dayOfWeek = segmentDate.getUTCDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-          
-          // Create gradient from Monday (white) to Sunday (black)
-          // Monday = 1, Sunday = 0, so we need to adjust the calculation
-          let brightness;
-          if (dayOfWeek === 0) {
-            // Sunday - black (0)
-            brightness = 0;
-          } else if (dayOfWeek === 6) {
-            // Saturday - much darker to separate weekend
-            brightness = 50;
-          } else {
-            // Monday (1) to Friday (5) - progressively darker
-            // Monday = 255, Tuesday = 220, Wednesday = 185, Thursday = 150, Friday = 115
-            brightness = 255 - (dayOfWeek - 1) * 35;
-          }
-          
-          // Use configurable opacity for day overlay
-          const dayOverlayColor = `rgba(${brightness}, ${brightness}, ${brightness}, ${this.state.dayOverlayOpacity})`;
+          const dailyData = getDailyData(segmentId);
+          const dayOverlayColor = dailyData.dayOverlayColor;
           
           // Store day overlay data for drawing after events (circle mode)
           this.dayOverlays.push({

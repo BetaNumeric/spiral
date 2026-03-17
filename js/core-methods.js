@@ -234,6 +234,33 @@ Object.assign(SpiralCalendar.prototype, {
       return segmentDate.getUTCDate();
     },
 
+    getVisibleEvents() {
+      const currentCalendarsKey = JSON.stringify(this.state.visibleCalendars);
+      if (this._visibleEventsCacheVersion !== this._eventsVersion || 
+          this._visibleCalendarsCacheKey !== currentCalendarsKey) {
+        
+        const visibleCalendarsSet = new Set(this.state.visibleCalendars);
+        
+        this._visibleEventsCache = this.events.filter(ev => {
+          const cal = ev.calendar || 'Home';
+          return visibleCalendarsSet.has(cal);
+        }).map(ev => {
+          // Pre-calculate timestamps if missing to avoid Date creations
+          if (ev._startMs === undefined || ev._startMs !== new Date(ev.start).getTime()) {
+             ev._startMs = new Date(ev.start).getTime();
+          }
+          if (ev._endMs === undefined || ev._endMs !== new Date(ev.end).getTime()) {
+             ev._endMs = new Date(ev.end).getTime();
+          }
+          return ev;
+        });
+        
+        this._visibleEventsCacheVersion = this._eventsVersion;
+        this._visibleCalendarsCacheKey = currentCalendarsKey;
+      }
+      return this._visibleEventsCache;
+    },
+
     getAllEventsForSegment(day, segment) {
       // Calculate the date/time this segment represents
       const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
@@ -247,28 +274,37 @@ Object.assign(SpiralCalendar.prototype, {
       const segmentHourEnd = new Date(segmentHourStart);
     segmentHourEnd.setUTCHours(segmentHourStart.getUTCHours() + 1);
       
+      const segmentStartMs = segmentHourStart.getTime();
+      const segmentEndMs = segmentHourEnd.getTime();
+      
       const overlappingEvents = [];
+      const visibleEvents = this.getVisibleEvents();
       
       // Check each event to see if this segment falls within it and passes calendar filter
-      for (const event of this.events) {
-        // Ensure event has a calendar tag; default to 'Home' for legacy
-        const eventCalendar = event.calendar || 'Home';
-        if (!this.state.visibleCalendars.includes(eventCalendar)) continue;
-        const eventStart = new Date(event.start);
-        const eventEnd = new Date(event.end);
+      for (const event of visibleEvents) {
+        const eventStartMs = event._startMs;
+        const eventEndMs = event._endMs;
         
         // Check if there's any overlap between the segment hour and the event
-        if (eventStart < segmentHourEnd && eventEnd > segmentHourStart) {
+        if (eventStartMs < segmentEndMs && eventEndMs > segmentStartMs) {
           // Calculate the start and end minutes within this hour segment
-          const overlapStart = eventStart > segmentHourStart ? eventStart : segmentHourStart;
-          const overlapEnd = eventEnd < segmentHourEnd ? eventEnd : segmentHourEnd;
+          const overlapStartMs = eventStartMs > segmentStartMs ? eventStartMs : segmentStartMs;
+          const overlapEndMs = eventEndMs < segmentEndMs ? eventEndMs : segmentEndMs;
           
-        const startMinute = overlapStart.getUTCMinutes();
-        const endMinute = overlapEnd.getUTCMinutes();
+          let startMinute = 0;
+          let endMinute = 60;
+          
+          // Only calculate minute component if not an entire exact hour to save Date creation
+          if (overlapStartMs > segmentStartMs) {
+            startMinute = new Date(overlapStartMs).getUTCMinutes();
+          }
+          if (overlapEndMs < segmentEndMs) {
+            endMinute = new Date(overlapEndMs).getUTCMinutes();
+          }
           
           // If the event spans the entire next hour, end minute should be 60
           let actualEndMinute = endMinute;
-          if (overlapEnd.getTime() === segmentHourEnd.getTime()) {
+          if (overlapEndMs === segmentEndMs) {
             actualEndMinute = 60;
           }
           
@@ -278,9 +314,9 @@ Object.assign(SpiralCalendar.prototype, {
             startMinute: startMinute,
             endMinute: actualEndMinute,
             // Global properties for consistent ordering across segments
-            totalDurationMinutes: Math.max(0, Math.round((eventEnd.getTime() - eventStart.getTime()) / (60 * 1000))),
-            startUtcMs: eventStart.getTime(),
-            endUtcMs: eventEnd.getTime()
+            totalDurationMinutes: Math.max(0, Math.round((eventEndMs - eventStartMs) / (60 * 1000))),
+            startUtcMs: eventStartMs,
+            endUtcMs: eventEndMs
           });
         }
       }
@@ -295,17 +331,18 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     getMaxOverlapForEventAcrossHours(targetEvent) {
-      if (!this.events || this.events.length === 0) return 1;
-      const targetStartMs = new Date(targetEvent.start).getTime();
-      const targetEndMs = new Date(targetEvent.end).getTime();
+      const visibleEvents = this.getVisibleEvents();
+      if (!visibleEvents || visibleEvents.length === 0) return 1;
+      const targetStartMs = targetEvent._startMs !== undefined ? targetEvent._startMs : new Date(targetEvent.start).getTime();
+      const targetEndMs = targetEvent._endMs !== undefined ? targetEvent._endMs : new Date(targetEvent.end).getTime();
       if (!Number.isFinite(targetStartMs) || !Number.isFinite(targetEndMs) || targetStartMs >= targetEndMs) {
         return 1;
       }
 
       const points = [];
-      for (const ev of this.events) {
-        const evStartMs = new Date(ev.start).getTime();
-        const evEndMs = new Date(ev.end).getTime();
+      for (const ev of visibleEvents) {
+        const evStartMs = ev._startMs !== undefined ? ev._startMs : new Date(ev.start).getTime();
+        const evEndMs = ev._endMs !== undefined ? ev._endMs : new Date(ev.end).getTime();
         if (!Number.isFinite(evStartMs) || !Number.isFinite(evEndMs)) continue;
 
         const overlapStartMs = Math.max(targetStartMs, evStartMs);
@@ -394,18 +431,21 @@ Object.assign(SpiralCalendar.prototype, {
     computePersistentEventLanesForWindow() {
       const windowStart = this.visibleWindowStart();
       const windowEnd = this.visibleWindowEnd();
+      const windowStartMs = windowStart.getTime();
+      const windowEndMs = windowEnd.getTime();
 
       // Build list of effective intervals within the window
       const intervals = [];
-      for (const ev of this.events) {
-        const evStart = new Date(ev.start);
-        const evEnd = new Date(ev.end);
-        if (!(evStart < windowEnd && evEnd > windowStart)) continue; // no overlap with window
-        const start = evStart > windowStart ? evStart : windowStart;
-        const end = evEnd < windowEnd ? evEnd : windowEnd;
-        if (start >= end) continue;
-        const totalDurationMinutes = Math.max(0, Math.round((evEnd.getTime() - evStart.getTime()) / (60 * 1000)));
-        intervals.push({ event: ev, start, end, startMs: start.getTime(), endMs: end.getTime(), totalDurationMinutes, globalStartMs: evStart.getTime() });
+      const visibleEvents = this.getVisibleEvents();
+      for (const ev of visibleEvents) {
+        const evStartMs = ev._startMs !== undefined ? ev._startMs : new Date(ev.start).getTime();
+        const evEndMs = ev._endMs !== undefined ? ev._endMs : new Date(ev.end).getTime();
+        if (!(evStartMs < windowEndMs && evEndMs > windowStartMs)) continue; // no overlap with window
+        const startMs = evStartMs > windowStartMs ? evStartMs : windowStartMs;
+        const endMs = evEndMs < windowEndMs ? evEndMs : windowEndMs;
+        if (startMs >= endMs) continue;
+        const totalDurationMinutes = Math.max(0, Math.round((evEndMs - evStartMs) / (60 * 1000)));
+        intervals.push({ event: ev, startMs, endMs, totalDurationMinutes, globalStartMs: evStartMs });
       }
 
       // Sweep line: create points, ends before starts at same time
@@ -456,20 +496,23 @@ Object.assign(SpiralCalendar.prototype, {
     computeEventComponentsForWindow(eventToLane) {
       const windowStart = this.visibleWindowStart();
       const windowEnd = this.visibleWindowEnd();
+      const windowStartMs = windowStart.getTime();
+      const windowEndMs = windowEnd.getTime();
 
       // Collect window-overlapping events and give them indices
       const nodes = [];
       const eventIndex = new Map();
       const eventBounds = new Map();
-      for (const ev of this.events) {
-        const s = new Date(ev.start);
-        const e = new Date(ev.end);
-        if (s < windowEnd && e > windowStart) {
+      const visibleEvents = this.getVisibleEvents();
+      for (const ev of visibleEvents) {
+        const sMs = ev._startMs !== undefined ? ev._startMs : new Date(ev.start).getTime();
+        const eMs = ev._endMs !== undefined ? ev._endMs : new Date(ev.end).getTime();
+        if (sMs < windowEndMs && eMs > windowStartMs) {
           eventIndex.set(ev, nodes.length);
           nodes.push(ev);
           eventBounds.set(ev, {
-            startMs: s.getTime(),
-            endMs: e.getTime()
+            startMs: sMs,
+            endMs: eMs
           });
         }
       }

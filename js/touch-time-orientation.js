@@ -921,8 +921,13 @@ Object.assign(SpiralCalendar.prototype, {
           // Update event list visibility based on offset (skip rendering during drag to prevent flicker)
           this.updateBottomEventList(true);
         }
-        // Do not change collapsed flag until end; just redraw
-        this.drawSpiral();
+        
+        // Throttle canvas drawing during Time Display swipe to ~30 FPS
+        const now = performance.now();
+        if (!this._lastTimeDisplaySwipeDraw || now - this._lastTimeDisplaySwipeDraw > 33) {
+          this._lastTimeDisplaySwipeDraw = now;
+          this.drawSpiral();
+        }
       }
       e.preventDefault();
       return;
