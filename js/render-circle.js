@@ -581,9 +581,7 @@ Object.assign(SpiralCalendar.prototype, {
       const fixedDistance = this.getOutsideHourNumberOffset(fontSize);
       const labelRadius = maxRadius + fixedDistance;
       const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
-      
-      // Match label size to the actual rendered spiral radius, including pull-up scaling.
-      
+
       this.ctx.save();
       this.ctx.font = getFontString(fontSize);
       this.ctx.textAlign = 'center';
@@ -708,16 +706,7 @@ Object.assign(SpiralCalendar.prototype, {
         computedInner = radiusFunction(centerTheta);
         computedOuter = radiusFunction(centerTheta + 2 * Math.PI);
       }
-      if (this.state.hourNumbersOutward) {
-        if (this.state.hourNumbersInsideSegment) {
-          labelRadius = (computedInner + computedOuter) / 2;
-        } else {
-          const fixedDistance = 20;
-          labelRadius = computedOuter + fixedDistance;
-        }
-      } else {
-        labelRadius = (computedInner + computedOuter) / 2;
-      }
+      labelRadius = (computedInner + computedOuter) / 2;
 
       const useOutsideLabelSizing = this.state.hourNumbersOutward && !this.state.hourNumbersInsideSegment;
       let fontSize;

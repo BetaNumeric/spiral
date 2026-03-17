@@ -325,10 +325,12 @@ Object.assign(SpiralCalendar.prototype, {
     // Find which segment the mouse is over (only if not in detail circle)
     if (shouldCheckHover) {
       const segment = this.findSegmentAtPoint(canvasX, canvasY);
+      let shouldRedraw = false;
+      const tooltipWasVisible = this.mouseState.hoveredEvent !== null;
       
       if (segment !== this.mouseState.hoveredSegment) {
         this.mouseState.hoveredSegment = segment;
-        this.drawSpiral(); // Redraw to show hover highlight
+        shouldRedraw = true;
       }
       
       // Update tooltip info for hovered segment (only on desktop, not mobile)
@@ -342,6 +344,13 @@ Object.assign(SpiralCalendar.prototype, {
       } else {
         // Clear tooltip when not hovering over a segment or on mobile
         this.mouseState.hoveredEvent = null;
+      }
+      const tooltipIsVisible = this.mouseState.hoveredEvent !== null;
+      if (tooltipWasVisible !== tooltipIsVisible) {
+        shouldRedraw = true;
+      }
+      if (shouldRedraw) {
+        this.drawSpiral(); // Redraw to update hover highlight / tooltip visibility
       }
       }
     },
