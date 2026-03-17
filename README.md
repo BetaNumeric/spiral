@@ -5,6 +5,10 @@
 
 This time-visualization application combines two time-measuring methods: the calendar and the clock. It uses the same motion we go through during a day as we move around Earth’s rotational axis. It doesn’t assume a circular repetition of days, as clocks do, but rather a continuous forward motion, as our planet does when it orbits the sun. The length of the solar illumination varies, since Earth's axis is tilted relative to the ecliptic (obliquity of the ecliptic). This is incorporated into the spiral with a subtle overlay that marks the time between sunset and sunrise for each day, based on the user’s location.
 
+
+https://github.com/user-attachments/assets/868b6aed-372f-4f0a-b018-442f5423f7c9
+
+
 ## **Controls and Usage**
 
 You navigate by performing a circular motion around the spiral's center. The spiral follows the finger/cursor and rotates with it: clockwise moves forward in time, counterclockwise rewinds. The spiral has inertia, so you can keep adding momentum by releasing it mid-motion, and it will keep rotating, slowing down until it stops. 
