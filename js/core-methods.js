@@ -889,5 +889,9 @@ Object.assign(SpiralCalendar.prototype, {
     if (timeDisplayToggle) {
       timeDisplayToggle.checked = this.state.showTimeDisplay;
     }
+
+    if (typeof this.scheduleViewportResize === 'function') {
+      this.scheduleViewportResize();
+    }
   }
 });

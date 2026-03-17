@@ -1,18 +1,88 @@
 // Canvas Setup and Mouse Interaction
 Object.assign(SpiralCalendar.prototype, {
+    getViewportDimensions() {
+      const viewport = window.visualViewport;
+      const width = viewport && Number.isFinite(viewport.width) ? viewport.width : window.innerWidth;
+      const height = viewport && Number.isFinite(viewport.height) ? viewport.height : window.innerHeight;
+
+      return {
+        width: Math.max(0, Math.round(width || 0)),
+        height: Math.max(0, Math.round(height || 0))
+      };
+    },
+
+    syncViewportHostSize() {
+      const { width, height } = this.getViewportDimensions();
+      if (!width || !height) return;
+
+      const rootStyle = document.documentElement && document.documentElement.style;
+      if (!rootStyle) return;
+
+      rootStyle.setProperty('--app-viewport-width', `${width}px`);
+      rootStyle.setProperty('--app-viewport-height', `${height}px`);
+    },
+
     handleResize() {
-      this.canvas.width = this.canvas.clientWidth * devicePixelRatio;
-      this.canvas.height = this.canvas.clientHeight * devicePixelRatio;
-      this.ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+      this.syncViewportHostSize();
+
+      const clientWidth = this.canvas.clientWidth;
+      const clientHeight = this.canvas.clientHeight;
+      if (!clientWidth || !clientHeight) return;
+
+      const dpr = window.devicePixelRatio || 1;
+      this.canvas.width = Math.round(clientWidth * dpr);
+      this.canvas.height = Math.round(clientHeight * dpr);
+      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       // Update event list max height to 1/3 of screen height
       if (this.timeDisplayState) {
-        this.timeDisplayState.eventListMaxHeight = Math.floor(this.canvas.clientHeight / 3);
+        this.timeDisplayState.eventListMaxHeight = Math.floor(clientHeight / 3);
       }
       this.drawSpiral();
     },
 
+    scheduleViewportResize() {
+      if (this.resizeSyncState) {
+        if (this.resizeSyncState.animationFrameId) {
+          cancelAnimationFrame(this.resizeSyncState.animationFrameId);
+          this.resizeSyncState.animationFrameId = null;
+        }
+        if (Array.isArray(this.resizeSyncState.timeoutIds)) {
+          this.resizeSyncState.timeoutIds.forEach((timeoutId) => clearTimeout(timeoutId));
+          this.resizeSyncState.timeoutIds = [];
+        }
+      }
+
+      const runResize = () => {
+        if (this.resizeSyncState) {
+          this.resizeSyncState.animationFrameId = null;
+        }
+        this.handleResize();
+      };
+
+      const queueResize = (delayMs) => {
+        if (delayMs <= 0) {
+          this.resizeSyncState.animationFrameId = requestAnimationFrame(runResize);
+          return;
+        }
+        const timeoutId = setTimeout(() => {
+          this.resizeSyncState.timeoutIds = this.resizeSyncState.timeoutIds.filter((id) => id !== timeoutId);
+          this.resizeSyncState.animationFrameId = requestAnimationFrame(runResize);
+        }, delayMs);
+        this.resizeSyncState.timeoutIds.push(timeoutId);
+      };
+
+      queueResize(0);
+
+      if (isMobileDevice()) {
+        // iPhone Safari often reports one or two transient sizes mid-rotation.
+        // Follow-up passes let the viewport settle before the canvas locks in.
+        queueResize(80);
+        queueResize(220);
+      }
+    },
+
     setupCanvas() {
-      this.handleResize();
+      this.scheduleViewportResize();
     },
 
     handleMouseMove(event) {

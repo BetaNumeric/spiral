@@ -277,6 +277,11 @@ class SpiralCalendar {
         orientationChangeHandler: null,
         orientationResizeHandler: null
       };
+
+      this.resizeSyncState = {
+        animationFrameId: null,
+        timeoutIds: []
+      };
       
       // Overlay data to draw after events
       this.nightOverlays = [];

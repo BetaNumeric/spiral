@@ -17,9 +17,32 @@
     html, body { margin: 0; padding: 0; overflow: hidden; }
     /* Use viewport units for consistent full-screen behavior */
     /* 100dvh is dynamic viewport height (accounts for mobile browser UI) */
-    html { height: 100vh; height: 100dvh; background: #fff; }
-    body { height: 100vh; height: 100dvh; font-family: sans-serif; display: flex; padding-top: env(safe-area-inset-top); padding-bottom: 0; background: #fff; }
-    #app { flex: 1; position: relative; min-height: 0; }
+    :root {
+      --app-viewport-width: 100vw;
+      --app-viewport-height: 100dvh;
+    }
+    html {
+      width: var(--app-viewport-width);
+      height: var(--app-viewport-height);
+      background: #fff;
+    }
+    body {
+      width: var(--app-viewport-width);
+      height: var(--app-viewport-height);
+      font-family: sans-serif;
+      display: flex;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: 0;
+      background: #fff;
+    }
+    #app {
+      flex: 1;
+      position: relative;
+      min-height: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
     /* In standalone mode, don't add padding-bottom to #app - canvas should fill full viewport */
     /* In browser mode, add padding to account for browser UI (if needed) */
     @media (display-mode: standalone) {

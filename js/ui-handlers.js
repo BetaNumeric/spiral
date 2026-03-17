@@ -1224,7 +1224,12 @@ Object.assign(SpiralCalendar.prototype, {
       this.canvas.addEventListener('touchend', (e) => this.handleTouchEnd(e), { passive: false });
       this.canvas.addEventListener('touchcancel', (e) => this.handleTouchEnd(e), { passive: false });
 
-      window.addEventListener('resize', () => this.handleResize());
+      const resizeHandler = () => this.scheduleViewportResize();
+      window.addEventListener('resize', resizeHandler);
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', resizeHandler);
+        window.visualViewport.addEventListener('scroll', resizeHandler);
+      }
       
     // Add reset settings button handler
     const resetSettingsBtn = document.getElementById('resetSettingsBtn');
