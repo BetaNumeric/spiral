@@ -808,11 +808,8 @@
       
       /* Fix for iOS Safari viewport height issues */
       @media (max-width: 768px) {
-        #eventInputPanel {
-          max-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 4em) !important;
-        }
-        #settingsPanel {
-          max-height: none !important;
+        #eventInputPanel, #settingsPanel {
+          max-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 2em) !important;
         }
       }
     }
@@ -839,17 +836,17 @@
     </button>
 
     <!-- Event Input Panel (hidden by default) -->
-    <div id="eventInputPanel" style="display: none; position: absolute; top: 1.0em; left: 1.0em; background: rgba(222, 222, 222, 0.85); padding: .7em .9em .7em .9em; border-radius: .3em; font-size: .9em; z-index: 35; min-width: 360px; max-height: 96vh; overflow-y: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.10);">
+    <div id="eventInputPanel" style="display: none; position: absolute; top: 1.0em; left: 1.0em; background: rgba(222, 222, 222, 0.85); padding: .7em .9em .7em .9em; border-radius: .3em; font-size: .9em; z-index: 35; width: min(360px, calc(100vw - 2em)); min-width: 0; max-width: calc(100vw - 2em); max-height: calc(100vh - 2.0em); overflow-y: auto; overflow-x: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.10);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2em;">
         <span style="font-weight: bold; font-size: 1.1em;">Add Event</span>
         <button id="closeEventPanelBtn" title="Close" style="background: none; border: none; font-size: 1.3em; cursor: pointer; color: #888;">&times;</button>
       </div>
       <div class="event-field-group" style="margin-top: 0.6em;">
-        <label><input type="text" id="eventTitle" placeholder="Title" maxlength="20" style="flex: 1; padding: 0.45em 2.9em 0.45em 0.55em; border: 1px solid #ccc; border-radius: 0.3em; width: 100%; font-size: 0.95em; min-height: 2.35em;"></label>
+        <label style="width: 100%; display: block;"><input type="text" id="eventTitle" placeholder="Title" maxlength="20" style="flex: 1; padding: 0.45em 2.9em 0.45em 0.55em; border: 1px solid #ccc; border-radius: 0.3em; width: 100%; font-size: 0.95em; min-height: 2.35em; box-sizing: border-box;"></label>
         <div class="event-char-count"><span id="titleCharCount">0</span>/20</div>
       </div>
       <div class="event-field-group" style="margin-top: 0.85em;">
-        <label><textarea id="eventDescription" placeholder="Description" maxlength="115" style="flex: 1; padding: 0.45em 3.4em 0.45em 0.55em; border: 1px solid #ccc; border-radius: 0.3em; resize: vertical; min-height: 4.2em; width: 100%; font-family: inherit; font-size: 0.95em;"></textarea></label>
+        <label style="width: 100%; display: block;"><textarea id="eventDescription" placeholder="Description" maxlength="115" style="flex: 1; padding: 0.45em 3.4em 0.45em 0.55em; border: 1px solid #ccc; border-radius: 0.3em; resize: vertical; min-height: 4.2em; width: 100%; font-family: inherit; font-size: 0.95em; box-sizing: border-box;"></textarea></label>
         <div class="event-char-count" style="right: 0.85em; bottom: 0.7em;"><span id="descCharCount">0</span>/115</div>
       </div>
       <div style="display: flex; gap: 0; margin-top: 0.85em; align-items: center;">
@@ -961,7 +958,7 @@
     </button>
 
     <!-- Settings Panel (hidden by default) -->
-    <div id="settingsPanel" style="display: none; position: absolute; top: 1.0em; right: 1.0em; background: rgba(222, 222, 222, 0.85); padding: .7em .9em .7em .9em; border-radius: .3em; font-size: .9em; z-index: 35; width: min(360px, calc(100vw - 2em)); min-width: 0; max-width: calc(100vw - 2em); max-height: 96vh; overflow-y: auto; overflow-x: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.10);">
+    <div id="settingsPanel" style="display: none; position: absolute; top: 1.0em; right: 1.0em; background: rgba(222, 222, 222, 0.85); padding: .7em .9em .7em .9em; border-radius: .3em; font-size: .9em; z-index: 35; width: min(360px, calc(100vw - 2em)); min-width: 0; max-width: calc(100vw - 2em); max-height: calc(100vh - 2.0em); overflow-y: auto; overflow-x: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.10);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2em;">
         <div style="display: flex; align-items: baseline; gap: 0.5em;">
           <span style="font-weight: bold; font-size: 1.1em;">Settings</span>

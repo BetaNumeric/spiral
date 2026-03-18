@@ -36,6 +36,8 @@ When two or more events are added to the same segment, they will stack in the sp
 
 Another feature is the manipulation of an event’s length in the spiral directly. When clicking on an event, it will open the event circle and also show a handle at the start and end of the event. You can click and drag each handle to increase or decrease the event’s length. While dragging, it will switch to spiral mode and hide the event screen. When releasing the handle, the event is saved with the new start and end time. 
 
+All your events and configuration settings remain completely private, as the application stores its data entirely locally on your device within your browser's local storage.
+
 ## **Event List Timeline**
 
 The time display at the bottom of the screen can be pulled up to reveal an event list. Each event is listed chronologically here, grouped by day, with the event that is closest in the spiral being scrolled to the top and highlighted when it is selected. At the top, there is a search bar to find events by name (you can quickly pull up this list and jump straight to the search bar by simply pressing `f` or `/`). One can select which calendars are shown by toggling the active calendars in a list, or by long-pressing the calendar tag of an element to show only events from that calendar. Behind each event in the list, there is a delete “x” button that lets you remove the event, and an “add” button that lets you add the event to your local calendar app. At the top, there is also the option to delete all events or add all events to your local calendar.
@@ -61,4 +63,17 @@ More experimental settings are hidden, but can be accessed in the developer mode
 
 For fine-grained control of the calendar's looks, the dev setting includes a group of advanced visual options. Here you can toggle additional guide lines (such as noon or 6 am / 6 pm markers), show or hide segment borders, and adjust how text is rendered inside the spiral (for example, showing year and month names only on the first segment of each period). You can also fine-tune how hours, days, months, and years are labeled, choosing between different formats and levels of detail.
 
-Developer Mode also includes a random events generator used for testing. It is located at the bottom of the “Add Events” panel. With it, you can quickly populate the spiral with synthetic events spread across multiple days, using varying durations, start times, and calendars. This makes it easy to see how overlapping events stack, how different color palettes behave, and how the event list and interactions perform under heavier loads. 
+Developer Mode also includes a random events generator used for testing. It is located at the bottom of the “Add Events” panel. With it, you can quickly populate the spiral with synthetic events spread across multiple days, using varying durations, start times, and calendars. This makes it easy to see how overlapping events stack, how different color palettes behave, and how the event list and interactions perform under heavier loads.
+
+## **Installation and Standalone App Support**
+
+Spiral is built as a Progressive Web App (PWA) with full standalone support. Once loaded, it caches the necessary files and works completely offline without requiring a backend server. 
+
+### **Using via Browser**
+To run the application, simply visit the [Live Demo](https://betanumeric.github.io/spiral/). To set up the app locally, clone the repository, run a local web server (such as `python -m http.server 8000` or `npx serve`), and open `http://localhost:8000` in your browser.
+
+### **Adding to Home Screen (Mobiles & Tablets)**
+Because it’s a PWA, you can install the app on your mobile device for a native, fullscreen viewing experience:
+- **Android:** Open the application in Chrome. A prompt to "Install app"  or "Add Spiral to Home screen" might appear at the bottom. Alternatively, tap the browser's three-dot menu and select "Install app".
+- **iOS / iPhone:** Open the application in Safari. Tap the Share icon (the square with an arrow pointing up), scroll down, and tap "Add to Home Screen".
+- **Desktop:** In supported browsers (like Chrome or Edge), an installation tag or icon will appear inside the right side of the URL address bar. Clicking it installs Spiral natively on your computer. 
