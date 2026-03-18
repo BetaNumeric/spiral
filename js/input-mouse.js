@@ -975,9 +975,7 @@ Object.assign(SpiralCalendar.prototype, {
         if (this.mouseState.hoveredHandle && this.mouseState.selectedSegment) {
           const which = this.mouseState.hoveredHandle; // 'start' | 'end'
           const detailEventState = this.getDetailViewEventState();
-          const activeEvent = detailEventState && !detailEventState.isDraftEventActive
-            ? detailEventState.activePersistedEvent
-            : null;
+          const activeEvent = detailEventState ? detailEventState.detailEvent : null;
           if (activeEvent) {
             this.mouseState.isHandleDragging = true;
             this.mouseState.draggingHandle = which;
@@ -998,6 +996,10 @@ Object.assign(SpiralCalendar.prototype, {
             this.canvas.style.cursor = 'grabbing';
             // Stop inertia when beginning a handle drag
             this.stopInertia();
+            // Blur any active text input (title/description)
+            if (document.activeElement && typeof document.activeElement.blur === 'function') {
+              document.activeElement.blur();
+            }
             // Mark changes so "+ New" → "Done"
             this._detailViewHasChanges = true;
             // Redraw to reflect mode change instantly
@@ -1061,6 +1063,7 @@ Object.assign(SpiralCalendar.prototype, {
 
       // Finalize event time handle dragging
       if (this.mouseState.isHandleDragging) {
+        this.mouseState.wasDragging = true; // Prevent handleClick from firing
         this.mouseState.isHandleDragging = false;
         this.mouseState.draggingHandle = null;
         this.handleDragState = null;

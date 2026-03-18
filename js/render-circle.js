@@ -100,24 +100,60 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   getDisplayColorForEvent(event) {
+    let finalColor = '#888888';
     try {
       if (this.state && this.state.colorMode === 'seasonal') {
         const eventStart = event && event.start ? new Date(event.start) : new Date();
         const seasonal = this.generateSeasonalColor(eventStart);
-        return seasonal.startsWith('#') ? seasonal : this.hslToHex(seasonal);
-      }
-      if (this.state && this.state.colorMode === 'calendar') {
+        finalColor = seasonal.startsWith('#') ? seasonal : this.hslToHex(seasonal);
+      } else if (this.state && this.state.colorMode === 'calendar') {
         const calName = event && ((event.calendar || 'Home').trim());
         const calColor = this.state.calendarColors && this.state.calendarColors[calName];
         if (calColor) {
-          return calColor;
+          finalColor = calColor;
+        } else {
+          const c = event && event.color ? event.color : '#888888';
+          finalColor = c.startsWith('#') ? c : this.hslToHex(c);
         }
+      } else {
+        const c = event && event.color ? event.color : '#888888';
+        finalColor = c.startsWith('#') ? c : this.hslToHex(c);
       }
-      const c = event && event.color ? event.color : '#888888';
-      return c.startsWith('#') ? c : this.hslToHex(c);
     } catch (_) {
-      return '#888888';
     }
+
+    if (event && event.isDraft) {
+      if (typeof finalColor === 'string' && finalColor.startsWith('#')) {
+        let r_fg = 0, g_fg = 0, b_fg = 0;
+        if (finalColor.length === 7) {
+          r_fg = parseInt(finalColor.substring(1, 3), 16);
+          g_fg = parseInt(finalColor.substring(3, 5), 16);
+          b_fg = parseInt(finalColor.substring(5, 7), 16);
+        } else if (finalColor.length === 4) {
+          r_fg = parseInt(finalColor[1] + finalColor[1], 16);
+          g_fg = parseInt(finalColor[2] + finalColor[2], 16);
+          b_fg = parseInt(finalColor[3] + finalColor[3], 16);
+        }
+        
+        // Blend with white (the true canvas background, since dark mode uses CSS invert filter)
+        // to simulate 50% opacity without actually being transparent.
+        // This prevents overlapping segments from showing a darker seam.
+        const r_bg = 255;
+        const g_bg = 255;
+        const b_bg = 255;
+        
+        const alpha = 0.5; // 50% transparency simulation
+        const r_out = Math.round(r_fg * alpha + r_bg * (1 - alpha));
+        const g_out = Math.round(g_fg * alpha + g_bg * (1 - alpha));
+        const b_out = Math.round(b_fg * alpha + b_bg * (1 - alpha));
+        
+        return '#' + 
+          r_out.toString(16).padStart(2, '0') + 
+          g_out.toString(16).padStart(2, '0') + 
+          b_out.toString(16).padStart(2, '0');
+      }
+    }
+    return finalColor;
   },
 
   calculateSelectedSegmentColor(day, segment) {

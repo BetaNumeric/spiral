@@ -278,7 +278,18 @@ Object.assign(SpiralCalendar.prototype, {
       const segmentEndMs = segmentHourEnd.getTime();
       
       const overlappingEvents = [];
-      const visibleEvents = this.getVisibleEvents();
+      let visibleEvents = this.getVisibleEvents();
+      
+      if (this.draftEvent && this.mouseState && this.draftEvent.segmentId === this.mouseState.selectedSegmentId) {
+        const draft = this.draftEvent;
+        if (draft._startMs === undefined || draft._startMs !== draft.start.getTime()) {
+           draft._startMs = draft.start.getTime();
+        }
+        if (draft._endMs === undefined || draft._endMs !== draft.end.getTime()) {
+           draft._endMs = draft.end.getTime();
+        }
+        visibleEvents = [...visibleEvents, draft];
+      }
       
       // Check each event to see if this segment falls within it and passes calendar filter
       for (const event of visibleEvents) {

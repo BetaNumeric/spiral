@@ -789,10 +789,8 @@ Object.assign(SpiralCalendar.prototype, {
       if (this.state.detailViewDay !== null && this.mouseState.selectedSegment) {
         const touchedHandle = this.getHandleAtCanvasPoint(canvasX, canvasY, 14);
         if (touchedHandle) {
-          const seg = this.mouseState.selectedSegment;
-          const eventsHere = this.getAllEventsForSegment(seg.day, seg.segment) || [];
-          const idx = Math.min(this.mouseState.selectedEventIndex || 0, Math.max(0, eventsHere.length - 1));
-          const selectedEvent = eventsHere[idx] && eventsHere[idx].event ? eventsHere[idx].event : null;
+          const detailEventState = this.getDetailViewEventState();
+          const selectedEvent = detailEventState ? detailEventState.detailEvent : null;
           if (selectedEvent) {
             this.mouseState.hoveredHandle = touchedHandle;
             this.mouseState.isHandleDragging = true;
@@ -817,6 +815,10 @@ Object.assign(SpiralCalendar.prototype, {
 
             this.touchState.isActive = false;
             this.stopInertia();
+            // Blur any active text input (title/description)
+            if (document.activeElement && typeof document.activeElement.blur === 'function') {
+              document.activeElement.blur();
+            }
             this._detailViewHasChanges = true;
             this.drawSpiral();
             e.preventDefault();
@@ -1320,6 +1322,7 @@ Object.assign(SpiralCalendar.prototype, {
       const stillTrackedTouchActive = trackedId !== null && Array.from(e.touches || []).some((touch) => touch.identifier === trackedId);
       if (stillTrackedTouchActive) return;
 
+      this.mouseState.wasDragging = true; // Prevent synthetic click from firing
       this.mouseState.isHandleDragging = false;
       this.mouseState.draggingHandle = null;
       this.mouseState.hoveredHandle = null;

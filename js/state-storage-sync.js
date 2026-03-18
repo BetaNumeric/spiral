@@ -1650,8 +1650,8 @@ Object.assign(SpiralCalendar.prototype, {
   _getSelectedEventForHandleEditing() {
     if (this.state.detailViewDay === null) return null;
     const detailEventState = this.getDetailViewEventState();
-    if (!detailEventState || detailEventState.isDraftEventActive) return null;
-    return detailEventState.activePersistedEvent;
+    if (!detailEventState || !detailEventState.detailEvent) return null;
+    return detailEventState.detailEvent;
   },
 
   _normalizeHandleDate(date, isEnd) {
