@@ -778,7 +778,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (!skipRender || (!wasVisible || isEmpty)) {
         // Ensure event list is rendered first to get accurate content height
         if (typeof window.renderEventList === 'function') {
-          window.renderEventList();
+          window.renderEventList({ reset: !wasVisible });
         }
       }
       

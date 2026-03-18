@@ -1268,7 +1268,7 @@ Object.assign(SpiralCalendar.prototype, {
       return li;
     };
 
-    window.renderEventList = () => {
+    window.renderEventList = (options = {}) => {
       // Sort events by start date and apply calendar visibility filter and search query
       const searchQuery = (this.eventListSearchQuery || '').toLowerCase().trim();
       const sortedEntries = this.events
@@ -1296,7 +1296,37 @@ Object.assign(SpiralCalendar.prototype, {
           if (endDiff !== 0) return endDiff;
           return String(a.event.title || '').localeCompare(String(b.event.title || ''));
         });
-      const sorted = sortedEntries.map(entry => entry.event);
+
+      const PRELOAD_LIMIT = 100;
+      const displayTime = this.getDisplayTime();
+      
+      // Initialize or manage sliding window bounds if the list is huge
+      if (!this._eventListBounds || options.reset || searchQuery !== (this._lastSearchQuery || '')) {
+        let centerIdx = sortedEntries.findIndex(e => e.startDate !== null && e.startDate >= displayTime);
+        if (centerIdx === -1) centerIdx = Math.max(0, sortedEntries.length - 1);
+        
+        this._eventListBounds = {
+          start: Math.max(0, centerIdx - PRELOAD_LIMIT),
+          end: Math.min(sortedEntries.length, centerIdx + PRELOAD_LIMIT)
+        };
+        this._lastSearchQuery = searchQuery;
+      }
+      
+      if (options.loadTop) {
+        this._eventListBounds.start = Math.max(0, this._eventListBounds.start - PRELOAD_LIMIT);
+      }
+      if (options.loadBottom) {
+        this._eventListBounds.end = Math.min(sortedEntries.length, this._eventListBounds.end + PRELOAD_LIMIT);
+      }
+
+      this._calculatedTotalEntries = sortedEntries.length;
+      
+      // Make sure bounds are valid (handle cases where events were deleted)
+      this._eventListBounds.start = Math.max(0, Math.min(this._eventListBounds.start, Math.max(0, sortedEntries.length - PRELOAD_LIMIT)));
+      this._eventListBounds.end = Math.max(this._eventListBounds.start + 1, Math.min(sortedEntries.length, this._eventListBounds.end));
+      
+      const slicedEntries = sortedEntries.slice(this._eventListBounds.start, this._eventListBounds.end);
+      const sorted = slicedEntries.map(entry => entry.event);
       
       // Preserve search input on mobile to prevent keyboard from closing
       // Check both search inputs (main panel and bottom list)
@@ -1358,7 +1388,7 @@ Object.assign(SpiralCalendar.prototype, {
       }
       
       // Empty state for both lists when no visible events (but still show header if searching)
-      if (sorted.length === 0) {
+      if (sortedEntries.length === 0) {
         const isMobile = window.innerWidth <= 768;
         const isDarkMode = document.body.classList.contains('dark-mode');
         const makeEmptyItem = () => {
@@ -1410,7 +1440,6 @@ Object.assign(SpiralCalendar.prototype, {
       
       // Calculate proximity scaling for events
       // Use the time shown in the time display, not just current time
-      const displayTime = this.getDisplayTime();
       
       // First, check for all currently happening events (start <= displayTime < end)
       // Handle overlapping events by highlighting all of them
@@ -1453,7 +1482,7 @@ Object.assign(SpiralCalendar.prototype, {
       
       // Group events by day (using UTC date to avoid timezone issues)
       const eventsByDay = new Map();
-      for (const entry of sortedEntries) {
+      for (const entry of slicedEntries) {
         const dayKey = makeEventDayKey(entry.startDate);
         if (!dayKey) continue;
         if (!eventsByDay.has(dayKey)) {
@@ -1540,9 +1569,67 @@ Object.assign(SpiralCalendar.prototype, {
       let firstHighlightedItem = null;
       let firstHighlightedItemBottom = null;
       
+      // Manage intersection observer for load more
+      if (this._listIntersectionObserver) {
+        this._listIntersectionObserver.disconnect();
+      }
+      this._listIntersectionObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.click();
+          }
+        });
+      }, { rootMargin: '300px' });
+
+      const createSentinel = (direction, container) => {
+        if (direction === 'top' && this._eventListBounds.start <= 0) return null;
+        if (direction === 'bottom' && this._eventListBounds.end >= sortedEntries.length) return null;
+        
+        const li = document.createElement('li');
+        li.style.cssText = 'padding: 15px; text-align: center; cursor: pointer; color: #888; font-size: 0.9em; list-style: none; opacity: 0.7;';
+        li.textContent = 'Loading more events...';
+        
+        // Prevent multiple clicks in rapid succession
+        let clicked = false;
+        
+        li.onclick = () => {
+          if (clicked) return;
+          clicked = true;
+          
+          const oldScrollTop = container.scrollTop;
+          const oldScrollHeight = container.scrollHeight;
+          
+          window.renderEventList({ 
+            reset: false, 
+            loadTop: direction === 'top', 
+            loadBottom: direction === 'bottom' 
+          });
+          
+          if (direction === 'top') {
+            requestAnimationFrame(() => {
+               // Restore scroll position so user doesn't lose their place when scrolling up
+               container.scrollTop = container.scrollHeight - oldScrollHeight + oldScrollTop;
+            });
+          }
+        };
+        
+        this._listIntersectionObserver.observe(li);
+        return li;
+      };
+
       // Sort day keys chronologically
       const sortedDayKeys = Array.from(eventsByDay.keys()).sort(compareEventDayKeys);
       
+      // Add top sentinels
+      const topSentinelPanel = createSentinel('top', eventList);
+      if (topSentinelPanel) eventList.appendChild(topSentinelPanel);
+      
+      let topSentinelBottom = null;
+      if (bottomEventListItems) {
+        topSentinelBottom = createSentinel('top', bottomEventListItems);
+        if (topSentinelBottom) bottomEventListItems.appendChild(topSentinelBottom);
+      }
+
       // Render events grouped by day
       const dayHeaders = [];
       const dayHeadersBottom = [];
@@ -1585,6 +1672,15 @@ Object.assign(SpiralCalendar.prototype, {
             }
           }
         }
+      }
+      
+      // Add bottom sentinels
+      const bottomSentinelPanel = createSentinel('bottom', eventList);
+      if (bottomSentinelPanel) eventList.appendChild(bottomSentinelPanel);
+      
+      if (bottomEventListItems) {
+        const bottomSentinelBottom = createSentinel('bottom', bottomEventListItems);
+        if (bottomSentinelBottom) bottomEventListItems.appendChild(bottomSentinelBottom);
       }
       
       // Update sticky top offset for day headers after they're in DOM (account for "All:" header if present)
@@ -1643,61 +1739,64 @@ Object.assign(SpiralCalendar.prototype, {
       });
       
       // Scroll to show the first highlighted event at the top (after header)
-      // Use setTimeout to ensure DOM is updated before scrolling
-      setTimeout(() => {
-        // Scroll event panel list
-        if (firstHighlightedItem && eventList) {
-          // Account for sticky "All:" header height if present
-          const allHeaderItem = eventList.querySelector('li:first-child');
-          const allHeaderHeight = (allHeaderItem && allHeaderItem.querySelector('#eventListSearch')) 
-            ? allHeaderItem.offsetHeight || 0 
-            : 0;
-          
-          // Account for sticky day header if the highlighted event is under one
-          let dayHeaderHeight = 0;
-          const highlightedEventLi = firstHighlightedItem;
-          // Find the previous sibling that is a day header (has sticky positioning)
-          let prevSibling = highlightedEventLi.previousElementSibling;
-          while (prevSibling) {
-            const prevStyle = window.getComputedStyle(prevSibling);
-            if (prevStyle.position === 'sticky' && prevStyle.zIndex === '4') {
-              // This is a day header
-              dayHeaderHeight = prevSibling.offsetHeight || 0;
-              break;
+      // Only jump to this event if we're not loading more items (keeps scroll smooth)
+      if (!options.loadTop && !options.loadBottom) {
+        // Use setTimeout to ensure DOM is updated before scrolling
+        setTimeout(() => {
+          // Scroll event panel list
+          if (firstHighlightedItem && eventList) {
+            // Account for sticky "All:" header height if present
+            const allHeaderItem = eventList.querySelector('li:first-child');
+            const allHeaderHeight = (allHeaderItem && allHeaderItem.querySelector('#eventListSearch')) 
+              ? allHeaderItem.offsetHeight || 0 
+              : 0;
+            
+            // Account for sticky day header if the highlighted event is under one
+            let dayHeaderHeight = 0;
+            const highlightedEventLi = firstHighlightedItem;
+            // Find the previous sibling that is a day header (has sticky positioning)
+            let prevSibling = highlightedEventLi.previousElementSibling;
+            while (prevSibling) {
+              const prevStyle = window.getComputedStyle(prevSibling);
+              if (prevStyle.position === 'sticky' && prevStyle.zIndex === '4') {
+                // This is a day header
+                dayHeaderHeight = prevSibling.offsetHeight || 0;
+                break;
+              }
+              prevSibling = prevSibling.previousElementSibling;
             }
-            prevSibling = prevSibling.previousElementSibling;
+            
+            const itemOffset = firstHighlightedItem.offsetTop;
+            eventList.scrollTop = itemOffset - allHeaderHeight - dayHeaderHeight;
           }
           
-          const itemOffset = firstHighlightedItem.offsetTop;
-          eventList.scrollTop = itemOffset - allHeaderHeight - dayHeaderHeight;
-        }
-        
-        // Scroll bottom event list
-        if (firstHighlightedItemBottom && bottomEventListItems) {
-          // Account for sticky "All:" header height if present
-          const allHeaderItemBottom = bottomEventListItems.querySelector('li:first-child');
-          const allHeaderHeightBottom = (allHeaderItemBottom && allHeaderItemBottom.querySelector('#eventListSearchBottom')) 
-            ? allHeaderItemBottom.offsetHeight || 0 
-            : 0;
-          
-          // Account for sticky day header if the highlighted event is under one
-          let dayHeaderHeightBottom = 0;
-          const highlightedEventLiBottom = firstHighlightedItemBottom;
-          let prevSiblingBottom = highlightedEventLiBottom.previousElementSibling;
-          while (prevSiblingBottom) {
-            const prevStyleBottom = window.getComputedStyle(prevSiblingBottom);
-            if (prevStyleBottom.position === 'sticky' && prevStyleBottom.zIndex === '4') {
-              // This is a day header
-              dayHeaderHeightBottom = prevSiblingBottom.offsetHeight || 0;
-              break;
+          // Scroll bottom event list
+          if (firstHighlightedItemBottom && bottomEventListItems) {
+            // Account for sticky "All:" header height if present
+            const allHeaderItemBottom = bottomEventListItems.querySelector('li:first-child');
+            const allHeaderHeightBottom = (allHeaderItemBottom && allHeaderItemBottom.querySelector('#eventListSearchBottom')) 
+              ? allHeaderItemBottom.offsetHeight || 0 
+              : 0;
+            
+            // Account for sticky day header if the highlighted event is under one
+            let dayHeaderHeightBottom = 0;
+            const highlightedEventLiBottom = firstHighlightedItemBottom;
+            let prevSiblingBottom = highlightedEventLiBottom.previousElementSibling;
+            while (prevSiblingBottom) {
+              const prevStyleBottom = window.getComputedStyle(prevSiblingBottom);
+              if (prevStyleBottom.position === 'sticky' && prevStyleBottom.zIndex === '4') {
+                // This is a day header
+                dayHeaderHeightBottom = prevSiblingBottom.offsetHeight || 0;
+                break;
+              }
+              prevSiblingBottom = prevSiblingBottom.previousElementSibling;
             }
-            prevSiblingBottom = prevSiblingBottom.previousElementSibling;
+            
+            const itemOffsetBottom = firstHighlightedItemBottom.offsetTop;
+            bottomEventListItems.scrollTop = itemOffsetBottom - allHeaderHeightBottom - dayHeaderHeightBottom;
           }
-          
-          const itemOffsetBottom = firstHighlightedItemBottom.offsetTop;
-          bottomEventListItems.scrollTop = itemOffsetBottom - allHeaderHeightBottom - dayHeaderHeightBottom;
-        }
-      }, 0);
+        }, 0);
+      }
       
       // Restore search input cursor position if header was preserved (focus maintained automatically)
       if (wasSearchFocused && shouldPreserveHeader && existingSearchInput) {
