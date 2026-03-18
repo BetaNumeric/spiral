@@ -844,7 +844,7 @@ Object.assign(SpiralCalendar.prototype, {
         const displayTitle = isDraftEventActive ? (detailEvent.title || 'Click to add title...') : detailEvent.title;
         const color = isDraftEventActive && !detailEvent.title ? '#999' : '#000';
         const { width: fittedWidth, height: fittedHeight, fontSizeUsed, maxTitleWidth } = this.measureTitleFitted(displayTitle, circleRadius, titleFontSize, true);
-        const titleBoxWidth = maxTitleWidth + baseFontSize * 0.9;
+        const titleBoxWidth = Math.min(maxTitleWidth, fittedWidth) + baseFontSize * 0.9;
         const titleBoxHeight = Math.max(fontSizeUsed * 1.7, baseFontSize * 1.7);
         if (allowInteraction) {
           this.titleClickArea = {
@@ -1030,7 +1030,7 @@ Object.assign(SpiralCalendar.prototype, {
         background: ${document.body.classList.contains('dark-mode') ? 'var(--dark-bg-secondary)' : 'white'};
         color: ${document.body.classList.contains('dark-mode') ? 'var(--dark-text-primary)' : 'black'};
         z-index: 1000;
-        font-family: inherit;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         text-align: center;
         box-sizing: border-box;
         transform-origin: center center;
@@ -1443,7 +1443,7 @@ Object.assign(SpiralCalendar.prototype, {
         background: ${document.body.classList.contains('dark-mode') ? 'var(--dark-bg-secondary)' : 'white'};
         color: ${document.body.classList.contains('dark-mode') ? 'var(--dark-text-primary)' : 'black'};
         z-index: 1000;
-        font-family: inter, sans-serif;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         resize: none;
         box-sizing: border-box;
         line-height: 20px;
