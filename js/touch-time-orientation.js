@@ -86,13 +86,15 @@ Object.assign(SpiralCalendar.prototype, {
     const ev = this.handleDragState.event;
     if (this.mouseState.draggingHandle === 'start') {
       if (newTime >= ev.end) {
-          ev.start = new Date(ev.end.getTime() - 5 * 60 * 1000);
-        } else {
-          ev.start = newTime;
-        }
-      } else if (this.mouseState.draggingHandle === 'end') {
-        if (newTime <= ev.start) {
-          ev.end = new Date(ev.start.getTime() + 5 * 60 * 1000);
+        ev.start = new Date(ev.end.getTime() - 5 * 60 * 1000);
+      } else {
+        ev.start = newTime;
+      }
+    } else if (this.mouseState.draggingHandle === 'end') {
+      if (newTime <= ev.start) {
+        ev.end = new Date(ev.start.getTime() + 5 * 60 * 1000);
+      } else {
+        ev.end = newTime;
       }
     }
 
