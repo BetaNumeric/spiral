@@ -5,16 +5,53 @@ Object.assign(SpiralCalendar.prototype, {
       const hourAngle = Math.PI / 12; // 15°
       const r = this.state.rotation;
       const k = Math.round(r / hourAngle);
-      const target = k * hourAngle;
-      const delta = target - r;
-      const angleThreshold = 0.06;
-      const speedThreshold = 0.3; // rad/s
+      let target = k * hourAngle;
+      
+      let delta = target - r;
+      // Normalize delta between -PI and PI
+      while (delta > Math.PI) delta -= 2 * Math.PI;
+      while (delta < -Math.PI) delta += 2 * Math.PI;
+
+      const angleThreshold = 0.08; // catch area
+      const speedThreshold = 0.4; // rad/s
       const speed = Math.abs(this._inertiaVelocity || 0);
+      
       if (Math.abs(delta) < angleThreshold && speed < speedThreshold) {
-        this.state.rotation = target;
+        this.animateSnapTo(r + delta); // pass actual absolute coordinate
         return true;
       }
       return false;
+    },
+
+    animateSnapTo(targetAngle) {
+      if (this._inertiaAnimationId) {
+        cancelAnimationFrame(this._inertiaAnimationId);
+      }
+      this._inertiaVelocity = 0;
+      
+      const startAngle = this.state.rotation;
+      const durationMs = 250;
+      const startTs = performance.now();
+      
+      const step = (ts) => {
+        let progress = (ts - startTs) / durationMs;
+        if (progress >= 1) {
+          this.state.rotation = targetAngle;
+          this.drawSpiral();
+          this._inertiaAnimationId = null;
+          return;
+        }
+        
+        // ease-out cubic
+        const ease = 1 - Math.pow(1 - progress, 3);
+        this.state.rotation = startAngle + (targetAngle - startAngle) * ease;
+        this._shouldUpdateEventList = true;
+        this.drawSpiral();
+        
+        this._inertiaAnimationId = requestAnimationFrame(step);
+      };
+      
+      this._inertiaAnimationId = requestAnimationFrame(step);
     },
 
     stopInertia() {
@@ -244,8 +281,6 @@ Object.assign(SpiralCalendar.prototype, {
         this._shouldUpdateEventList = true;
         // Try snap if near boundary
         if (this.snapIfClose()) {
-          this.stopInertia();
-          this.drawSpiral();
           return;
         }
         // Redraw
@@ -254,9 +289,10 @@ Object.assign(SpiralCalendar.prototype, {
         this._inertiaVelocity *= Math.exp(-friction * dt);
         if (Math.abs(this._inertiaVelocity) < minVelocity) {
           // Final snap if close enough when stopping
-          this.snapIfClose();
-          this.stopInertia();
-          this.drawSpiral();
+          if (!this.snapIfClose()) {
+            this.stopInertia();
+            this.drawSpiral();
+          }
           return;
         }
         this._inertiaAnimationId = requestAnimationFrame(step);
