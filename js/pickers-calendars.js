@@ -33,7 +33,10 @@ Object.assign(SpiralCalendar.prototype, {
     }
 
     event.lastModified = Date.now();
+    this._eventsVersion++;
     this._detailViewHasChanges = true;
+    this.ensureLayoutCache();
+    
     if (event.isDraft && this.draftEvent && this.draftEvent.segmentId === event.segmentId) {
       this.draftEvent = event;
     }

@@ -1232,10 +1232,12 @@ Object.assign(SpiralCalendar.prototype, {
           }
           
           event.lastModified = Date.now();
-          
+
           // Mark that changes have been made
+          this._eventsVersion++;
           this._detailViewHasChanges = true;
-          
+          this.ensureLayoutCache();
+
           this.drawSpiral(); // Redraw to update any event visualization
           // Save events to localStorage
           this.saveEventsToStorage();
@@ -1358,6 +1360,8 @@ Object.assign(SpiralCalendar.prototype, {
         event.start = parseDateTimeLocalAsUTC(startInput.value);
         event.end = parseDateTimeLocalAsUTC(endInput.value);
         event.lastModified = Date.now();
+        this._eventsVersion++;
+        this.ensureLayoutCache();
         }
         startInput.remove();
         endInput.remove();

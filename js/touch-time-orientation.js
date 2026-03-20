@@ -56,7 +56,7 @@ Object.assign(SpiralCalendar.prototype, {
       return false;
     }
 
-    const seg = this.findSegmentAtPoint(canvasX, canvasY);
+    const seg = this.findSegmentAtPoint(canvasX, canvasY, { clampToOuterFallback: true });
     if (!seg) return false;
 
     // Transform point to pre-rotation spiral space.
@@ -86,15 +86,13 @@ Object.assign(SpiralCalendar.prototype, {
     const ev = this.handleDragState.event;
     if (this.mouseState.draggingHandle === 'start') {
       if (newTime >= ev.end) {
-        ev.start = new Date(ev.end.getTime() - 60 * 1000);
-      } else {
-        ev.start = newTime;
-      }
-    } else if (this.mouseState.draggingHandle === 'end') {
-      if (newTime <= ev.start) {
-        ev.end = new Date(ev.start.getTime() + 60 * 1000);
-      } else {
-        ev.end = newTime;
+          ev.start = new Date(ev.end.getTime() - 5 * 60 * 1000);
+        } else {
+          ev.start = newTime;
+        }
+      } else if (this.mouseState.draggingHandle === 'end') {
+        if (newTime <= ev.start) {
+          ev.end = new Date(ev.start.getTime() + 5 * 60 * 1000);
       }
     }
 
@@ -295,7 +293,7 @@ Object.assign(SpiralCalendar.prototype, {
 
   getTouchJoystickLongPressConfig() {
     return {
-      activationDelayMs: 440,
+      activationDelayMs: 700,
       dragCancelDistance: 12,
       motionResetDistance: 3
     };
@@ -364,8 +362,8 @@ Object.assign(SpiralCalendar.prototype, {
     const canvasHeight = this.canvas ? this.canvas.clientHeight : 0;
     const minDimension = Math.max(0, Math.min(canvasWidth, canvasHeight));
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-    const axialEnterRadius = Math.round(clamp(minDimension * 0.22, 96, 180));
-    const maxTravel = Math.round(clamp(minDimension * 0.3, axialEnterRadius + 36, 250));
+    const axialEnterRadius = Math.round(clamp(minDimension * 0.28, 120, 220));
+    const maxTravel = Math.round(clamp(minDimension * 0.42, axialEnterRadius + 60, 320));
 
     return {
       deadZone: 1,
@@ -642,10 +640,9 @@ Object.assign(SpiralCalendar.prototype, {
         if (Math.abs(limited.y) > deadZone && verticalAlignment >= dayStepVerticalRatio) {
           const verticalNorm = Math.min(1, (Math.abs(limited.y) - deadZone) / (maxTravel - deadZone));
           const direction = limited.y > 0 ? -1 : 1;
-          const weekJumpThreshold = axialEnterRadius + (maxTravel - axialEnterRadius) * 0.55;
+          const weekJumpThreshold = axialEnterRadius + (maxTravel - axialEnterRadius) * 0.85;
           const dayStep = Math.abs(limited.y) >= weekJumpThreshold ? 7 : 1;
           const intervalMs = (420 - verticalNorm * 320) + (dayStep === 7 ? 80 : 0);
-
           if (
             direction !== this.touchState.joystickLastDayDirection ||
             dayStep !== this.touchState.joystickLastDayStep

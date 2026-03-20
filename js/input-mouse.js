@@ -153,7 +153,7 @@ Object.assign(SpiralCalendar.prototype, {
       // Handle event time handle dragging
       if (this.mouseState.isHandleDragging && this.handleDragState && this.handleDragState.event) {
         // Determine which hour segment we're over
-        const seg = this.findSegmentAtPoint(canvasX, canvasY);
+        const seg = this.findSegmentAtPoint(canvasX, canvasY, { clampToOuterFallback: true });
         if (seg) {
           // Compute minute within this segment using pre-rotation coordinates
           const canvasWidth = this.canvas.clientWidth;
@@ -199,17 +199,17 @@ Object.assign(SpiralCalendar.prototype, {
           // Apply constraints and update event
           const ev = this.handleDragState.event;
           if (this.mouseState.draggingHandle === 'start') {
-            // Start must be before end by at least 1 minute
+            // Start must be before end by at least 5 minutes
             if (newTime >= ev.end) {
-              const adjusted = new Date(ev.end.getTime() - 60 * 1000);
+              const adjusted = new Date(ev.end.getTime() - 5 * 60 * 1000);
               ev.start = adjusted;
             } else {
               ev.start = newTime;
             }
           } else if (this.mouseState.draggingHandle === 'end') {
-            // End must be after start by at least 1 minute
+            // End must be after start by at least 5 minutes
             if (newTime <= ev.start) {
-              const adjusted = new Date(ev.start.getTime() + 60 * 1000);
+              const adjusted = new Date(ev.start.getTime() + 5 * 60 * 1000);
               ev.end = adjusted;
             } else {
               ev.end = newTime;
@@ -852,9 +852,36 @@ Object.assign(SpiralCalendar.prototype, {
         // Clicked outside of any segment - deselect current selection
         const hadSelection = this.state.detailViewDay !== null || this.mouseState.selectedSegment !== null;
         this.closeDetailView({ clearSelection: true, clearDraft: true });
-        
-        // Reset auto-activated settings (independent of autoInsideSegmentNumbers flag)
+
+// Reset auto-activated settings (independent of autoInsideSegmentNumbers flag)
         let needsRedraw = false;
+
+        // Close event list if click was fully outside the spiral's outer bounds
+        if (this.timeDisplayState && this.timeDisplayState.pullUpOffset > 0) {
+          const canvasWidth = this.canvas.clientWidth;
+          const canvasHeight = this.canvas.clientHeight;
+          const { centerX, centerY } = this.calculateCenter(canvasWidth, canvasHeight);
+          const x = canvasX / (window.devicePixelRatio || 1) - centerX;
+          const y = canvasY / (window.devicePixelRatio || 1) - centerY;
+          const dist = Math.sqrt(x * x + y * y);
+          const { maxRadius, thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
+          const visibilityRange = this.getRenderVisibilityRange(thetaMax);
+          const circleMode = this.getRenderCircleMode();
+          const radiusFunction = this.createRadiusFunction(maxRadius, thetaMax, this.state.radiusExponent, this.state.rotation, {
+            circleMode: circleMode,
+            allowSpiralOverflow: !circleMode && this.shouldAllowDetailViewSpiralOverflow(thetaMax, null)
+          });
+          const endDay = Math.ceil(visibilityRange.max / (2 * Math.PI)) + 1;
+          const outerRadius = radiusFunction((endDay + 1) * 2 * Math.PI);
+          
+          if (dist > outerRadius) {
+            this.timeDisplayState.pullUpOffset = 0;
+            if (typeof this.hideBottomEventList === 'function') {
+              this.hideBottomEventList();
+            }
+            needsRedraw = true; // ensure we redraw after hiding
+          }
+        }
         
         // Restore original scale if it was stored
         if (this.state.originalSpiralScale !== null) {
@@ -1237,7 +1264,7 @@ Object.assign(SpiralCalendar.prototype, {
       this.resetToCurrentTimeFromTap();
     },
 
-    findSegmentAtPoint(canvasX, canvasY) {
+    findSegmentAtPoint(canvasX, canvasY, options = {}) {
       const canvasWidth = this.canvas.clientWidth;
       const canvasHeight = this.canvas.clientHeight;
       
@@ -1269,12 +1296,13 @@ Object.assign(SpiralCalendar.prototype, {
       while (angle < 0) angle += 2 * Math.PI;
       
       if (this.getRenderCircleMode()) {
+        let bestClampSegment = null;
         // Circle mode detection - use same logic as drawing
         const { maxRadius, thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
         const visibilityRange = this.getRenderVisibilityRange(thetaMax);
         const radiusFunction = this.createRadiusFunction(maxRadius, thetaMax, this.state.radiusExponent, this.state.rotation);
         const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
-        
+
         const startDay = Math.floor(visibilityRange.min / (2 * Math.PI)) - 1;
         const endDay = Math.ceil(visibilityRange.max / (2 * Math.PI)) + 1;
         
@@ -1283,24 +1311,24 @@ Object.assign(SpiralCalendar.prototype, {
           // For each ring, use spiral's segment radii for the corresponding day
           const outerRadius = radiusFunction((day + 1) * 2 * Math.PI);
           const innerRadius = radiusFunction(day * 2 * Math.PI);
-          
+
           if (radius >= innerRadius && radius <= outerRadius) {
             // Point is in this day ring, now find the segment
             for (let segment = 0; segment < CONFIG.SEGMENTS_PER_DAY; segment++) {
               const dayStartAngle = day * 2 * Math.PI;
               const segmentStartAngle = dayStartAngle + segment * segmentAngle;
               const segmentEndAngle = segmentStartAngle + segmentAngle;
-              
+
               const segmentStart = Math.max(segmentStartAngle, visibilityRange.min);
               const segmentEnd = Math.min(segmentEndAngle, visibilityRange.max);
-              
+
               if (segmentEnd <= segmentStart) continue;
-              
+
               // Check if angle is within this segment
               let checkAngle = angle;
               while (checkAngle < segmentStart) checkAngle += 2 * Math.PI;
               while (checkAngle > segmentStart + 2 * Math.PI) checkAngle -= 2 * Math.PI;
-              
+
               if (checkAngle >= segmentStart && checkAngle <= segmentEnd) {
                 return {
                   day: day,
@@ -1311,9 +1339,32 @@ Object.assign(SpiralCalendar.prototype, {
               }
             }
             break; // Found the day ring, no need to check others
+          } else if (options.clampToOuterFallback && radius > outerRadius) {
+            for (let segment = 0; segment < CONFIG.SEGMENTS_PER_DAY; segment++) {
+              const dayStartAngle = day * 2 * Math.PI;
+              const segmentStartAngle = dayStartAngle + segment * segmentAngle;
+              const segmentEndAngle = segmentStartAngle + segmentAngle;
+
+              const segmentStart = Math.max(segmentStartAngle, visibilityRange.min);
+              const segmentEnd = Math.min(segmentEndAngle, visibilityRange.max);
+
+              if (segmentEnd <= segmentStart) continue;
+
+              let checkAngle = angle;
+              while (checkAngle < segmentStart) checkAngle += 2 * Math.PI;
+              while (checkAngle > segmentStart + 2 * Math.PI) checkAngle -= 2 * Math.PI;
+
+              if (checkAngle >= segmentStart && checkAngle <= segmentEnd) {
+                bestClampSegment = { day, segment, angle: checkAngle, radius: outerRadius };
+              }
+            }
           }
         }
+        if (options.clampToOuterFallback && bestClampSegment) {
+          return bestClampSegment;
+        }
       } else {
+        let bestClampSegment = null;
         // Spiral mode detection
         const { thetaMax, maxRadius } = this.calculateTransforms(canvasWidth, canvasHeight);
         const visibilityRange = this.getRenderVisibilityRange(thetaMax);
@@ -1371,9 +1422,23 @@ Object.assign(SpiralCalendar.prototype, {
                   angle: normalizedAngle,
                   radius: radius
                 };
+              } else if (options.clampToOuterFallback && radius > maxCheckRadius) {
+                // If we are clamping and the point is beyond this segment's outer edge,
+                // we record it. The outer loop will naturally overwrite this with the
+                // outermost available valid day's segment that meets this angle.
+                bestClampSegment = {
+                  day: day,
+                  segment: segment,
+                  angle: normalizedAngle,
+                  radius: maxCheckRadius
+                };
               }
             }
           }
+        }
+        
+        if (options.clampToOuterFallback && bestClampSegment) {
+          return bestClampSegment;
         }
       }
       
