@@ -341,13 +341,6 @@ Object.assign(SpiralCalendar.prototype, {
       if (this.autoTimeAlignState && this.autoTimeAlignState.enabled) {
         this.stopAutoTimeAlign();
       }
-      const rotateSlider = document.getElementById('rotateSlider');
-      if (rotateSlider) {
-        const degrees = eventRotation * 180 / Math.PI;
-        rotateSlider.value = degrees;
-        const rotateVal = document.getElementById('rotateVal');
-        if (rotateVal) rotateVal.textContent = Math.round(degrees) + '°';
-      }
 
       this.drawSpiral();
     } catch (_) {

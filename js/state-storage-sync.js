@@ -1,52 +1,5 @@
 // Animation, Storage, and Settings Sync
 Object.assign(SpiralCalendar.prototype, {
-    startAnimation() {
-      if (this.animationState.animationId) return; // Already animating
-      
-      this.animationState.startTime = performance.now();
-      this.animate();
-    },
-
-    stopAnimation() {
-      if (this.animationState.animationId) {
-        cancelAnimationFrame(this.animationState.animationId);
-        this.animationState.animationId = null;
-      }
-    },
-
-    animate() {
-      if (!this.animationState.isAnimating) return;
-
-      const currentTime = performance.now();
-      const elapsed = (currentTime - this.animationState.startTime) / 1000; // Convert to seconds
-      
-      // Get the current max value from the rotateMaxSlider
-      const rotateMaxSlider = document.getElementById('rotateMaxSlider');
-      const maxDegrees = +rotateMaxSlider.value;
-      
-      // Calculate rotation based on time and speed
-      // One complete cycle takes 4 seconds at speed 1.0
-      const cycleDuration = 4 / this.animationState.speed;
-      const progress = (elapsed % cycleDuration) / cycleDuration;
-      
-      // Convert progress (0-1) to rotation (0-maxDegrees)
-      const rotationDegrees = progress * maxDegrees;
-      const rotationRadians = rotationDegrees * Math.PI / 180;
-      
-      // Update the rotation state
-      this.state.rotation = rotationRadians;
-      
-      // Update the UI slider to reflect current rotation
-      document.getElementById('rotateSlider').value = rotationDegrees;
-      document.getElementById('rotateVal').textContent = Math.round(rotationDegrees) + '°';
-      
-      // Redraw the spiral
-      this.drawSpiral();
-      
-      // Continue animation
-      this.animationState.animationId = requestAnimationFrame(() => this.animate());
-    },
-
     snapIfClose() {
       // Snap when close to nearest 15° boundary and moving slowly
       const hourAngle = Math.PI / 12; // 15°
@@ -294,14 +247,6 @@ Object.assign(SpiralCalendar.prototype, {
           this.stopInertia();
           this.drawSpiral();
           return;
-        }
-        // Update UI slider
-        const rotateSlider = document.getElementById('rotateSlider');
-        if (rotateSlider) {
-          let degrees = this.state.rotation * 180 / Math.PI;
-          rotateSlider.value = degrees % 360;
-          const rotateVal = document.getElementById('rotateVal');
-          if (rotateVal) rotateVal.textContent = Math.round(degrees) + '°';
         }
         // Redraw
         this.drawSpiral();
@@ -597,11 +542,7 @@ Object.assign(SpiralCalendar.prototype, {
     // Runtime/UI-only defaults not persisted in defaultSettings.
     this.state.circleMode = false;
     this.state.detailViewDay = null;
-    this.animationState.isAnimating = !!this.defaultSettings.animationEnabled;
-    this.animationState.speed = Number(this.defaultSettings.animationSpeed ?? 1.0);
-    if (!this.animationState.isAnimating) {
-      this.stopAnimation();
-    }
+
     if (Number.isFinite(Number(this.state.nightOverlayLat)) && Number.isFinite(Number(this.state.nightOverlayLng))) {
       LOCATION_COORDS.lat = Number(this.state.nightOverlayLat);
       LOCATION_COORDS.lng = Number(this.state.nightOverlayLng);
@@ -609,20 +550,9 @@ Object.assign(SpiralCalendar.prototype, {
     this._sunTimesCache = null;
     // Removed toggle: always keep overlap-hiding on.
     this.state.hideDayWhenHourInside = true;
-    
-    // Reset rotation slider max value
-    const rotateMaxSlider = document.getElementById('rotateMaxSlider');
-    if (rotateMaxSlider) {
-      rotateMaxSlider.value = 720;
-      const rotateMaxVal = document.getElementById('rotateMaxVal');
-      if (rotateMaxVal) rotateMaxVal.textContent = '720°';
-    }
-    
+
     // Sync all UI controls
     this.syncAllUIControls();
-    if (this.animationState.isAnimating) {
-      this.startAnimation();
-    }
     // Apply dark mode class
     try { document.body.classList.toggle('dark-mode', !!this.state.darkMode); } catch(_) {}
     this.updateThemeColor();
@@ -654,7 +584,6 @@ Object.assign(SpiralCalendar.prototype, {
       { slider: 'daysSlider', value: this.state.days, display: 'daysVal' },
       { slider: 'scaleSlider', value: this.state.spiralScale, display: 'scaleVal' },
       { slider: 'radiusSlider', value: this.state.radiusExponent, display: 'radiusVal' },
-      { slider: 'rotateSlider', value: this.state.rotation * 180 / Math.PI, display: 'rotateVal', suffix: '°' },
       { slider: 'hourNumbersPositionSlider', value: this.state.hourNumbersPosition, display: 'hourNumbersPositionVal' },
     ];
     
@@ -767,12 +696,12 @@ Object.assign(SpiralCalendar.prototype, {
     // Update sub-options visibility
     const hourNumbersControls = document.getElementById('hourNumbersControls');
     if (hourNumbersControls) {
-      hourNumbersControls.style.display = (this.state.showHourNumbers && DEV_MODE) ? 'block' : 'none';
+      hourNumbersControls.style.display = this.state.showHourNumbers ? 'block' : 'none';
     }
-    
+
     const dayNumbersControls = document.getElementById('dayNumbersControls');
     if (dayNumbersControls) {
-      dayNumbersControls.style.display = (this.state.showDayNumbers && DEV_MODE) ? 'block' : 'none';
+      dayNumbersControls.style.display = this.state.showDayNumbers ? 'block' : 'none';
     }
     // Sync day label short-name toggle
     const dayLabelUseShortNames = document.getElementById('dayLabelUseShortNames');
@@ -825,23 +754,6 @@ Object.assign(SpiralCalendar.prototype, {
       eventBoundaryAllEdgesToggle.checked = this.state.showAllEventBoundaryStrokes;
     }
 
-    // Sync animation controls
-    const animateToggle = document.getElementById('animateToggle');
-    if (animateToggle) {
-      animateToggle.checked = !!this.animationState.isAnimating;
-    }
-    const speedSlider = document.getElementById('speedSlider');
-    const speedVal = document.getElementById('speedVal');
-    if (speedSlider && speedVal) {
-      const speed = Number(this.animationState.speed ?? 1);
-      speedSlider.value = String(speed);
-      speedVal.textContent = String(speed);
-    }
-    const animationSpeedControls = document.getElementById('animationSpeedControls');
-    if (animationSpeedControls) {
-      animationSpeedControls.style.display = this.animationState.isAnimating ? 'block' : 'none';
-    }
-    
     // Sync overlay opacity sliders and show/hide controls
     const nightOverlayOpacitySlider = document.getElementById('nightOverlayOpacitySlider');
     const nightOverlayOpacityVal = document.getElementById('nightOverlayOpacityVal');
@@ -927,7 +839,7 @@ Object.assign(SpiralCalendar.prototype, {
       this._currentTimeResetAnimationId = null;
       this.state.rotation = targetRotation;
       this._shouldUpdateEventList = true;
-      this.updateRotationSliderUI();
+      
       this.drawSpiral();
       if (enableAutoTimeAlign) {
         this.startAutoTimeAlign({ skipImmediateUpdate: true });
@@ -951,7 +863,7 @@ Object.assign(SpiralCalendar.prototype, {
       const eased = easeInOutCubic(t);
       this.state.rotation = startRotation + delta * eased;
       this._shouldUpdateEventList = true;
-      this.updateRotationSliderUI();
+      
       this.drawSpiral();
 
       if (t < 1) {
@@ -969,9 +881,6 @@ Object.assign(SpiralCalendar.prototype, {
     const now = new Date();
     const rotation = this.getCurrentTimeRotation(now);
     this.state.rotation = rotation;
-    // Update the rotateSlider UI to match
-    this.updateRotationSliderUI();
-    this.drawSpiral();
   },
 
   isDetailViewCircleModeActive() {
@@ -1630,7 +1539,11 @@ Object.assign(SpiralCalendar.prototype, {
     }
 
     if (this.canvas) {
-      this.canvas.style.cursor = 'default';
+      if (typeof this.refreshCanvasCursor === 'function') {
+        this.refreshCanvasCursor(true);
+      } else {
+        this.canvas.style.cursor = 'default';
+      }
     }
   },
 

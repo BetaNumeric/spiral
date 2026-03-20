@@ -31,23 +31,11 @@ Object.assign(SpiralCalendar.prototype, {
           property: 'spiralScale',
           formatter: (val) => val 
         },
-        { 
-          sliderId: 'radiusSlider', 
-          displayId: 'radiusVal', 
+        {
+          sliderId: 'radiusSlider',
+          displayId: 'radiusVal',
           property: 'radiusExponent',
-          formatter: (val) => val 
-        },
-
-        { 
-          sliderId: 'rotateSlider', 
-          displayId: 'rotateVal', 
-          property: 'rotation',
-          formatter: (val) => val + '°',
-          transform: (val) => val * Math.PI / 180,  // convert to radians
-          onChange: () => {
-            // Mark that this is a manual rotation, so event list should update
-            this._shouldUpdateEventList = true;
-          }
+          formatter: (val) => val
         }
       ];
 
@@ -90,9 +78,9 @@ Object.assign(SpiralCalendar.prototype, {
       if (showHourNumbersCheckbox) {
       showHourNumbersCheckbox.addEventListener('change', (e) => {
         this.state.showHourNumbers = e.target.checked;
-          // Show/hide sub-options (only if DEV_MODE is true)
+          // Show/hide sub-options
           if (hourNumbersControls) {
-            hourNumbersControls.style.display = (e.target.checked && DEV_MODE) ? 'block' : 'none';
+            hourNumbersControls.style.display = e.target.checked ? 'block' : 'none';
           }
         this.drawSpiral();
           this.saveSettingsToStorage();
@@ -106,9 +94,9 @@ Object.assign(SpiralCalendar.prototype, {
       if (showDayNumbersCheckbox) {
         showDayNumbersCheckbox.addEventListener('change', (e) => {
           this.state.showDayNumbers = e.target.checked;
-          // Show/hide sub-options (only if DEV_MODE is true)
+          // Show/hide sub-options
           if (dayNumbersControls) {
-            dayNumbersControls.style.display = (e.target.checked && DEV_MODE) ? 'block' : 'none';
+            dayNumbersControls.style.display = e.target.checked ? 'block' : 'none';
           }
           this.drawSpiral();
           this.saveSettingsToStorage();
@@ -949,60 +937,12 @@ Object.assign(SpiralCalendar.prototype, {
         });
       }
 
-      // Add animation controls
-      const animateToggle = document.getElementById('animateToggle');
-      if (animateToggle) {
-        animateToggle.addEventListener('change', (e) => {
-        this.animationState.isAnimating = e.target.checked;
-        if (this.animationState.isAnimating) {
-          this.startAnimation();
-        } else {
-          this.stopAnimation();
-        }
-          // Show/hide animation speed sub-options like other toggles
-          const animationSpeedControls = document.getElementById('animationSpeedControls');
-          if (animationSpeedControls) {
-            animationSpeedControls.style.display = e.target.checked ? 'block' : 'none';
-        }
-      });
-        // Initialize sub-options visibility
-        const animationSpeedControls = document.getElementById('animationSpeedControls');
-        if (animationSpeedControls) {
-          animationSpeedControls.style.display = animateToggle.checked ? 'block' : 'none';
-        }
-      }
-
-      const speedSlider = document.getElementById('speedSlider');
-      if (speedSlider) {
-        speedSlider.addEventListener('input', (e) => {
-        this.animationState.speed = +e.target.value;
-          const speedVal = document.getElementById('speedVal');
-          if (speedVal) speedVal.textContent = e.target.value;
-      });
-      }
+// Add other logic here if there is any below
 
       // Study session controls
       this.setupStudySessionControls();
 
-      // Add rotate max slider handler
-  const rotateSlider = document.getElementById('rotateSlider');
-      const rotateMaxSlider = document.getElementById('rotateMaxSlider');
-      const rotateMaxVal = document.getElementById('rotateMaxVal');
-      if (rotateMaxSlider && rotateSlider && rotateMaxVal) {
-      rotateMaxSlider.addEventListener('input', (e) => {
-        const maxVal = +e.target.value;
-        rotateSlider.max = maxVal;
-        rotateMaxVal.textContent = maxVal + '°';
-        // Clamp current value if needed
-        if (+rotateSlider.value > maxVal) {
-          rotateSlider.value = maxVal;
-          this.state.rotation = maxVal * Math.PI / 180;
-          this.drawSpiral();
-        }
-      });
-      }
-
-      // Add mouse event listeners for segment detection
+// Add mouse event listeners for segment detection
     this.canvas.addEventListener('mousemove', (e) => {
       const isMobile = isMobileDevice();
       if (isMobile) return; // disable hover handling on mobile
@@ -1302,15 +1242,7 @@ Object.assign(SpiralCalendar.prototype, {
         }
         
         // No clamping: allow indefinite rotation
-        // Update the rotateSlider UI to match
-        const rotateSlider = document.getElementById('rotateSlider');
-        if (rotateSlider) {
-          // Allow indefinite rotation for wheel events
-          let degrees = this.state.rotation * 180 / Math.PI;
-          rotateSlider.value = degrees % 360; // Only constrain slider visual, not the actual value
-          const rotateVal = document.getElementById('rotateVal');
-          if (rotateVal) rotateVal.textContent = Math.round(degrees) + '°';
-        }
+
         this.drawSpiral();
       }, { passive: false });
 

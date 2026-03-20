@@ -58,8 +58,6 @@ const APP_SETTINGS_DEFAULTS = {
 
   // UX
   audioFeedbackEnabled: true,
-  animationEnabled: false,
-  animationSpeed: 1.0,
   darkMode: false,
 
   // Calendars
@@ -90,8 +88,6 @@ const APP_DEV_OPTIONS_CONFIG = {
     'daysSlider', 'daysVal',
     'scaleSlider', 'scaleVal',
     'radiusSlider', 'radiusVal',
-    'rotateSlider', 'rotateVal',
-    'rotateMaxSlider', 'rotateMaxVal',
     'showMidnightLinesToggle','showNoonLinesToggle','showSixAmPmLinesToggle',
     'longPressJoystickToggle',
     'showHourNumbers', 'hourNumbersControls',
@@ -102,9 +98,7 @@ const APP_DEV_OPTIONS_CONFIG = {
     'overlayStackMode',
     'eventBoundaryStrokesToggle',
     'eventBoundaryStrokeControls',
-    'tooltipToggle',
-    'animateToggle',
-    'speedSlider', 'speedVal'
+    'tooltipToggle'
   ],
 
   // Whole sections hidden when "Dev Options" is OFF.

@@ -5,7 +5,6 @@ Object.assign(SpiralCalendar.prototype, {
 
       const startup = this.startupAnimationState;
       startup.started = true;
-      startup.resumeContinuousAnimation = !!this.animationState.isAnimating;
 
       const prefersReducedMotion = typeof window !== 'undefined' &&
         typeof window.matchMedia === 'function' &&
@@ -16,9 +15,6 @@ Object.assign(SpiralCalendar.prototype, {
         startup.progress = 1;
         startup.revealedHourSegmentKeys = [];
         this.drawSpiral();
-        if (startup.resumeContinuousAnimation) {
-          this.startAnimation();
-        }
         return;
       }
 
@@ -38,9 +34,6 @@ Object.assign(SpiralCalendar.prototype, {
           startup.progress = 1;
           startup.revealedHourSegmentKeys = [];
           this.drawSpiral();
-          if (startup.resumeContinuousAnimation) {
-            this.startAnimation();
-          }
         }
       };
 

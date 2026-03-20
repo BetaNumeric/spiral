@@ -194,16 +194,7 @@ Object.assign(SpiralCalendar.prototype, {
     this.touchState[frameKey] = requestAnimationFrame(step);
   },
 
-  updateRotationSliderUI() {
-    const rotateSlider = document.getElementById('rotateSlider');
-    if (!rotateSlider) return;
 
-    const degrees = this.state.rotation * 180 / Math.PI;
-    rotateSlider.value = degrees % 360;
-
-    const rotateVal = document.getElementById('rotateVal');
-    if (rotateVal) rotateVal.textContent = Math.round(degrees) + '°';
-  },
 
   clearTouchJoystickTimer() {
     if (!this.touchState || !this.touchState.longPressTimerId) return;
@@ -461,6 +452,10 @@ Object.assign(SpiralCalendar.prototype, {
     if (resetConsumedTouch) {
       this.touchState.joystickConsumedTouch = false;
     }
+
+    if (typeof this.refreshCanvasCursor === 'function') {
+      this.refreshCanvasCursor();
+    }
   },
 
   beginPointerRotationDragAtPoint(pointX, pointY) {
@@ -480,6 +475,10 @@ Object.assign(SpiralCalendar.prototype, {
     if (this.autoTimeAlignState.enabled) {
       this.autoTimeAlignState.enabled = false;
       this.stopAutoTimeAlign();
+    }
+
+    if (typeof this.refreshCanvasCursor === 'function') {
+      this.refreshCanvasCursor();
     }
   },
 
@@ -519,6 +518,9 @@ Object.assign(SpiralCalendar.prototype, {
     }
 
     this.playFeedback(0.08, 12);
+    if (typeof this.refreshCanvasCursor === 'function') {
+      this.refreshCanvasCursor();
+    }
     this.startTouchJoystickLoop();
     this.drawSpiral();
   },
@@ -676,7 +678,7 @@ Object.assign(SpiralCalendar.prototype, {
       }
 
       if (rotationChanged) {
-        this.updateRotationSliderUI();
+        
         this.drawSpiral();
       }
 
@@ -1181,14 +1183,7 @@ Object.assign(SpiralCalendar.prototype, {
           }
         }
       }
-      
-          const rotateSlider = document.getElementById('rotateSlider');
-          if (rotateSlider) {
-            let degrees = this.state.rotation * 180 / Math.PI;
-            rotateSlider.value = degrees % 360;
-            const rotateVal = document.getElementById('rotateVal');
-            if (rotateVal) rotateVal.textContent = Math.round(degrees) + '°';
-          }
+
           this.touchState.initialDistance = currentDistance;
       // Mark that a pinch-zoom just occurred
       this._justPinchZoomed = true;
@@ -1270,15 +1265,7 @@ Object.assign(SpiralCalendar.prototype, {
         }
         this._lastMoveTs = now;
         
-        // Update the rotateSlider UI to match
-        const rotateSlider = document.getElementById('rotateSlider');
-        if (rotateSlider) {
-          let degrees = this.state.rotation * 180 / Math.PI;
-          // Allow indefinite rotation for touch drag
-          rotateSlider.value = degrees % 360; // Only constrain slider visual, not the actual value
-          const rotateVal = document.getElementById('rotateVal');
-          if (rotateVal) rotateVal.textContent = Math.round(degrees) + '°';
-        }
+
         
         this.drawSpiral();
       }
@@ -1339,7 +1326,11 @@ Object.assign(SpiralCalendar.prototype, {
         window.renderEventList();
       }
 
-      this.canvas.style.cursor = 'default';
+      if (typeof this.refreshCanvasCursor === 'function') {
+        this.refreshCanvasCursor();
+      } else {
+        this.canvas.style.cursor = 'default';
+      }
       this.drawSpiral();
       if (e.cancelable) e.preventDefault();
       return;

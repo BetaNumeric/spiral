@@ -85,6 +85,84 @@ Object.assign(SpiralCalendar.prototype, {
 
     setupCanvas() {
       this.scheduleViewportResize();
+      this.refreshCanvasCursor(true);
+    },
+
+    getDetailViewElementCursor(element) {
+      switch (element) {
+        case 'title':
+        case 'description':
+          return 'text';
+        default:
+          return 'pointer';
+      }
+    },
+
+    shouldMirrorCanvasCursorGlobally() {
+      return !!(
+        (this.timeDisplayState && this.timeDisplayState.mouseActive && this.state.showTimeDisplay) ||
+        this.mouseState.isHandleDragging ||
+        this.mouseState.isDragging ||
+        (this.touchState && this.touchState.joystickActive && this.touchState.joystickTouchId === 'mouse')
+      );
+    },
+
+    getCanvasInteractionCursor() {
+      if (this.timeDisplayState && this.timeDisplayState.mouseActive && this.state.showTimeDisplay) {
+        return 'ns-resize';
+      }
+
+      if (this.mouseState.isHandleDragging || this.mouseState.isDragging) {
+        return 'grabbing';
+      }
+
+      if (this.touchState && this.touchState.joystickActive && this.touchState.joystickTouchId === 'mouse') {
+        return 'grabbing';
+      }
+
+      if (this.mouseState.hoveredHandle) {
+        return 'grab';
+      }
+
+      if (this.mouseState.hoveredDetailElement) {
+        return this.getDetailViewElementCursor(this.mouseState.hoveredDetailElement);
+      }
+
+      if (this.mouseState.hoveredTimeDisplay) {
+        return 'ns-resize';
+      }
+
+      if (this.mouseState.hoveredSegment) {
+        return 'pointer';
+      }
+
+      return this.state.detailViewDay === null ? 'grab' : 'default';
+    },
+
+    refreshCanvasCursor(force = false) {
+      const nextCanvasCursor = this.getCanvasInteractionCursor();
+      const nextGlobalCursor = this.shouldMirrorCanvasCursorGlobally() ? nextCanvasCursor : '';
+
+      if (!force &&
+          this._canvasInteractionCursor === nextCanvasCursor &&
+          this._globalInteractionCursor === nextGlobalCursor) {
+        return;
+      }
+
+      this._canvasInteractionCursor = nextCanvasCursor;
+      this._globalInteractionCursor = nextGlobalCursor;
+
+      if (this.canvas && this.canvas.style) {
+        this.canvas.style.cursor = nextCanvasCursor;
+      }
+
+      if (document.documentElement && document.documentElement.style) {
+        document.documentElement.style.cursor = nextGlobalCursor;
+      }
+
+      if (document.body && document.body.style) {
+        document.body.style.cursor = nextGlobalCursor;
+      }
     },
 
     handleMouseMove(event) {
@@ -136,15 +214,16 @@ Object.assign(SpiralCalendar.prototype, {
           this._lastTimeDisplayDragDraw = now;
           this.drawSpiral();
         }
-        
+
+        this.refreshCanvasCursor();
         return;
       }
       const rect = this.canvas.getBoundingClientRect();
       const mouseX = event.clientX - rect.left;
       const mouseY = event.clientY - rect.top;
-    // Track last mouse position for hover rendering in draw routines
-    this.mouseState.lastMouseX = mouseX;
-    this.mouseState.lastMouseY = mouseY;
+      // Track last mouse position for hover rendering in draw routines
+      this.mouseState.lastMouseX = mouseX;
+      this.mouseState.lastMouseY = mouseY;
       
       // Convert to canvas coordinates (accounting for device pixel ratio)
       const canvasX = mouseX * this.canvas.width / this.canvas.clientWidth;
@@ -217,12 +296,12 @@ Object.assign(SpiralCalendar.prototype, {
           }
           // Mark as changed and redraw
           this._detailViewHasChanges = true;
-          this.canvas.style.cursor = 'grabbing';
           // Rebuild layout cache since event times changed
           this._eventsVersion++;
           this.ensureLayoutCache();
           this.drawSpiral();
         }
+        this.refreshCanvasCursor();
         return;
       }
       
@@ -230,6 +309,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (this.touchState && this.touchState.joystickActive && this.touchState.joystickTouchId === 'mouse') {
         this.updateMouseJoystick(mouseX, mouseY);
         this.drawSpiral();
+        this.refreshCanvasCursor();
         return;
       }
 
@@ -286,18 +366,11 @@ Object.assign(SpiralCalendar.prototype, {
           }
           this._lastMoveTs = now;
           
-          // Update the rotateSlider UI to match
-          const rotateSlider = document.getElementById('rotateSlider');
-          if (rotateSlider) {
-            let degrees = this.state.rotation * 180 / Math.PI;
-            // Allow indefinite rotation - don't constrain to 0-360°
-            rotateSlider.value = degrees % 360; // Only constrain slider visual, not the actual value
-            const rotateVal = document.getElementById('rotateVal');
-            if (rotateVal) rotateVal.textContent = Math.round(degrees) + '°';
-          }
+
           
           this.drawSpiral();
         }
+        this.refreshCanvasCursor();
         return; // Don't update hover when dragging
       }
       
@@ -312,17 +385,12 @@ Object.assign(SpiralCalendar.prototype, {
       
       if (isHoveringTimeDisplay !== this.mouseState.hoveredTimeDisplay) {
         this.mouseState.hoveredTimeDisplay = isHoveringTimeDisplay;
-        
-        // Change cursor
-        this.canvas.style.cursor = isHoveringTimeDisplay ? 'pointer' : 'default';
-        
         this.drawSpiral(); // Redraw to show hover effects
       }
     } else {
       // Reset hover state when time display is disabled
       if (this.mouseState.hoveredTimeDisplay) {
         this.mouseState.hoveredTimeDisplay = false;
-        this.canvas.style.cursor = 'default';
         this.drawSpiral();
       }
     }
@@ -359,8 +427,6 @@ Object.assign(SpiralCalendar.prototype, {
         const newHovered = startHit ? 'start' : (endHit ? 'end' : null);
         if (newHovered !== this.mouseState.hoveredHandle) {
           this.mouseState.hoveredHandle = newHovered;
-          // Update cursor
-          this.canvas.style.cursor = newHovered ? 'pointer' : 'default';
           // Redraw to update handle sizes on hover
           this.drawSpiral();
         }
@@ -373,7 +439,6 @@ Object.assign(SpiralCalendar.prototype, {
       } else if (this.mouseState.hoveredHandle) {
         // Clear stale hover state if handles aren't present
         this.mouseState.hoveredHandle = null;
-        this.canvas.style.cursor = 'default';
         this.drawSpiral();
       }
       
@@ -396,7 +461,6 @@ Object.assign(SpiralCalendar.prototype, {
         // Cursor is outside the detail view, reset hover state
         if (this.mouseState.hoveredDetailElement !== null) {
           this.mouseState.hoveredDetailElement = null;
-          this.canvas.style.cursor = 'default';
         }
       }
     }
@@ -431,7 +495,9 @@ Object.assign(SpiralCalendar.prototype, {
       if (shouldRedraw) {
         this.drawSpiral(); // Redraw to update hover highlight / tooltip visibility
       }
-      }
+    }
+
+      this.refreshCanvasCursor();
     },
 
   checkDetailViewHover(mouseX, mouseY, centerX, centerY) {
@@ -477,14 +543,9 @@ Object.assign(SpiralCalendar.prototype, {
     // Update cursor based on hovered element
     if (hoveredElement !== this.mouseState.hoveredDetailElement) {
       this.mouseState.hoveredDetailElement = hoveredElement;
-      
-      if (hoveredElement) {
-        this.canvas.style.cursor = 'pointer';
-      } else {
-        this.canvas.style.cursor = 'default';
-      }
       // Redraw to reflect hover styling changes on canvas elements
       this.drawSpiral();
+      this.refreshCanvasCursor();
     }
   },
 
@@ -503,15 +564,16 @@ Object.assign(SpiralCalendar.prototype, {
       // This allows dragging to continue when mouse moves outside canvas
       
       this.mouseState.hoveredSegment = null;
-    this.mouseState.hoveredTimeDisplay = false;
-    this.mouseState.clickingTimeDisplay = false;
-    this.mouseState.hoveredDetailElement = null;
+      this.mouseState.hoveredHandle = null;
+      this.mouseState.hoveredTimeDisplay = false;
+      this.mouseState.clickingTimeDisplay = false;
+      this.mouseState.hoveredDetailElement = null;
       // Only stop spiral dragging when mouse leaves canvas, not time display dragging
       if (!(this.timeDisplayState && this.timeDisplayState.mouseActive && this.state.showTimeDisplay)) {
         this.mouseState.isDragging = false;
       }
-    this.canvas.style.cursor = 'default'; // Reset cursor
       this.mouseState.hoveredEvent = null; // Clear tooltip
+      this.refreshCanvasCursor();
       this.drawSpiral(); // Redraw to remove hover highlight
     },
 
@@ -544,6 +606,7 @@ Object.assign(SpiralCalendar.prototype, {
         // If collapsed, expand on click and exit
         if (this.timeDisplayState && this.timeDisplayState.collapsed) {
           this.setTimeDisplayCollapsed(false);
+          this.refreshCanvasCursor();
           return;
         }
         // If an event is open, close it and reset auto-activated settings
@@ -555,11 +618,13 @@ Object.assign(SpiralCalendar.prototype, {
           
           // Play feedback for closing event
           this.playFeedback(0.15, 10);
+          this.refreshCanvasCursor();
           return; // Don't process other clicks
         }
         
         this.resetToCurrentTimeFromTap();
         // Play feedback for time display click
+        this.refreshCanvasCursor();
         return; // Don't process other clicks
       }
     }
@@ -673,6 +738,7 @@ Object.assign(SpiralCalendar.prototype, {
               if (this._detailViewHasChanges) {
                 // "Done" button clicked - close the detail view
                 this.closeDetailView();
+                this.refreshCanvasCursor();
                 this.drawSpiral();
                 return;
               }
@@ -710,7 +776,7 @@ Object.assign(SpiralCalendar.prototype, {
               this.playFeedback(); // Add click sound
               if (btn.isAddButton) {
                 // Add Event button clicked - convert draft event to real event
-              if (btn.event && btn.event.isDraft) {
+                if (btn.event && btn.event.isDraft) {
                   // Convert draft event to real event
                   const newEvent = {
                     title: btn.event.title || 'Untitled Event',
@@ -760,6 +826,7 @@ Object.assign(SpiralCalendar.prototype, {
                     insideSegmentCheckbox.checked = false;
                   }
                 }
+                this.refreshCanvasCursor();
                 this.drawSpiral();
               } else {
                 // Delete button clicked
@@ -782,6 +849,7 @@ Object.assign(SpiralCalendar.prototype, {
                   
                   // Reset auto-activated settings
                   this.resetAutoActivatedSettings();
+                  this.refreshCanvasCursor();
                   this.drawSpiral();
                   }
                 }
@@ -949,13 +1017,13 @@ Object.assign(SpiralCalendar.prototype, {
           this.drawSpiral();
         }
         this.mouseState.hoveredDetailElement = null;
-        this.canvas.style.cursor = 'default';
         
         // Play feedback for deselection only if there was actually a selection
         if (hadSelection) {
           this.playFeedback(0.08, 5);
         }
       }
+      this.refreshCanvasCursor();
       this.drawSpiral();
     },
 
@@ -993,6 +1061,7 @@ Object.assign(SpiralCalendar.prototype, {
           this.timeDisplayState.mouseStartHeight = this.getTimeDisplayHeight();
           // Stop inertia when interacting with time display
           this.stopInertia();
+          this.refreshCanvasCursor();
           return; // Don't start spiral drag
         }
       }
@@ -1020,7 +1089,6 @@ Object.assign(SpiralCalendar.prototype, {
               this._originalCircleModeDuringHandleDrag = false;
             }
             // Visual feedback
-            this.canvas.style.cursor = 'grabbing';
             // Stop inertia when beginning a handle drag
             this.stopInertia();
             // Blur any active text input (title/description)
@@ -1030,6 +1098,7 @@ Object.assign(SpiralCalendar.prototype, {
             // Mark changes so "+ New" → "Done"
             this._detailViewHasChanges = true;
             // Redraw to reflect mode change instantly
+            this.refreshCanvasCursor();
             this.drawSpiral();
             event.preventDefault();
             return;
@@ -1063,6 +1132,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (!this.startPendingMouseJoystick(mouseX, mouseY)) {
         this.beginPointerRotationDragAtPoint(mouseX, mouseY);
       }
+      this.refreshCanvasCursor();
       
       // Prevent text selection while dragging
       event.preventDefault();
@@ -1084,6 +1154,7 @@ Object.assign(SpiralCalendar.prototype, {
         this.mouseState.isDragging = false;
         this.mouseState.hasMovedDuringDrag = false;
         this.mouseState.wasDragging = true;
+        this.refreshCanvasCursor();
         this.drawSpiral();
         return;
       }
@@ -1106,7 +1177,7 @@ Object.assign(SpiralCalendar.prototype, {
         if (typeof window.renderEventList === 'function') {
           window.renderEventList();
         }
-        this.canvas.style.cursor = 'default';
+        this.refreshCanvasCursor();
         this.drawSpiral();
         return;
       }
@@ -1181,6 +1252,7 @@ Object.assign(SpiralCalendar.prototype, {
             this.timeDisplayState.justFinishedDrag = false;
           }
         }, 100);
+        this.refreshCanvasCursor();
         this.drawSpiral();
         return;
       }
@@ -1237,6 +1309,8 @@ Object.assign(SpiralCalendar.prototype, {
       this.mouseState.clickingTimeDisplay = false;
       this.drawSpiral(); // Redraw to remove click effect
     }
+
+    this.refreshCanvasCursor();
     },
 
     handleDoubleClick(event) {

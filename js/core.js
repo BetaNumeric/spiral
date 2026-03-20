@@ -52,8 +52,6 @@ class SpiralCalendar {
         showEventBoundaryStrokes: true,
         showAllEventBoundaryStrokes: false,
         audioFeedbackEnabled: true,
-        animationEnabled: false,
-        animationSpeed: 1.0,
         darkMode: false,
         calendars: ['Home', 'Work'],
         selectedCalendar: 'Home',
@@ -185,14 +183,7 @@ class SpiralCalendar {
     const currentHour = ((now.getUTCHours() + timezoneOffsetHours + now.getUTCMinutes() / 60) % 24 + 24) % 24;
       const initialRotation = (currentHour / CONFIG.SEGMENTS_PER_DAY) * 2 * Math.PI;
       this.state.rotation = initialRotation;
-      // Update the rotateSlider UI to match
-      const rotateSlider = document.getElementById('rotateSlider');
-      if (rotateSlider) {
-        const degrees = initialRotation * 180 / Math.PI;
-        rotateSlider.value = degrees;
-        const rotateVal = document.getElementById('rotateVal');
-        if (rotateVal) rotateVal.textContent = Math.round(degrees) + '°';
-      }
+
 
       // Mouse interaction state
       this.mouseState = {
@@ -200,6 +191,7 @@ class SpiralCalendar {
         selectedSegment: null,
         selectedSegmentId: null, // Store segmentId (distance from outside)
         selectedEventIndex: 0, // Track which event is selected when multiple events exist
+        hoveredDetailElement: null,
         hoveredHandle: null, // 'start' | 'end' | null for event time handles
         draggingHandle: null, // 'start' | 'end' while dragging a handle
         isHandleDragging: false,
@@ -208,12 +200,14 @@ class SpiralCalendar {
         dragStartAngle: 0,
         dragStartRotation: 0,
         lastAngle: 0, // Track the last angle for continuous rotation
-      hasMovedDuringDrag: false,
-      hoveredTimeDisplay: false, // Track if hovering over time display
+        hasMovedDuringDrag: false,
+        hoveredTimeDisplay: false, // Track if hovering over time display
         clickingTimeDisplay: false, // Track if clicking on time display
         previousInertiaVelocity: 0, // Store previous inertia velocity for momentum accumulation
         hoveredEvent: null, // Track hovered event for tooltip
-        tooltipPosition: { x: 0, y: 0 } // Tooltip position next to cursor
+        tooltipPosition: { x: 0, y: 0 }, // Tooltip position next to cursor
+        lastMouseX: 0,
+        lastMouseY: 0
       };
 
       // Track persistent inputs state
@@ -286,20 +280,11 @@ class SpiralCalendar {
       // Arc lines to draw on top of everything
       this.arcLines = [];
 
-      // Animation state
-      this.animationState = {
-        isAnimating: this.defaultSettings.animationEnabled,
-        speed: this.defaultSettings.animationSpeed,
-        startTime: 0,
-        animationId: null
-      };
-
       this.startupAnimationState = {
         active: true,
         started: false,
         animationId: null,
         progress: 0,
-        resumeContinuousAnimation: false,
         revealedHourSegmentKeys: []
       };
 

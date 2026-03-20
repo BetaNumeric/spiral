@@ -55,6 +55,7 @@
       display: block; 
       width: 100%; 
       height: 100%; 
+      cursor: grab;
       touch-action: none; /* Disable pinch-zoom and other default touch behaviors */
     }
 
@@ -983,9 +984,7 @@
         <label>Days:   <input type="range" id="daysSlider"   min="1" max="40" step="1"   value="7"><span id="daysVal">7</span></label>
         <label>Scale:  <input type="range" id="scaleSlider" min="0.1" max="1" step="0.01" value="0.40"><span id="scaleVal">0.40</span></label>
         <label>Radius:   <input type="range" id="radiusSlider"     min="1" max="10" step="0.05" value="2"><span id="radiusVal">2  </span></label>
-        <label>Rotate: <input type="range" id="rotateSlider"min="0" max="720" step="1"   value="0"><span id="rotateVal">0°</span></label>
-        <label>Rotate Max: <input type="range" id="rotateMaxSlider" min="360" max="131400" step="90" value="720"><span id="rotateMaxVal">720°</span></label>
-        
+
         <div id="paletteSelectorSection" class="palette-selector">
           <div class="palette-selector-header">
             <button type="button" id="paletteSelectorToggle" class="palette-selector-toggle" aria-expanded="false" aria-controls="paletteSelectorContent">
@@ -1229,11 +1228,7 @@
         </div>
         
         <!-- Event Input section removed from here -->
-        <label><input type="checkbox" id="animateToggle"> Animate</label>
-        <div id="animationSpeedControls" style="display:none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
-          <label>Speed: <input type="range" id="speedSlider" min="0.01" max="2" step="0.01" value="1" style="width:100%"><span id="speedVal">1.0</span></label>
-        </div>
-        
+
         <!-- Study Session Controls (STUDY_MODE only) -->
         <div id="studySessionSection" style="margin-top: 0.8em; padding-top: 0.6em; border-top: 1px solid #ccc;">
           <div id="studySessionToggle" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em; cursor: pointer;">
@@ -1325,17 +1320,14 @@
       const advancedOptions = Array.isArray(devOptionsConfig.advancedOptionIds)
         ? devOptionsConfig.advancedOptionIds
         : [
-            'rotateSlider', 'daysSlider', 'rotateVal', 'scaleSlider', 'radiusSlider', 
-            'rotateMaxSlider', 'rotateMaxVal',
+            'daysSlider', 'scaleSlider', 'radiusSlider',
             'showHourNumbers', 'hourNumbersControls',
             'showDayNumbers', 'dayNumbersControls',
             'timeDisplayToggle',
             'segmentEdgesToggle',
             'arcLinesToggle',
             'overlayStackMode',
-            'tooltipToggle',
-            'animateToggle',
-            'speedSlider', 'speedVal'
+            'tooltipToggle'
           ];
       const devOnlySectionIds = Array.isArray(devOptionsConfig.devOnlySectionIds)
         ? devOptionsConfig.devOnlySectionIds
@@ -1345,26 +1337,41 @@
           ? devOptionsConfig.devModeToggleSectionId
           : 'devModeToggleSection';
       
-      // Show/hide advanced options
-      advancedOptions.forEach(id => {
-        const element = document.getElementById(id);
-        if (element) {
-          const parentLabel = element.closest('label');
-          if (parentLabel) {
-            parentLabel.style.display = effectiveDevMode ? 'flex' : 'none';
-          } else {
-            element.style.display = effectiveDevMode ? 'block' : 'none';
+      // Set body class for CSS-based hiding
+      if (effectiveDevMode) {
+        document.body.classList.remove('hide-dev-options');
+      } else {
+        document.body.classList.add('hide-dev-options');
+      }
+      
+      // One-time initialization of CSS classes and rules
+      if (!window._devOptionsInitialized) {
+        window._devOptionsInitialized = true;
+        
+        const style = document.createElement('style');
+        style.innerHTML = `body.hide-dev-options .dev-option { display: none !important; }`;
+        document.head.appendChild(style);
+
+        // Add class to advanced options
+        advancedOptions.forEach(id => {
+          const element = document.getElementById(id);
+          if (element) {
+            const parentLabel = element.closest('label');
+            if (parentLabel) {
+              parentLabel.classList.add('dev-option');
+            } else {
+              element.classList.add('dev-option');
+            }
           }
-        }
-      });
-      
-      devOnlySectionIds.forEach((id) => {
-        const section = document.getElementById(id);
-        if (section) {
-          section.style.display = effectiveDevMode ? 'block' : 'none';
-        }
-      });
-      
+        });
+
+        // Add class to dev-only sections
+        devOnlySectionIds.forEach(id => {
+          const section = document.getElementById(id);
+          if (section) section.classList.add('dev-option');
+        });
+      }
+
       // Show/hide DEV_MODE toggle button
       const devModeToggleSection = document.getElementById(devModeToggleSectionId);
       if (devModeToggleSection) {
