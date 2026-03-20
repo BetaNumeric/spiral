@@ -294,6 +294,31 @@ Object.assign(SpiralCalendar.prototype, {
               ev.end = newTime;
             }
           }
+          
+          // Keep selectedSegment within the resized event bounds
+          if (this.mouseState.selectedSegment) {
+            const totVisSegs = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
+            const seg = this.mouseState.selectedSegment;
+            const curSegId = totVisSegs - (seg.day * CONFIG.SEGMENTS_PER_DAY + seg.segment) - 1;
+            const curHourStart = new Date(this.referenceTime.getTime() + curSegId * 60 * 60 * 1000);
+            curHourStart.setUTCMinutes(0, 0, 0, 0);
+            const curHourEnd = new Date(curHourStart.getTime() + 60 * 60 * 1000);
+            
+            const overlaps = ev.start < curHourEnd && ev.end > curHourStart;
+            if (!overlaps) {
+              // Jump selected segment to the dragged edge
+              const pullDate = this.mouseState.draggingHandle === 'start' ? ev.start : new Date(ev.end.getTime() - 1);
+              const dHrs = (pullDate - this.referenceTime) / (1000 * 60 * 60);
+              const nSegId = dHrs >= 0 ? Math.floor(dHrs) : Math.ceil(dHrs);
+              const nAbsPos = totVisSegs - nSegId - 1;
+              const nDay = Math.floor(nAbsPos / CONFIG.SEGMENTS_PER_DAY);
+              const nSeg = (CONFIG.SEGMENTS_PER_DAY - 1) - pullDate.getUTCHours();
+              
+              this.mouseState.selectedSegment = { day: nDay, segment: nSeg };
+              this.state.detailViewDay = nDay;
+            }
+          }
+
           // Mark as changed and redraw
           this._detailViewHasChanges = true;
           // Rebuild layout cache since event times changed
