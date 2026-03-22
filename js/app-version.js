@@ -2,7 +2,7 @@
 (function (globalScope) {
   'use strict';
 
-  const APP_VERSION = '1.41.1';
+  const APP_VERSION = '1.41.2';
   const APP_CACHE_PREFIX = 'spiral-v';
   const APP_CACHE_NAME = `${APP_CACHE_PREFIX}${APP_VERSION}`;
 

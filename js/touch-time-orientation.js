@@ -768,6 +768,7 @@ Object.assign(SpiralCalendar.prototype, {
       // Cancel any time display swipe/tap tracking if multiple touches occur (e.g. pinch zoom)
       this.timeDisplayState.swipeActive = false;
       this.timeDisplayState.swipeStartedInRenderRect = false;
+      this.touchState.wasMultiTouch = true;
     }
 
     if (e.touches.length === 4) {
@@ -1470,6 +1471,9 @@ Object.assign(SpiralCalendar.prototype, {
     }
     if (e.touches.length === 0) {
       this.touchState.lastTouchEndTs = Date.now();
+      const wasMultiTouch = !!this.touchState.wasMultiTouch;
+      this.touchState.wasMultiTouch = false;
+      
       if (this.mouseState.isDragging && this.mouseState.hasMovedDuringDrag) {
         this.mouseState.wasDragging = true;
       }
@@ -1518,7 +1522,7 @@ Object.assign(SpiralCalendar.prototype, {
       }
       
       // Handle touch click for time display and detail circle date boxes (mobile devices)
-      if (!this.mouseState.wasDragging && !this.mouseState.hasMovedDuringDrag) {
+      if (!this.mouseState.wasDragging && !this.mouseState.hasMovedDuringDrag && !wasMultiTouch) {
         // Don't handle tap if we just finished dragging the time display
         if (this.timeDisplayState && this.timeDisplayState.justFinishedDrag) {
           return;
