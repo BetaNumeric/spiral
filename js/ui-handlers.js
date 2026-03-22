@@ -1338,6 +1338,7 @@ Object.assign(SpiralCalendar.prototype, {
         joystickOriginX: 0,
         joystickOriginY: 0,
         joystickBaseX: 0,
+        lastTouchEndTs: 0,
         joystickBaseY: 0,
         joystickDx: 0,
         joystickDy: 0,

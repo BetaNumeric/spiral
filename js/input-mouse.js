@@ -603,6 +603,10 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     handleClick(event) {
+      // Ignore synthetic mouse events fired right after touch interactions
+      if (this.touchState && this.touchState.lastTouchEndTs && Date.now() - this.touchState.lastTouchEndTs < 500) {
+        return;
+      }
       // Don't handle click if we just finished dragging
       if (this.mouseState.wasDragging) {
         this.mouseState.wasDragging = false;
@@ -621,7 +625,8 @@ Object.assign(SpiralCalendar.prototype, {
       const canvasY = mouseY * this.canvas.height / this.canvas.clientHeight;
     
     // Check if click is on the time display (only if time display is enabled)
-    if (this.state.showTimeDisplay) {
+    const isMobile = typeof isMobileDevice === 'function' ? isMobileDevice() : false;
+    if (this.state.showTimeDisplay && !isMobile) {
       const canvasWidth = this.canvas.clientWidth;
       const canvasHeight = this.canvas.clientHeight;
       const timeDisplayArea = this.getTimeDisplayRenderRect(canvasWidth, canvasHeight);
@@ -1053,6 +1058,11 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     handleMouseDown(event) {
+      // Ignore synthetic mouse events fired right after touch interactions
+      if (this.touchState && this.touchState.lastTouchEndTs && Date.now() - this.touchState.lastTouchEndTs < 500) {
+        return;
+      }
+
       if (event.button !== 0) {
         return;
       }
@@ -1167,6 +1177,11 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     handleMouseUp(event) {
+      // Ignore synthetic mouse events fired right after touch interactions
+      if (this.touchState && this.touchState.lastTouchEndTs && Date.now() - this.touchState.lastTouchEndTs < 500) {
+        return;
+      }
+
       const mouseUsedJoystick = !!(
         this.touchState &&
         this.touchState.joystickConsumedTouch &&
@@ -1342,6 +1357,10 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     handleDoubleClick(event) {
+      // Ignore synthetic mouse events fired right after touch interactions
+      if (this.touchState && this.touchState.lastTouchEndTs && Date.now() - this.touchState.lastTouchEndTs < 500) {
+        return;
+      }
       if (event.target !== this.canvas || isMobileDevice()) return;
 
       // Ignore after drag interactions so the reset only comes from an intentional double-click.

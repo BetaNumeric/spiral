@@ -1469,6 +1469,7 @@ Object.assign(SpiralCalendar.prototype, {
       this.touchState.isActive = false;
     }
     if (e.touches.length === 0) {
+      this.touchState.lastTouchEndTs = Date.now();
       if (this.mouseState.isDragging && this.mouseState.hasMovedDuringDrag) {
         this.mouseState.wasDragging = true;
       }
