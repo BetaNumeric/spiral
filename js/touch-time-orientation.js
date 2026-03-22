@@ -387,7 +387,7 @@ Object.assign(SpiralCalendar.prototype, {
       maxTravel,
       axialEnterRadius,
       axialExitRadius: Math.round(axialEnterRadius * 0.78),
-      dayStepVerticalRatio: 0.9,
+      dayStepVerticalRatio: 0.7071,
       circularGuideRadius: Math.round(clamp(minDimension * 0.024, 16, 28)),
       knobRadius: Math.round(clamp(minDimension * 0.022, 16, 22))
     };
@@ -406,14 +406,16 @@ Object.assign(SpiralCalendar.prototype, {
         ? `rgba(28,36,48,${alpha('0.04', '0.08')})`
         : `rgba(28,36,48,${alpha('0.02', '0.04')})`,
       guideStroke: circularActive
-        ? `rgba(28,36,48,${alpha('0.18', '0.32')})`
-        : `rgba(19,29,42,${alpha('0.06', '0.14')})`,
+        ? `rgba(28,36,48,${alpha('0.14', '0.28')})`
+        : `rgba(19,29,42,${alpha('0.02', '0.04')})`,
       centerDotColor: axialActive
         ? `rgba(28,36,48,${alpha('0.14', '0.24')})`
         : `rgba(28,36,48,${alpha('0.1', '0.18')})`,
       knobFill: circularActive
         ? `rgba(28,36,48,${alpha('0.88', '0.94')})`
-        : `rgba(28,36,48,${alpha('0.8', '0.86')})`
+        : `rgba(28,36,48,${alpha('0.8', '0.86')})`,
+      wedgeFill: `rgba(28,36,48,${alpha('0.06', '0.12')})`,
+      wedgeActiveFill: `rgba(28,36,48,${alpha('0.15', '0.25')})`
     };
   },
 
@@ -654,9 +656,20 @@ Object.assign(SpiralCalendar.prototype, {
 
         this.touchState.joystickLastAngle = currentAngle;
       } else if (this.touchState.joystickMode === 'axial') {
-        if (Math.abs(limited.x) > deadZone) {
+        const verticalAlignment = distance > 0 ? Math.abs(limited.y) / distance : 0;
+        const isDaySkipArea = distance > deadZone && verticalAlignment >= dayStepVerticalRatio;
+        
+        const trueDistance = Math.sqrt(this.touchState.joystickDx ** 2 + this.touchState.joystickDy ** 2);
+
+        if (!isDaySkipArea && Math.abs(limited.x) > deadZone) {
           const horizontalNorm = Math.min(1, (Math.abs(limited.x) - deadZone) / (maxTravel - deadZone));
-          const angularVelocity = Math.sign(limited.x) * Math.pow(horizontalNorm, 1.45) * (Math.PI * 2.1);
+          
+          let speedMultiplier = Math.pow(horizontalNorm, 1.45) * 2.1;
+          if (trueDistance > maxTravel) {
+            speedMultiplier = 6.5;
+          }
+          
+          const angularVelocity = Math.sign(limited.x) * speedMultiplier * Math.PI;
           if (angularVelocity) {
             this.state.rotation += angularVelocity * (dtMs / 1000);
             this._shouldUpdateEventList = true;
@@ -664,12 +677,10 @@ Object.assign(SpiralCalendar.prototype, {
           }
         }
 
-        const verticalAlignment = distance > 0 ? Math.abs(limited.y) / distance : 0;
-        if (Math.abs(limited.y) > deadZone && verticalAlignment >= dayStepVerticalRatio) {
+        if (isDaySkipArea) {
           const verticalNorm = Math.min(1, (Math.abs(limited.y) - deadZone) / (maxTravel - deadZone));
           const direction = limited.y > 0 ? -1 : 1;
-          const weekJumpThreshold = axialEnterRadius + (maxTravel - axialEnterRadius) * 0.85;
-          const dayStep = Math.abs(limited.y) >= weekJumpThreshold ? 7 : 1;
+          const dayStep = trueDistance > maxTravel ? 7 : 1;
           const intervalMs = (420 - verticalNorm * 320) + (dayStep === 7 ? 80 : 0);
           if (
             direction !== this.touchState.joystickLastDayDirection ||
@@ -1470,7 +1481,6 @@ Object.assign(SpiralCalendar.prototype, {
       this.touchState.isActive = false;
     }
     if (e.touches.length === 0) {
-      this.touchState.lastTouchEndTs = Date.now();
       const wasMultiTouch = !!this.touchState.wasMultiTouch;
       this.touchState.wasMultiTouch = false;
       
@@ -1607,7 +1617,8 @@ Object.assign(SpiralCalendar.prototype, {
       maxTravel,
       axialEnterRadius,
       circularGuideRadius,
-      knobRadius
+      knobRadius,
+      dayStepVerticalRatio
     } = this.getTouchJoystickConfig();
     const limited = this.getTouchJoystickTravel(this.touchState.joystickDx, this.touchState.joystickDy, maxTravel);
     const baseX = this.touchState.joystickBaseX;
@@ -1624,7 +1635,9 @@ Object.assign(SpiralCalendar.prototype, {
       angularAreaFill,
       guideStroke,
       centerDotColor,
-      knobFill
+      knobFill,
+      wedgeFill,
+      wedgeActiveFill
     } = this.getTouchJoystickOverlayPalette(circularActive, axialActive);
 
     this.ctx.save();
@@ -1633,11 +1646,67 @@ Object.assign(SpiralCalendar.prototype, {
     this.ctx.arc(baseX, baseY, axialEnterRadius, 0, Math.PI * 2);
     this.ctx.fill();
 
-    this.ctx.lineWidth = 1.5;
+    if (axialActive && limited.distance > axialEnterRadius) {
+      const verticalAlignment = Math.abs(limited.y) / limited.distance;
+      const isDaySkipArea = verticalAlignment >= dayStepVerticalRatio;
+      const angle = Math.asin(dayStepVerticalRatio);
+      
+      const trueDistance = Math.sqrt(this.touchState.joystickDx ** 2 + this.touchState.joystickDy ** 2);
+      this.ctx.fillStyle = trueDistance > maxTravel ? wedgeActiveFill : wedgeFill;
+      
+      if (isDaySkipArea) {
+        this.ctx.beginPath();
+        this.ctx.arc(baseX, baseY, maxTravel, angle, Math.PI - angle);
+        this.ctx.arc(baseX, baseY, axialEnterRadius, Math.PI - angle, angle, true);
+        this.ctx.fill();
+        
+        this.ctx.beginPath();
+        this.ctx.arc(baseX, baseY, maxTravel, Math.PI + angle, 2 * Math.PI - angle);
+        this.ctx.arc(baseX, baseY, axialEnterRadius, 2 * Math.PI - angle, Math.PI + angle, true);
+        this.ctx.fill();
+      } else {
+        this.ctx.beginPath();
+        this.ctx.arc(baseX, baseY, maxTravel, -angle, angle);
+        this.ctx.arc(baseX, baseY, axialEnterRadius, angle, -angle, true);
+        this.ctx.fill();
+        
+        this.ctx.beginPath();
+        this.ctx.arc(baseX, baseY, maxTravel, Math.PI - angle, Math.PI + angle);
+        this.ctx.arc(baseX, baseY, axialEnterRadius, Math.PI + angle, Math.PI - angle, true);
+        this.ctx.fill();
+      }
+    }
+
+    this.ctx.lineWidth = 1.0;
     this.ctx.strokeStyle = guideStroke;
     this.ctx.beginPath();
     this.ctx.arc(baseX, baseY, circularGuideRadius, 0, Math.PI * 2);
     this.ctx.stroke();
+
+    const maxSpiralRadius = axialEnterRadius;
+    const drawSpiral = (endAngle) => {
+      const startAngle = endAngle - Math.PI*2;
+      this.ctx.beginPath();
+      for (let i = 0; i <= 600; i++) {
+        const t = i / 600;
+        const currentAngle = startAngle + t * (Math.PI*2);
+        // Start from inner ring, end near the boundary
+        const r = circularGuideRadius + t * (maxSpiralRadius - circularGuideRadius);
+        const x = baseX + r * Math.cos(currentAngle);
+        const y = baseY + r * Math.sin(currentAngle);
+        if (i === 0) {
+          this.ctx.moveTo(x, y);
+        } else {
+          this.ctx.lineTo(x, y);
+        }
+      }
+      this.ctx.stroke();
+    };
+
+    drawSpiral(Math.PI / 4);
+    drawSpiral(-Math.PI / 4);
+    drawSpiral(-(3 * Math.PI) / 4);
+    drawSpiral((3 * Math.PI) / 4);
 
     this.ctx.lineWidth = centerDotRadius * 2;
     this.ctx.lineCap = 'round';
