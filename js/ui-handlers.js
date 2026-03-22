@@ -67,6 +67,68 @@ Object.assign(SpiralCalendar.prototype, {
       });
       }
 
+      // Add Layout Preset handler
+      const layoutPresetSelect = document.getElementById('layoutPresetSelect');
+      if (layoutPresetSelect) {
+        layoutPresetSelect.addEventListener('change', (e) => {
+          const preset = e.target.value;
+          if (!preset) return;
+
+          // First, reset all affected layout fields to defaults as a baseline
+          const fieldsToReset = [
+            'hourNumbersStartAtOne',
+            'showEverySixthHour',
+            'hourNumbersPosition',
+            'showArcLines',
+            'dayLabelUseShortNames',
+            'dayLabelUseShortMonth',
+            'dayLabelMonthOnFirstOnly',
+            'dayLabelYearOnFirstOnly',
+            'dayLabelUseOrdinal',
+            'showAllEventBoundaryStrokes',
+            'showNoonLines',
+            'showSixAmPmLines'
+          ];
+          
+          fieldsToReset.forEach(key => {
+            if (this.defaultSettings.hasOwnProperty(key)) {
+              this.state[key] = this.defaultSettings[key];
+            }
+          });
+
+          // Apply specific overrides
+          if (preset === 'minimal') {
+            this.state.hourNumbersStartAtOne = true;
+            this.state.showEverySixthHour = true;
+            this.state.hourNumbersPosition = 1;
+            this.state.showArcLines = false;
+          } else if (preset === 'complex') {
+            this.state.dayLabelUseShortNames = false;
+            this.state.hourNumbersStartAtOne = true;
+            this.state.hourNumbersPosition = 0;
+            this.state.dayLabelUseShortMonth = false;
+            this.state.dayLabelMonthOnFirstOnly = false;
+            this.state.dayLabelYearOnFirstOnly = false;
+            this.state.dayLabelUseOrdinal = true;
+            this.state.showAllEventBoundaryStrokes = true;
+            this.state.showNoonLines = true;
+            this.state.showSixAmPmLines = true;
+          }
+          // 'default' just uses the reset baseline
+
+          if (typeof this.syncAllUIControls === 'function') {
+            this.syncAllUIControls();
+          }
+          this.drawSpiral();
+          this.saveSettingsToStorage();
+
+          // Reset the select box
+          setTimeout(() => {
+            e.target.value = '';
+          }, 300);
+        });
+      }
+
       // Add show hour numbers checkbox handler
       const showHourNumbersCheckbox = document.getElementById('showHourNumbers');
       const hourNumbersControls = document.getElementById('hourNumbersControls');
@@ -186,6 +248,7 @@ Object.assign(SpiralCalendar.prototype, {
       const dayLabelUseShortMonth = document.getElementById('dayLabelUseShortMonth');
       const dayLabelUseShortYear = document.getElementById('dayLabelUseShortYear');
       const dayLabelUseOrdinal = document.getElementById('dayLabelUseOrdinal');
+      const outermostDayDetailed = document.getElementById('outermostDayDetailed');
       const dayLabelMonthOnFirstOnly = document.getElementById('dayLabelMonthOnFirstOnly');
       const dayLabelYearOnFirstOnly = document.getElementById('dayLabelYearOnFirstOnly');
       const dayLabelWeekdaySubOptions = document.getElementById('dayLabelWeekdaySubOptions');
@@ -265,6 +328,14 @@ Object.assign(SpiralCalendar.prototype, {
         dayLabelUseOrdinal.checked = !!this.state.dayLabelUseOrdinal;
         dayLabelUseOrdinal.addEventListener('change', (e) => {
           this.state.dayLabelUseOrdinal = e.target.checked;
+          this.drawSpiral();
+          this.saveSettingsToStorage();
+        });
+      }
+      if (outermostDayDetailed) {
+        outermostDayDetailed.checked = !!this.state.outermostDayDetailed;
+        outermostDayDetailed.addEventListener('change', (e) => {
+          this.state.outermostDayDetailed = e.target.checked;
           this.drawSpiral();
           this.saveSettingsToStorage();
         });
@@ -1323,8 +1394,59 @@ Object.assign(SpiralCalendar.prototype, {
         this.playFeedback(0.1, 6);
         
         // Confirm before resetting
-        if (confirm('Reset all settings to defaults? This cannot be undone.')) {
+        if (confirm('Reset UI and physics settings to defaults? (Your events and calendars will NOT be deleted).')) {
           this.resetSettingsToDefaults();
+        }
+      });
+    }
+
+    const deleteAllDataBtn = document.getElementById('deleteAllDataBtn');
+    if (deleteAllDataBtn) {
+      deleteAllDataBtn.addEventListener('click', () => {
+        // Play feedback for button click
+        this.playFeedback(0.1, 8);
+
+        // Confirm before deleting
+        if (confirm('Delete ALL events and data? This cannot be undone.')) {
+          // Clear events memory
+          if (this.events) {
+            this.events = [];
+          }
+          if (typeof this.saveEventsToStorage === 'function') {
+            this.saveEventsToStorage();
+          }
+
+          // Force delete from local storage to be absolute sure
+          try {
+            if (typeof Storage !== 'undefined') {
+              localStorage.removeItem('spiralCalendarEvents');
+            }
+          } catch(e) { }
+
+          // Close detail views
+          const eventDetailOverlay = document.getElementById('eventDetailOverlay');
+          if (eventDetailOverlay) {
+            eventDetailOverlay.style.display = 'none';
+          }
+          const eventModalOverlay = document.getElementById('eventModalOverlay');
+          if (eventModalOverlay) {
+            eventModalOverlay.style.display = 'none';
+          }
+          
+          if (this.mouseState) {
+            this.mouseState.selectedSegment = null;
+            this.mouseState.selectedSegmentTime = null;
+          }
+
+          // Redraw everything empty
+          if (typeof this.rebuildTimelines === 'function') {
+            this.rebuildTimelines();
+          }
+          if (typeof this.render === 'function') {
+            this.render();
+          }
+          
+          alert('All event data has been deleted.');
         }
       });
     }

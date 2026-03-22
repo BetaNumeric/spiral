@@ -569,10 +569,20 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   resetSettingsToDefaults() {
+    // Keys to exclude from resetting so that user calendars are not unintentionally lost
+    const keysToExclude = ['calendars', 'visibleCalendars', 'calendarColors'];
+
     // Reset state
     Object.keys(this.defaultSettings).forEach(key => {
-      if (this.state.hasOwnProperty(key)) {
-        this.state[key] = this.defaultSettings[key];
+      if (this.state.hasOwnProperty(key) && !keysToExclude.includes(key)) {
+        // Only array and object deep copy if needed, currently shallow is what was done
+        if (Array.isArray(this.defaultSettings[key])) {
+          this.state[key] = [...this.defaultSettings[key]];
+        } else if (typeof this.defaultSettings[key] === 'object' && this.defaultSettings[key] !== null) {
+          this.state[key] = JSON.parse(JSON.stringify(this.defaultSettings[key]));
+        } else {
+          this.state[key] = this.defaultSettings[key];
+        }
       }
     });
     // Runtime/UI-only defaults not persisted in defaultSettings.

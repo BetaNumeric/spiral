@@ -1076,7 +1076,19 @@
             <option value="single">Single Color</option>
           </select>
         </div>
-        
+
+        <div style="margin: 1em 0 0.5em 0; padding-bottom: 0.5em; border-bottom: 1px solid rgba(128,128,128,0.2);">
+          <label style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <span style="font-weight: bold;">Layout Presets</span>
+            <select id="layoutPresetSelect" style="padding: 0.2em; border-radius: 0.2em; max-width: 50%; font-size: 0.9em;">
+              <option value="" disabled selected>Choose preset...</option>
+              <option value="minimal">Minimal</option>
+              <option value="default">Default</option>
+              <option value="complex">Detailed</option>
+            </select>
+          </label>
+        </div>
+
         <label><input type="checkbox" id="staticMode" checked> Static Mode</label>
         <label><input type="checkbox" id="circleMode"> Circle Mode</label>
         <label><input type="checkbox" id="showHourNumbers" checked> Show Hour Numbers</label>
@@ -1163,6 +1175,10 @@
           <label style="display:flex; align-items:center; gap:0.5em;">
             <input type="checkbox" id="dayLabelUseOrdinal"/>
             <span>Use ordinal days</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:0.5em;">
+            <input type="checkbox" id="outermostDayDetailed"/>
+            <span>Detailed outermost spiral coil</span>
           </label>
         </div>
         
@@ -1254,6 +1270,7 @@
           <button id="devModeToggleBtn" style="width: 100%; padding: 0.4em; background: #ff9800; color: white; border: none; border-radius: 0.3em; cursor: pointer; font-size: 0.9em;">Show Dev Options</button>
         </div>
         <button id="resetSettingsBtn" style="width: 100%; padding: 0.4em; background: #d32f2f; color: white; border: none; border-radius: 0.3em; cursor: pointer; font-size: 0.9em; margin-top: 0.3em;">Reset to Defaults</button>
+        <button id="deleteAllDataBtn" class="dev-option" style="width: 100%; padding: 0.4em; background: #b71c1c; color: white; border: none; border-radius: 0.3em; cursor: pointer; font-size: 0.9em; margin-top: 0.3em;">Delete All Data</button>
       </div>
     </div>
 
