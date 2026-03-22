@@ -1437,7 +1437,19 @@ Object.assign(SpiralCalendar.prototype, {
           if (typeof this.render === 'function') {
             this.render();
           }
-          
+          // Ensure caches and layouts pick up the deleted events
+          if (typeof this._eventsVersion === 'number') {
+            this._eventsVersion++;
+          } else {
+            this._eventsVersion = 1;
+          }
+          if (typeof window.renderEventList === 'function') {
+            window.renderEventList();
+          }
+          if (typeof this.drawSpiral === 'function') {
+            this.drawSpiral();
+          }
+
           alert('All event data has been deleted.');
         }
       });

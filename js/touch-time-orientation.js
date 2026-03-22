@@ -1704,9 +1704,9 @@ Object.assign(SpiralCalendar.prototype, {
     };
 
     drawSpiral(Math.PI / 4);
-    drawSpiral(-Math.PI / 4);
+    //drawSpiral(-Math.PI / 4);
     drawSpiral(-(3 * Math.PI) / 4);
-    drawSpiral((3 * Math.PI) / 4);
+    //drawSpiral((3 * Math.PI) / 4);
 
     this.ctx.lineWidth = centerDotRadius * 2;
     this.ctx.lineCap = 'round';

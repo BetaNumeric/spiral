@@ -1054,7 +1054,18 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     handleMouseDown(event) {
-      if (event.button !== 0) {
+      if (event.button !== 0 && event.button !== 1) {
+        return;
+      }
+
+      if (event.button === 1) {
+        event.preventDefault();
+        const rect = this.canvas.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left;
+        const mouseY = event.clientY - rect.top;
+        if (this.state.detailViewDay === null && typeof this.activatePendingJoystick === 'function') {
+          this.activatePendingJoystick('mouse', mouseX, mouseY);
+        }
         return;
       }
 

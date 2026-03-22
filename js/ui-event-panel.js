@@ -1392,7 +1392,7 @@ Object.assign(SpiralCalendar.prototype, {
           msg.textContent = hasSearchQuery ? 'No events found' : 'No events to show';
           const hint = document.createElement('div');
           hint.style.cssText = `font-size: ${isMobile ? '0.78em' : '0.85em'}; color: ${isDarkMode ? 'var(--dark-text-primary)' : '#888'}; opacity: 0.8;`;
-          hint.textContent = hasSearchQuery ? 'Try a different search term.' : 'Use + to add events.';
+          hint.textContent = hasSearchQuery ? 'Try a different search term.' : 'Click to add.';
           const wrap = document.createElement('div');
           wrap.style.cssText = 'display:flex; flex-direction: column; align-items: center;';
           wrap.appendChild(msg);
@@ -1610,17 +1610,62 @@ Object.assign(SpiralCalendar.prototype, {
         return li;
       };
 
+      const createBoundaryMarker = (position) => {
+        const isMobile = window.innerWidth <= 768;
+        const isDarkMode = document.body.classList.contains('dark-mode');
+        const li = document.createElement('li');
+        li.style.cssText = 'padding: 1.2em 0; border-bottom: 1px solid rgba(150, 150, 150, 0.1); display: flex; justify-content: center; align-items: center; gap: 0.6em; cursor: pointer;';
+        li.tabIndex = 0;
+        li.setAttribute('role', 'button');
+        li.setAttribute('aria-label', 'Add event');
+
+        const msg = document.createElement('div');
+        msg.style.cssText = `font-size: ${isMobile ? '0.88em' : '0.95em'}; color: ${isDarkMode ? 'var(--dark-text-primary)' : '#666'}; opacity: 0.7; text-align: center;`;
+        
+        if (position === 'top') {
+          msg.textContent = 'No earlier events. Click to add.';
+        } else {
+          msg.textContent = 'No later events. Click to add.';
+        }
+
+        li.appendChild(msg);
+
+        const openAddEventPanel = () => {
+          const addEventPanelBtn = document.getElementById('addEventPanelBtn');
+          if (!addEventPanelBtn) return;
+          this.playFeedback(0.1, 6);
+          addEventPanelBtn.click();
+        };
+
+        li.addEventListener('click', openAddEventPanel);
+        li.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openAddEventPanel();
+          }
+        });
+
+        return li;
+      };
+
       // Sort day keys chronologically
       const sortedDayKeys = Array.from(eventsByDay.keys()).sort(compareEventDayKeys);
-      
-      // Add top sentinels
-      const topSentinelPanel = createSentinel('top', eventList);
-      if (topSentinelPanel) eventList.appendChild(topSentinelPanel);
-      
-      let topSentinelBottom = null;
-      if (bottomEventListItems) {
-        topSentinelBottom = createSentinel('top', bottomEventListItems);
-        if (topSentinelBottom) bottomEventListItems.appendChild(topSentinelBottom);
+
+      // Add top sentinels or boundary markers
+      if (this._eventListBounds.start <= 0) {
+        eventList.appendChild(createBoundaryMarker('top'));
+        if (bottomEventListItems) {
+          bottomEventListItems.appendChild(createBoundaryMarker('top'));
+        }
+      } else {
+        const topSentinelPanel = createSentinel('top', eventList);
+        if (topSentinelPanel) eventList.appendChild(topSentinelPanel);
+
+        let topSentinelBottom = null;
+        if (bottomEventListItems) {
+          topSentinelBottom = createSentinel('top', bottomEventListItems);
+          if (topSentinelBottom) bottomEventListItems.appendChild(topSentinelBottom);
+        }
       }
 
       // Render events grouped by day
@@ -1666,16 +1711,23 @@ Object.assign(SpiralCalendar.prototype, {
           }
         }
       }
-      
-      // Add bottom sentinels
-      const bottomSentinelPanel = createSentinel('bottom', eventList);
-      if (bottomSentinelPanel) eventList.appendChild(bottomSentinelPanel);
-      
-      if (bottomEventListItems) {
-        const bottomSentinelBottom = createSentinel('bottom', bottomEventListItems);
-        if (bottomSentinelBottom) bottomEventListItems.appendChild(bottomSentinelBottom);
+
+      // Add bottom sentinels or boundary markers
+      if (this._eventListBounds.end >= sortedEntries.length) {
+        eventList.appendChild(createBoundaryMarker('bottom'));
+        if (bottomEventListItems) {
+          bottomEventListItems.appendChild(createBoundaryMarker('bottom'));
+        }
+      } else {
+        const bottomSentinelPanel = createSentinel('bottom', eventList);
+        if (bottomSentinelPanel) eventList.appendChild(bottomSentinelPanel);
+
+        if (bottomEventListItems) {
+          const bottomSentinelBottom = createSentinel('bottom', bottomEventListItems);
+          if (bottomSentinelBottom) bottomEventListItems.appendChild(bottomSentinelBottom);
+        }
       }
-      
+
       // Update sticky top offset for day headers after they're in DOM (account for "All:" header if present)
       // Use requestAnimationFrame to ensure layout is calculated
       requestAnimationFrame(() => {
