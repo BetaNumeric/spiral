@@ -248,7 +248,6 @@ Object.assign(SpiralCalendar.prototype, {
       const dayLabelUseShortMonth = document.getElementById('dayLabelUseShortMonth');
       const dayLabelUseShortYear = document.getElementById('dayLabelUseShortYear');
       const dayLabelUseOrdinal = document.getElementById('dayLabelUseOrdinal');
-      const outermostDayDetailed = document.getElementById('outermostDayDetailed');
       const dayLabelMonthOnFirstOnly = document.getElementById('dayLabelMonthOnFirstOnly');
       const dayLabelYearOnFirstOnly = document.getElementById('dayLabelYearOnFirstOnly');
       const dayLabelWeekdaySubOptions = document.getElementById('dayLabelWeekdaySubOptions');
@@ -328,14 +327,6 @@ Object.assign(SpiralCalendar.prototype, {
         dayLabelUseOrdinal.checked = !!this.state.dayLabelUseOrdinal;
         dayLabelUseOrdinal.addEventListener('change', (e) => {
           this.state.dayLabelUseOrdinal = e.target.checked;
-          this.drawSpiral();
-          this.saveSettingsToStorage();
-        });
-      }
-      if (outermostDayDetailed) {
-        outermostDayDetailed.checked = !!this.state.outermostDayDetailed;
-        outermostDayDetailed.addEventListener('change', (e) => {
-          this.state.outermostDayDetailed = e.target.checked;
           this.drawSpiral();
           this.saveSettingsToStorage();
         });

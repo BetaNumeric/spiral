@@ -733,8 +733,11 @@ Object.assign(SpiralCalendar.prototype, {
       const tdHeight = (this.timeDisplayState && this.timeDisplayState.collapsed) ? (this.timeDisplayState.collapseHeight || 12) : CONFIG.TIME_DISPLAY_HEIGHT;
       const pullUpOffset = (this.timeDisplayState && this.timeDisplayState.pullUpOffset) ? this.timeDisplayState.pullUpOffset : 0;
       // Reduce hit padding when event list is extended (when pullUpOffset > 0)
-      const basePad = (this.timeDisplayState && this.timeDisplayState.hitPadding) ? this.timeDisplayState.hitPadding : 80;
-      const pad = pullUpOffset > 0 ? Math.max(20, basePad * 0.25) : basePad; // Reduce to 25% (min 20px) when extended
+      // Remove padding on wide screens/desktops
+      const isMobile = typeof isMobileDevice === 'function' ? isMobileDevice() : true;
+      const configPad = (this.timeDisplayState && this.timeDisplayState.hitPadding) ? this.timeDisplayState.hitPadding : 80;
+      const basePad = isMobile ? configPad : 0;
+      const pad = pullUpOffset > 0 && isMobile ? Math.max(20, basePad * 0.25) : basePad; // Reduce to 25% (min 20px) when extended
       const timeDisplayArea = { x: 0, y: Math.max(0, canvasHeight - tdHeight - pullUpOffset - pad), width: canvasWidth, height: tdHeight + pad };
       const inside = touchX >= timeDisplayArea.x && touchX <= timeDisplayArea.x + timeDisplayArea.width && touchY >= timeDisplayArea.y && touchY <= timeDisplayArea.y + timeDisplayArea.height;
       if (inside && !touchesHandleInDetailMode) {
@@ -759,6 +762,12 @@ Object.assign(SpiralCalendar.prototype, {
         e.preventDefault();
         return;
       }
+    }
+
+    if (e.touches.length > 1 && this.timeDisplayState) {
+      // Cancel any time display swipe/tap tracking if multiple touches occur (e.g. pinch zoom)
+      this.timeDisplayState.swipeActive = false;
+      this.timeDisplayState.swipeStartedInRenderRect = false;
     }
 
     if (e.touches.length === 4) {

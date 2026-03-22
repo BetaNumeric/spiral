@@ -1068,8 +1068,11 @@ Object.assign(SpiralCalendar.prototype, {
         const tdHeight = (this.timeDisplayState && this.timeDisplayState.collapsed) ? (this.timeDisplayState.collapseHeight || 12) : CONFIG.TIME_DISPLAY_HEIGHT;
         const pullUpOffset = (this.timeDisplayState && this.timeDisplayState.pullUpOffset) ? this.timeDisplayState.pullUpOffset : 0;
         // Reduce hit padding when event list is extended (when pullUpOffset > 0)
-        const basePad = (this.timeDisplayState && this.timeDisplayState.hitPadding) ? this.timeDisplayState.hitPadding : 80;
-        const pad = pullUpOffset > 0 ? Math.max(20, basePad * 0.25) : basePad; // Reduce to 25% (min 20px) when extended
+        // Remove padding on wide screens/desktops
+        const isMobile = typeof isMobileDevice === 'function' ? isMobileDevice() : true;
+        const configPad = (this.timeDisplayState && this.timeDisplayState.hitPadding) ? this.timeDisplayState.hitPadding : 80;
+        const basePad = isMobile ? configPad : 0;
+        const pad = pullUpOffset > 0 && isMobile ? Math.max(20, basePad * 0.25) : basePad; // Reduce to 25% (min 20px) when extended
         const area = { x: 0, y: Math.max(0, canvasHeight - tdHeight - pullUpOffset - pad), width: canvasWidth, height: tdHeight + pad };
         if (mouseX >= area.x && mouseX <= area.x + area.width && mouseY >= area.y && mouseY <= area.y + area.height) {
           this.timeDisplayState.mouseActive = true;
