@@ -34,6 +34,10 @@ The circle has an outline in the event’s color. You can change the randomly se
 When you click the “Add Event” button at the bottom, the circle closes, and the event is added to the spiral calendar, coloring the area during which it takes place. Clicking any segment with an event in it opens a similar window, but with the event’s data already in the input fields. At the bottom, there are two buttons, one to delete the event and one to add a new event, which opens an empty circle like before. You can also quickly press the `Delete` or `Backspace` keys while an event is selected to trigger the deletion. If you change anything, the “add” button becomes a “done” button, which closes the event screen.
 When two or more events are added to the same segment, they will stack in the spiral. To access an overlapping event, you can click the selected segment multiple times or the chevron arrows at the top of the event circle to cycle through the events. 
 
+
+https://github.com/user-attachments/assets/3ff0ea48-aaf1-4e68-8e91-d3330bf4e0c8
+
+
 Another feature is the manipulation of an event’s length in the spiral directly. When clicking on an event, it will open the event circle and also show a handle at the start and end of the event. You can click and drag each handle to increase or decrease the event’s length. While dragging, it will switch to spiral mode and hide the event screen. When releasing the handle, the event is saved with the new start and end time. 
 
 All your events and configuration settings remain completely private, as the application stores its data entirely locally on your device within your browser's local storage.
