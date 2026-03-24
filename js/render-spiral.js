@@ -2097,12 +2097,15 @@ Object.assign(SpiralCalendar.prototype, {
             const centerRadius = radiusFunction(centerTheta + Math.PI); // Middle of segment (between inner and outer)
             // Build weekday + day label (e.g., Mon 28)
             // Defaults in case of errors
+            let showWeekday = false;
             let includeMonth = false;
             let includeYear = false;
+            let segmentDateMs = null;
             try {
               const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
               const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
               const segmentDate = new Date(this.referenceTime.getTime() + segmentId * 60 * 60 * 1000);
+              segmentDateMs = segmentDate.getTime();
               const weekdayFull = WEEKDAYS_UTC[segmentDate.getUTCDay()];
               const weekdayShort = weekdayFull.slice(0, 3);
               const monthFull = MONTHS_LONG_UTC[segmentDate.getUTCMonth()];
@@ -2114,18 +2117,29 @@ Object.assign(SpiralCalendar.prototype, {
               const useShortYear = !!this.state.dayLabelUseShortYear;
               const isFirstOfMonth = segmentDate.getUTCDate() === 1;
               const isFirstOfYear = isFirstOfMonth && segmentDate.getUTCMonth() === 0;
-              if (this.state.dayLabelShowWeekday) {
+              showWeekday = !!this.state.dayLabelShowWeekday || (isOutermostDay && !!this.state.dayLabelWeekdayOnOutermost);
+              const showMonth = !!this.state.dayLabelShowMonth || (isOutermostDay && !!this.state.dayLabelMonthOnOutermost);
+              const showYear = !!this.state.dayLabelShowYear || (isOutermostDay && !!this.state.dayLabelYearOnOutermost);
+              if (showWeekday) {
                 parts.push(useShortWeekday ? weekdayShort : weekdayFull);
               }
-              includeMonth = this.state.dayLabelShowMonth && (!this.state.dayLabelMonthOnFirstOnly || isFirstOfMonth);
+              includeMonth = showMonth && (
+                (isOutermostDay && !!this.state.dayLabelMonthOnOutermost) ||
+                !this.state.dayLabelMonthOnFirstOnly ||
+                isFirstOfMonth
+              );
               if (includeMonth) {
                 parts.push(useShortMonth ? monthShort : monthFull);
               }
               const dayText = this.state.dayLabelUseOrdinal ? this.dayToOrdinal(dayNumber) : String(dayNumber);
               parts.push(dayText);
-              if (this.state.dayLabelShowWeekday && parts.length > 1) parts[0] = parts[0] + ',';
+              if (showWeekday && parts.length > 1) parts[0] = parts[0] + ',';
               var fullDayLabel = parts.join(' ');
-              includeYear = this.state.dayLabelShowYear && (!this.state.dayLabelYearOnFirstOnly || isFirstOfYear);
+              includeYear = showYear && (
+                (isOutermostDay && !!this.state.dayLabelYearOnOutermost) ||
+                !this.state.dayLabelYearOnFirstOnly ||
+                isFirstOfYear
+              );
               if (includeYear) {
                 const yearText = useShortYear ? String(year).slice(2) : String(year);
                 fullDayLabel += `, ${yearText}`;
@@ -2157,6 +2171,9 @@ Object.assign(SpiralCalendar.prototype, {
             }
             
             this.dayNumbers.push({
+              day: day,
+              dayNumber: dayNumber,
+              segmentDateMs: segmentDateMs,
               x: centerRadius * Math.cos(-centerTheta + CONFIG.INITIAL_ROTATION_OFFSET),
               y: centerRadius * Math.sin(-centerTheta + CONFIG.INITIAL_ROTATION_OFFSET),
               text: fullDayLabel,
@@ -2167,7 +2184,7 @@ Object.assign(SpiralCalendar.prototype, {
               centerTheta: centerTheta,
               centerRadius: centerRadius,
               outerEndClipTheta: endTheta < rawEndAngle - 0.0001 ? endTheta : null,
-              onlyNumeric: (!this.state.dayLabelShowWeekday && !includeMonth && !includeYear)
+              onlyNumeric: (!showWeekday && !includeMonth && !includeYear)
             });
             }
           }

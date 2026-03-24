@@ -419,6 +419,9 @@ Object.assign(SpiralCalendar.prototype, {
         dayLabelShowWeekday: this.state.dayLabelShowWeekday,
         dayLabelShowMonth: this.state.dayLabelShowMonth,
         dayLabelShowYear: this.state.dayLabelShowYear,
+        dayLabelWeekdayOnOutermost: this.state.dayLabelWeekdayOnOutermost,
+        dayLabelMonthOnOutermost: this.state.dayLabelMonthOnOutermost,
+        dayLabelYearOnOutermost: this.state.dayLabelYearOnOutermost,
         dayLabelUseShortNames: this.state.dayLabelUseShortNames,
         dayLabelUseShortMonth: this.state.dayLabelUseShortMonth,
         dayLabelUseShortYear: this.state.dayLabelUseShortYear,
@@ -660,6 +663,9 @@ Object.assign(SpiralCalendar.prototype, {
       { id: 'dayLabelShowWeekday', value: this.state.dayLabelShowWeekday },
       { id: 'dayLabelShowMonth', value: this.state.dayLabelShowMonth },
       { id: 'dayLabelShowYear', value: this.state.dayLabelShowYear },
+      { id: 'dayLabelWeekdayOnOutermost', value: this.state.dayLabelWeekdayOnOutermost },
+      { id: 'dayLabelMonthOnOutermost', value: this.state.dayLabelMonthOnOutermost },
+      { id: 'dayLabelYearOnOutermost', value: this.state.dayLabelYearOnOutermost },
       { id: 'dayLabelUseShortMonth', value: this.state.dayLabelUseShortMonth },
       { id: 'dayLabelUseShortYear', value: this.state.dayLabelUseShortYear },
       { id: 'dayLabelMonthOnFirstOnly', value: this.state.dayLabelMonthOnFirstOnly },
@@ -755,11 +761,17 @@ Object.assign(SpiralCalendar.prototype, {
     
     // Ensure day label weekday/month/year sub-options visibility
     const dayLabelWeekdaySubOptions = document.getElementById('dayLabelWeekdaySubOptions');
-    if (dayLabelWeekdaySubOptions) dayLabelWeekdaySubOptions.style.display = this.state.dayLabelShowWeekday ? 'flex' : 'none';
+    if (dayLabelWeekdaySubOptions) {
+      dayLabelWeekdaySubOptions.style.display = (this.state.dayLabelShowWeekday || this.state.dayLabelWeekdayOnOutermost) ? 'flex' : 'none';
+    }
     const dayLabelMonthSubOptions = document.getElementById('dayLabelMonthSubOptions');
-    if (dayLabelMonthSubOptions) dayLabelMonthSubOptions.style.display = this.state.dayLabelShowMonth ? 'flex' : 'none';
+    if (dayLabelMonthSubOptions) {
+      dayLabelMonthSubOptions.style.display = (this.state.dayLabelShowMonth || this.state.dayLabelMonthOnOutermost) ? 'flex' : 'none';
+    }
     const dayLabelYearSubOptions = document.getElementById('dayLabelYearSubOptions');
-    if (dayLabelYearSubOptions) dayLabelYearSubOptions.style.display = this.state.dayLabelShowYear ? 'flex' : 'none';
+    if (dayLabelYearSubOptions) {
+      dayLabelYearSubOptions.style.display = (this.state.dayLabelShowYear || this.state.dayLabelYearOnOutermost) ? 'flex' : 'none';
+    }
     
     // Sync dev mode line toggle states
     const showMonthLinesToggle = document.getElementById('showMonthLinesToggle');
@@ -1620,6 +1632,46 @@ Object.assign(SpiralCalendar.prototype, {
       d.setTime(d.getTime() - 1);
     }
     return d;
+  },
+
+  syncSelectedSegmentToDraggedHandle(draggedEvent = this.handleDragState && this.handleDragState.event) {
+    const handle = this.mouseState ? this.mouseState.draggingHandle : null;
+    if (!draggedEvent || !handle) return null;
+
+    const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
+    if (totalVisibleSegments <= 0) return null;
+
+    const isEnd = handle === 'end';
+    const handleDate = this._normalizeHandleDate(
+      isEnd ? draggedEvent.end : draggedEvent.start,
+      isEnd
+    );
+    let segmentId = (handleDate - this.referenceTime) / (1000 * 60 * 60);
+    segmentId = segmentId >= 0 ? Math.floor(segmentId) : Math.ceil(segmentId);
+    segmentId = Math.max(0, Math.min(totalVisibleSegments - 1, segmentId));
+
+    const absPos = totalVisibleSegments - segmentId - 1;
+    const day = Math.floor(absPos / CONFIG.SEGMENTS_PER_DAY);
+    const segment = (CONFIG.SEGMENTS_PER_DAY - 1) - handleDate.getUTCHours();
+    const nextSegment = { day, segment };
+
+    this.mouseState.selectedSegment = nextSegment;
+    this.mouseState.selectedSegmentId = this.getSelectedSegmentId(nextSegment);
+    this.state.detailViewDay = day;
+
+    if (draggedEvent.isDraft && this.draftEvent === draggedEvent) {
+      this.draftEvent.segmentId = this.mouseState.selectedSegmentId;
+    }
+
+    const segmentEventEntries = this.getAllEventsForSegment(day, segment) || [];
+    const matchingEventIndex = segmentEventEntries.findIndex(entry => entry && entry.event === draggedEvent);
+    if (matchingEventIndex >= 0) {
+      this.mouseState.selectedEventIndex = matchingEventIndex;
+    } else if (draggedEvent.isDraft && this.draftEvent === draggedEvent) {
+      this.mouseState.selectedEventIndex = 0;
+    }
+
+    return nextSegment;
   },
 
   _resolveHandleSegmentForDate(selectedEvent, selectedEventSegments, totalVisibleSegments, date, isEnd) {

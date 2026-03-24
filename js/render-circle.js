@@ -876,7 +876,66 @@ Object.assign(SpiralCalendar.prototype, {
       
     // 7.5 degrees in radians (used if upright is off)
     const tiltRadians = 7.5 * Math.PI / 180;
-    const onlyDayNumber = !this.state.dayLabelShowWeekday && !this.state.dayLabelShowMonth && !this.state.dayLabelShowYear;
+    const buildDayLabelState = (item, applyOutermostOverrides = false) => {
+      const fallbackText = item.text || String(item.dayNumber ?? '');
+      if (!Number.isFinite(item.segmentDateMs)) {
+        return {
+          text: fallbackText,
+          onlyNumeric: !!item.onlyNumeric
+        };
+      }
+
+      const segmentDate = new Date(item.segmentDateMs);
+      const weekdayFull = WEEKDAYS_UTC[segmentDate.getUTCDay()];
+      const weekdayShort = weekdayFull.slice(0, 3);
+      const monthFull = MONTHS_LONG_UTC[segmentDate.getUTCMonth()];
+      const monthShort = MONTHS_SHORT_UTC[segmentDate.getUTCMonth()];
+      const year = segmentDate.getUTCFullYear();
+      const useShortWeekday = !!this.state.dayLabelUseShortNames;
+      const useShortMonth = !!this.state.dayLabelUseShortMonth;
+      const useShortYear = !!this.state.dayLabelUseShortYear;
+      const isFirstOfMonth = segmentDate.getUTCDate() === 1;
+      const isFirstOfYear = isFirstOfMonth && segmentDate.getUTCMonth() === 0;
+      const showWeekday = !!this.state.dayLabelShowWeekday || (applyOutermostOverrides && !!this.state.dayLabelWeekdayOnOutermost);
+      const showMonth = !!this.state.dayLabelShowMonth || (applyOutermostOverrides && !!this.state.dayLabelMonthOnOutermost);
+      const showYear = !!this.state.dayLabelShowYear || (applyOutermostOverrides && !!this.state.dayLabelYearOnOutermost);
+
+      let includeMonth = showMonth && (
+        (applyOutermostOverrides && !!this.state.dayLabelMonthOnOutermost) ||
+        !this.state.dayLabelMonthOnFirstOnly ||
+        isFirstOfMonth
+      );
+      let includeYear = showYear && (
+        (applyOutermostOverrides && !!this.state.dayLabelYearOnOutermost) ||
+        !this.state.dayLabelYearOnFirstOnly ||
+        isFirstOfYear
+      );
+
+      const parts = [];
+      if (showWeekday) {
+        parts.push(useShortWeekday ? weekdayShort : weekdayFull);
+      }
+      if (includeMonth) {
+        parts.push(useShortMonth ? monthShort : monthFull);
+      }
+
+      const dayText = this.state.dayLabelUseOrdinal ? this.dayToOrdinal(item.dayNumber) : String(item.dayNumber);
+      parts.push(dayText);
+      if (showWeekday && parts.length > 1) {
+        parts[0] = parts[0] + ',';
+      }
+
+      let text = parts.join(' ');
+      if (includeYear) {
+        const yearText = useShortYear ? String(year).slice(2) : String(year);
+        text += `, ${yearText}`;
+      }
+
+      return {
+        text,
+        onlyNumeric: (!showWeekday && !includeMonth && !includeYear)
+      };
+    };
     const getRenderedFontSize = (item) => {
       const baseSize = Math.max(1, Number(item.fontSize) || 0);
       if (!Number.isFinite(item.transitionFontSize) || !this.isModeTransitionActive()) {
@@ -885,6 +944,111 @@ Object.assign(SpiralCalendar.prototype, {
       const progress = this.getModeMorphProgress();
       return baseSize + (item.transitionFontSize - baseSize) * progress;
     };
+    const measureTextAdvances = (text, fontPx) => {
+      this.ctx.save();
+      this.ctx.font = getFontString(fontPx);
+      const advances = [];
+      let prevWidth = 0;
+      for (let i = 0; i < text.length; i++) {
+        const sub = text.slice(0, i + 1);
+        const w = this.ctx.measureText(sub).width;
+        const adv = Math.max(0.5, w - prevWidth);
+        advances.push(adv);
+        prevWidth = w;
+      }
+      this.ctx.restore();
+      return {
+        advances,
+        totalWidth: prevWidth
+      };
+    };
+    const getOuterEndClipTheta = (item) => {
+      return (!item.isCircleMode && Number.isFinite(item.outerEndClipTheta))
+        ? item.outerEndClipTheta
+        : null;
+    };
+    const getMidRadius = (item, theta) => {
+      if (!item.radiusFunction || item.isCircleMode) return item.centerRadius || 0;
+      const innerRadius = item.radiusFunction(theta);
+      const outerRadius = item.radiusFunction(theta + 2 * Math.PI);
+      return (innerRadius + outerRadius) / 2;
+    };
+    const stepByArc = (item, thetaStart, targetWidth) => {
+      let startRadius = getMidRadius(item, thetaStart);
+      if (!isFinite(startRadius) || startRadius < 1) startRadius = 1;
+      let dTheta = Math.max(1e-5, targetWidth / startRadius);
+      let thetaEnd = thetaStart - dTheta;
+      const endRadius = getMidRadius(item, thetaEnd);
+      const startX = startRadius * Math.cos(-thetaStart + CONFIG.INITIAL_ROTATION_OFFSET);
+      const startY = startRadius * Math.sin(-thetaStart + CONFIG.INITIAL_ROTATION_OFFSET);
+      const endX = endRadius * Math.cos(-thetaEnd + CONFIG.INITIAL_ROTATION_OFFSET);
+      const endY = endRadius * Math.sin(-thetaEnd + CONFIG.INITIAL_ROTATION_OFFSET);
+      const ds = Math.hypot(endX - startX, endY - startY);
+      if (ds > 0.0001) {
+        dTheta = dTheta * (targetWidth / ds);
+      }
+      if (!isFinite(dTheta) || dTheta <= 0) dTheta = 1e-4;
+      return Math.min(dTheta, 0.5);
+    };
+    const canRenderDayLabel = (item, labelState) => {
+      const outerEndClipTheta = getOuterEndClipTheta(item);
+      if (outerEndClipTheta === null) {
+        return true;
+      }
+
+      const fontPx = getRenderedFontSize(item);
+      if (labelState.onlyNumeric) {
+        const { totalWidth } = measureTextAdvances(labelState.text, fontPx);
+        const radius = Math.max(1, item.centerRadius || 1);
+        const approxHalfThetaSpan = (totalWidth * 0.5) / radius;
+        const centerTheta = Number.isFinite(item.centerTheta) ? item.centerTheta : 0;
+        const textOuterTheta = centerTheta + approxHalfThetaSpan;
+        return outerEndClipTheta >= textOuterTheta - 1e-5;
+      }
+
+      const text = labelState.text;
+      const baseTheta = item.centerTheta !== undefined ? item.centerTheta : (item.centerAngle || 0);
+      const labelRadius = item.centerRadius || 0;
+      if (!text || !isFinite(labelRadius) || labelRadius < 1) return false;
+      const { advances } = measureTextAdvances(text, fontPx);
+      if (!advances.length) return false;
+
+      let theta = baseTheta;
+      theta += stepByArc(item, theta, fontPx * 0.85);
+      const firstCharWidth = advances[0];
+      const firstHalfAdvance = firstCharWidth * 0.5;
+      const firstDThetaHalf = stepByArc(item, theta, firstHalfAdvance);
+      const firstThetaMid = theta - firstDThetaHalf;
+      const firstDThetaHalf2 = stepByArc(item, firstThetaMid, firstHalfAdvance);
+      const firstThetaNext = firstThetaMid - firstDThetaHalf2;
+      const firstCharMaxTheta = Math.max(theta, firstThetaNext);
+      return outerEndClipTheta >= firstCharMaxTheta - 1e-5;
+    };
+    const hasOutermostDayLabelOverride = !!(
+      this.state.dayLabelWeekdayOnOutermost ||
+      this.state.dayLabelMonthOnOutermost ||
+      this.state.dayLabelYearOnOutermost
+    );
+    let effectiveOutermostDay = null;
+    if (hasOutermostDayLabelOverride) {
+      const sortedDayNumbers = this.dayNumbers
+        .filter((dayNum) => Number.isFinite(dayNum.day))
+        .slice()
+        .sort((a, b) => b.day - a.day);
+      for (const dayNum of sortedDayNumbers) {
+        const candidateLabel = buildDayLabelState(dayNum, true);
+        if (canRenderDayLabel(dayNum, candidateLabel)) {
+          effectiveOutermostDay = dayNum.day;
+          break;
+        }
+      }
+    }
+    for (const dayNum of this.dayNumbers) {
+      const labelState = buildDayLabelState(dayNum, effectiveOutermostDay !== null && dayNum.day === effectiveOutermostDay);
+      dayNum.text = labelState.text;
+      dayNum.onlyNumeric = labelState.onlyNumeric;
+    }
+    const onlyDayNumber = this.dayNumbers.length > 0 && this.dayNumbers.every((dayNum) => dayNum.onlyNumeric);
     
     // Helper: draw text following the local spiral tangent by placing characters sequentially
     const drawCurvedText = (item) => {
@@ -1361,12 +1525,15 @@ Object.assign(SpiralCalendar.prototype, {
             const centerRadius = (innerRadius + outerRadius) / 2;
             // Build weekday + day label (e.g., Mon 28)
             // Defaults in case of errors (circle mode)
+            let showWeekday = false;
             let includeMonth = false;
             let includeYear = false;
+            let segmentDateMs = null;
             try {
               const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
               const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
               const segmentDate = new Date(this.referenceTime.getTime() + segmentId * 60 * 60 * 1000);
+              segmentDateMs = segmentDate.getTime();
               const weekdayFull = WEEKDAYS_UTC[segmentDate.getUTCDay()];
               const weekdayShort = weekdayFull.slice(0, 3);
               const monthFull = MONTHS_LONG_UTC[segmentDate.getUTCMonth()];
@@ -1378,18 +1545,29 @@ Object.assign(SpiralCalendar.prototype, {
               const useShortYear = !!this.state.dayLabelUseShortYear;
               const isFirstOfMonth = segmentDate.getUTCDate() === 1;
               const isFirstOfYear = isFirstOfMonth && segmentDate.getUTCMonth() === 0;
-              if (this.state.dayLabelShowWeekday) {
+              showWeekday = !!this.state.dayLabelShowWeekday || (isOutermostDay && !!this.state.dayLabelWeekdayOnOutermost);
+              const showMonth = !!this.state.dayLabelShowMonth || (isOutermostDay && !!this.state.dayLabelMonthOnOutermost);
+              const showYear = !!this.state.dayLabelShowYear || (isOutermostDay && !!this.state.dayLabelYearOnOutermost);
+              if (showWeekday) {
                 parts.push(useShortWeekday ? weekdayShort : weekdayFull);
               }
-              includeMonth = this.state.dayLabelShowMonth && (!this.state.dayLabelMonthOnFirstOnly || isFirstOfMonth);
+              includeMonth = showMonth && (
+                (isOutermostDay && !!this.state.dayLabelMonthOnOutermost) ||
+                !this.state.dayLabelMonthOnFirstOnly ||
+                isFirstOfMonth
+              );
               if (includeMonth) {
                 parts.push(useShortMonth ? monthShort : monthFull);
               }
               const dayText = this.state.dayLabelUseOrdinal ? this.dayToOrdinal(dayNumber) : String(dayNumber);
               parts.push(dayText);
-              if (this.state.dayLabelShowWeekday && parts.length > 1) parts[0] = parts[0] + ',';
+              if (showWeekday && parts.length > 1) parts[0] = parts[0] + ',';
               var fullDayLabel = parts.join(' ');
-              includeYear = this.state.dayLabelShowYear && (!this.state.dayLabelYearOnFirstOnly || isFirstOfYear);
+              includeYear = showYear && (
+                (isOutermostDay && !!this.state.dayLabelYearOnOutermost) ||
+                !this.state.dayLabelYearOnFirstOnly ||
+                isFirstOfYear
+              );
               if (includeYear) {
                 const yearText = useShortYear ? String(year).slice(2) : String(year);
                 fullDayLabel += `, ${yearText}`;
@@ -1408,6 +1586,9 @@ Object.assign(SpiralCalendar.prototype, {
             const fontSize = Math.max(1, Math.min(24, maxDimension));
             
             this.dayNumbers.push({
+              day: day,
+              dayNumber: dayNumber,
+              segmentDateMs: segmentDateMs,
               x: centerRadius * Math.cos(-centerAngle + CONFIG.INITIAL_ROTATION_OFFSET),
               y: centerRadius * Math.sin(-centerAngle + CONFIG.INITIAL_ROTATION_OFFSET),
               text: fullDayLabel,
@@ -1415,7 +1596,7 @@ Object.assign(SpiralCalendar.prototype, {
               isCircleMode: true,
               centerAngle: centerAngle,
               centerRadius: centerRadius,
-              onlyNumeric: (!this.state.dayLabelShowWeekday && !includeMonth && !includeYear)
+              onlyNumeric: (!showWeekday && !includeMonth && !includeYear)
             });
             }
           }

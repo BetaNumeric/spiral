@@ -80,6 +80,9 @@ Object.assign(SpiralCalendar.prototype, {
             'showEverySixthHour',
             'hourNumbersPosition',
             'showArcLines',
+            'dayLabelWeekdayOnOutermost',
+            'dayLabelMonthOnOutermost',
+            'dayLabelYearOnOutermost',
             'dayLabelUseShortNames',
             'dayLabelUseShortMonth',
             'dayLabelMonthOnFirstOnly',
@@ -102,7 +105,14 @@ Object.assign(SpiralCalendar.prototype, {
             this.state.showEverySixthHour = true;
             this.state.hourNumbersPosition = 1;
             this.state.showArcLines = false;
+            this.state.dayLabelShowWeekday = false;
+            this.state.dayLabelWeekdayOnOutermost = true;
+          } else if (preset === 'default') {
+            this.state.dayLabelShowWeekday = true;
+            this.state.dayLabelWeekdayOnOutermost = false;
           } else if (preset === 'complex') {
+            this.state.dayLabelShowWeekday = true;
+            this.state.dayLabelWeekdayOnOutermost = false;
             this.state.dayLabelUseShortNames = false;
             this.state.hourNumbersStartAtOne = true;
             this.state.hourNumbersPosition = 0;
@@ -248,31 +258,61 @@ Object.assign(SpiralCalendar.prototype, {
       const dayLabelUseShortMonth = document.getElementById('dayLabelUseShortMonth');
       const dayLabelUseShortYear = document.getElementById('dayLabelUseShortYear');
       const dayLabelUseOrdinal = document.getElementById('dayLabelUseOrdinal');
+      const dayLabelWeekdayOnOutermost = document.getElementById('dayLabelWeekdayOnOutermost');
+      const dayLabelMonthOnOutermost = document.getElementById('dayLabelMonthOnOutermost');
+      const dayLabelYearOnOutermost = document.getElementById('dayLabelYearOnOutermost');
       const dayLabelMonthOnFirstOnly = document.getElementById('dayLabelMonthOnFirstOnly');
       const dayLabelYearOnFirstOnly = document.getElementById('dayLabelYearOnFirstOnly');
       const dayLabelWeekdaySubOptions = document.getElementById('dayLabelWeekdaySubOptions');
       const dayLabelMonthSubOptions = document.getElementById('dayLabelMonthSubOptions');
       const dayLabelYearSubOptions = document.getElementById('dayLabelYearSubOptions');
+      const updateDayLabelSubOptionVisibility = () => {
+        if (dayLabelWeekdaySubOptions) {
+          dayLabelWeekdaySubOptions.style.display = (this.state.dayLabelShowWeekday || this.state.dayLabelWeekdayOnOutermost) ? 'flex' : 'none';
+        }
+        if (dayLabelMonthSubOptions) {
+          dayLabelMonthSubOptions.style.display = (this.state.dayLabelShowMonth || this.state.dayLabelMonthOnOutermost) ? 'flex' : 'none';
+        }
+        if (dayLabelYearSubOptions) {
+          dayLabelYearSubOptions.style.display = (this.state.dayLabelShowYear || this.state.dayLabelYearOnOutermost) ? 'flex' : 'none';
+        }
+      };
       if (dayLabelShowWeekday) {
         dayLabelShowWeekday.checked = !!this.state.dayLabelShowWeekday;
         dayLabelShowWeekday.addEventListener('change', (e) => {
           this.state.dayLabelShowWeekday = e.target.checked;
-          if (dayLabelWeekdaySubOptions) dayLabelWeekdaySubOptions.style.display = this.state.dayLabelShowWeekday ? 'flex' : 'none';
+          updateDayLabelSubOptionVisibility();
           this.drawSpiral();
           this.saveSettingsToStorage();
         });
       }
-      if (dayLabelWeekdaySubOptions) dayLabelWeekdaySubOptions.style.display = this.state.dayLabelShowWeekday ? 'flex' : 'none';
+      if (dayLabelWeekdayOnOutermost) {
+        dayLabelWeekdayOnOutermost.checked = !!this.state.dayLabelWeekdayOnOutermost;
+        dayLabelWeekdayOnOutermost.addEventListener('change', (e) => {
+          this.state.dayLabelWeekdayOnOutermost = e.target.checked;
+          updateDayLabelSubOptionVisibility();
+          this.drawSpiral();
+          this.saveSettingsToStorage();
+        });
+      }
       if (dayLabelShowMonth) {
         dayLabelShowMonth.checked = !!this.state.dayLabelShowMonth;
         dayLabelShowMonth.addEventListener('change', (e) => {
           this.state.dayLabelShowMonth = e.target.checked;
-          if (dayLabelMonthSubOptions) dayLabelMonthSubOptions.style.display = this.state.dayLabelShowMonth ? 'flex' : 'none';
+          updateDayLabelSubOptionVisibility();
           this.drawSpiral();
           this.saveSettingsToStorage();
         });
       }
-      if (dayLabelMonthSubOptions) dayLabelMonthSubOptions.style.display = this.state.dayLabelShowMonth ? 'flex' : 'none';
+      if (dayLabelMonthOnOutermost) {
+        dayLabelMonthOnOutermost.checked = !!this.state.dayLabelMonthOnOutermost;
+        dayLabelMonthOnOutermost.addEventListener('change', (e) => {
+          this.state.dayLabelMonthOnOutermost = e.target.checked;
+          updateDayLabelSubOptionVisibility();
+          this.drawSpiral();
+          this.saveSettingsToStorage();
+        });
+      }
       if (dayLabelMonthOnFirstOnly) {
         dayLabelMonthOnFirstOnly.checked = !!this.state.dayLabelMonthOnFirstOnly;
         dayLabelMonthOnFirstOnly.addEventListener('change', (e) => {
@@ -293,12 +333,20 @@ Object.assign(SpiralCalendar.prototype, {
         dayLabelShowYear.checked = !!this.state.dayLabelShowYear;
         dayLabelShowYear.addEventListener('change', (e) => {
           this.state.dayLabelShowYear = e.target.checked;
-          if (dayLabelYearSubOptions) dayLabelYearSubOptions.style.display = this.state.dayLabelShowYear ? 'flex' : 'none';
+          updateDayLabelSubOptionVisibility();
           this.drawSpiral();
           this.saveSettingsToStorage();
         });
       }
-      if (dayLabelYearSubOptions) dayLabelYearSubOptions.style.display = this.state.dayLabelShowYear ? 'flex' : 'none';
+      if (dayLabelYearOnOutermost) {
+        dayLabelYearOnOutermost.checked = !!this.state.dayLabelYearOnOutermost;
+        dayLabelYearOnOutermost.addEventListener('change', (e) => {
+          this.state.dayLabelYearOnOutermost = e.target.checked;
+          updateDayLabelSubOptionVisibility();
+          this.drawSpiral();
+          this.saveSettingsToStorage();
+        });
+      }
       if (dayLabelYearOnFirstOnly) {
         dayLabelYearOnFirstOnly.checked = !!this.state.dayLabelYearOnFirstOnly;
         dayLabelYearOnFirstOnly.addEventListener('change', (e) => {
@@ -331,6 +379,7 @@ Object.assign(SpiralCalendar.prototype, {
           this.saveSettingsToStorage();
         });
       }
+      updateDayLabelSubOptionVisibility();
 
       // Add circle mode checkbox handler
       const circleModeCheckbox = document.getElementById('circleMode');
