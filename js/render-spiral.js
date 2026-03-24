@@ -56,9 +56,14 @@ Object.assign(SpiralCalendar.prototype, {
 
   drawSegment(startTheta, endTheta, radiusFunction, color, isMidnightSegment = false, isAfterMidnightSegment = false, isHovered = false, drawLeadingEdge = false, isSelected = false, rawStartAngle = null, rawEndAngle = null, isFirstDayOfMonth = false, day = null, segment = null, drawStroke = true, isEventSubSegment = false, isNoonSegment = false, isSixAMSegment = false, isSixPMSegment = false) {
       const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
+      const radialFillOverlap = (!isEventSubSegment && drawStroke && !this.state.showArcLines)
+        ? Math.max(0.5, CONFIG.STROKE_WIDTH * 0.5)
+        : 0;
+      const getInnerFillRadius = (theta) => Math.max(0, radiusFunction(theta) - radialFillOverlap);
+      const getOuterFillRadius = (theta) => Math.max(0, radiusFunction(theta) + radialFillOverlap);
       
       let angle = -startTheta + CONFIG.INITIAL_ROTATION_OFFSET;
-      let radius = radiusFunction(startTheta);
+      let radius = getInnerFillRadius(startTheta);
       let x = radius * Math.cos(angle);
       let y = radius * Math.sin(angle);
       
@@ -70,7 +75,7 @@ Object.assign(SpiralCalendar.prototype, {
           const t = i / innerSteps;
         const rawAngle = startTheta + t * (endTheta - startTheta);
         angle = -rawAngle + CONFIG.INITIAL_ROTATION_OFFSET;
-        radius = radiusFunction(rawAngle);
+        radius = getInnerFillRadius(rawAngle);
         x = radius * Math.cos(angle);
         y = radius * Math.sin(angle);
         this.ctx.lineTo(x, y);
@@ -78,14 +83,14 @@ Object.assign(SpiralCalendar.prototype, {
       // Draw radial line outwards (one full turn)
       const outerEnd = endTheta + 2 * Math.PI;
       angle = -outerEnd + CONFIG.INITIAL_ROTATION_OFFSET;
-      radius = radiusFunction(outerEnd);
+      radius = getOuterFillRadius(outerEnd);
       this.ctx.lineTo(radius * Math.cos(angle), radius * Math.sin(angle));
       // Draw outer arc back to start edge
         for (let i = 1; i <= innerSteps; i++) {
           const t = i / innerSteps;
         const rawAngle = outerEnd - t * (endTheta - startTheta);
         angle = -rawAngle + CONFIG.INITIAL_ROTATION_OFFSET;
-        radius = radiusFunction(rawAngle);
+        radius = getOuterFillRadius(rawAngle);
         x = radius * Math.cos(angle);
         y = radius * Math.sin(angle);
         this.ctx.lineTo(x, y);
@@ -249,6 +254,19 @@ Object.assign(SpiralCalendar.prototype, {
       }
     },
 
+  getSteppedGradientOverlayOpacity(day, segment, radiusFunction, maxRadius, hourStep = 6) {
+      const safeMaxRadius = Math.max(1e-6, maxRadius);
+      const stepSize = Math.max(1, Math.min(CONFIG.SEGMENTS_PER_DAY, hourStep));
+      const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
+      const blockStartSegment = Math.floor(segment / stepSize) * stepSize;
+      const blockCenterTheta = day * 2 * Math.PI + (blockStartSegment + stepSize * 0.5) * segmentAngle;
+      const innerRadius = radiusFunction(blockCenterTheta);
+      const outerRadius = radiusFunction(blockCenterTheta + 2 * Math.PI);
+      const avgRadius = (innerRadius + outerRadius) / 2;
+      const normalizedRadius = Math.max(0, Math.min(1, 1 - (avgRadius / safeMaxRadius)));
+      return normalizedRadius * this.state.gradientOverlayOpacity;
+  },
+
   adaptiveThetaSamples(startTheta, endTheta, radiusFunction, tolPx = 0.75, maxDepth = 10) {
       // Convert a theta to outer Cartesian point (use outer curve for curvature test)
       const thetaToOuterPoint = (th) => {
@@ -297,14 +315,11 @@ Object.assign(SpiralCalendar.prototype, {
       return dedup;
   },
 
-  drawSpiralBand(startTheta, endTheta, radiusFunction, fillStyle, minAvgThicknessPx = 0.6, tolPx = 0.75) {
-      if (endTheta <= startTheta) return;
-      // For semi-transparent overlays, use higher resolution (lower tolerance) to prevent gaps
-      // Check if fillStyle is semi-transparent (contains rgba - overlays use rgba with alpha < 1)
-      const isSemiTransparent = typeof fillStyle === 'string' && fillStyle.includes('rgba');
-      const effectiveTolPx = isSemiTransparent ? Math.min(tolPx, 0.1) : tolPx; // Higher resolution for overlays
-      const thetas = this.adaptiveThetaSamples(startTheta, endTheta, radiusFunction, effectiveTolPx, 10);
-      if (thetas.length < 2) return;
+  traceSpiralBandPath(startTheta, endTheta, radiusFunction, minAvgThicknessPx = 0.6, tolPx = 0.75) {
+      if (endTheta <= startTheta) return false;
+      const thetas = this.adaptiveThetaSamples(startTheta, endTheta, radiusFunction, tolPx, 10);
+      if (thetas.length < 2) return false;
+
       // Average thickness check to avoid drawing near-zero-width slivers
       let avgThick = 0;
       for (let i = 0; i < thetas.length; i++) {
@@ -314,19 +329,19 @@ Object.assign(SpiralCalendar.prototype, {
         avgThick += (outer - inner);
       }
       avgThick /= thetas.length;
-      if (avgThick < minAvgThicknessPx) return;
+      if (avgThick < minAvgThicknessPx) return false;
 
-      // Build path
-      this.ctx.save();
-      this.ctx.beginPath();
       // Inner edge forward
       for (let i = 0; i < thetas.length; i++) {
         const th = thetas[i];
         const r = radiusFunction(th);
         const ang = -th + CONFIG.INITIAL_ROTATION_OFFSET;
-        const x = r * Math.cos(ang), y = r * Math.sin(ang);
-        if (i === 0) this.ctx.moveTo(x, y); else this.ctx.lineTo(x, y);
+        const x = r * Math.cos(ang);
+        const y = r * Math.sin(ang);
+        if (i === 0) this.ctx.moveTo(x, y);
+        else this.ctx.lineTo(x, y);
       }
+
       // Connect to outer edge at the end
       {
         const th = thetas[thetas.length - 1];
@@ -334,6 +349,7 @@ Object.assign(SpiralCalendar.prototype, {
         const ang = -th + CONFIG.INITIAL_ROTATION_OFFSET;
         this.ctx.lineTo(r * Math.cos(ang), r * Math.sin(ang));
       }
+
       // Outer edge backward
       for (let i = thetas.length - 2; i >= 0; i--) {
         const th = thetas[i];
@@ -341,6 +357,7 @@ Object.assign(SpiralCalendar.prototype, {
         const ang = -th + CONFIG.INITIAL_ROTATION_OFFSET;
         this.ctx.lineTo(r * Math.cos(ang), r * Math.sin(ang));
       }
+
       // Close along the start radial
       {
         const th = thetas[0];
@@ -349,6 +366,22 @@ Object.assign(SpiralCalendar.prototype, {
         this.ctx.lineTo(r * Math.cos(ang), r * Math.sin(ang));
       }
       this.ctx.closePath();
+      return true;
+  },
+
+  drawSpiralBand(startTheta, endTheta, radiusFunction, fillStyle, minAvgThicknessPx = 0.6, tolPx = 0.75) {
+      if (endTheta <= startTheta) return;
+      // Semi-transparent bands need tighter sampling, but the main seam reduction
+      // comes from combining fills where possible before they reach this helper.
+      const isSemiTransparent = typeof fillStyle === 'string' && fillStyle.includes('rgba');
+      const effectiveTolPx = isSemiTransparent ? Math.min(tolPx, 0.1) : tolPx;
+
+      this.ctx.save();
+      this.ctx.beginPath();
+      if (!this.traceSpiralBandPath(startTheta, endTheta, radiusFunction, minAvgThicknessPx, effectiveTolPx)) {
+        this.ctx.restore();
+        return;
+      }
       this.ctx.fillStyle = fillStyle;
       this.ctx.fill();
       this.ctx.restore();
@@ -2047,22 +2080,8 @@ Object.assign(SpiralCalendar.prototype, {
           
           // --- GRADIENT OVERLAY LOGIC FOR SPIRAL MODE ---
           if (this.state.showGradientOverlay) {
-            // Calculate average radius of this segment to determine how far inward it is
-            const startRadius = radiusFunction(startTheta);
-            const endRadius = radiusFunction(endTheta);
-            const avgRadius = (startRadius + endRadius) / 2;
-            
-            // Get max radius for normalization
             const { maxRadius } = this.calculateTransforms(this.canvas.clientWidth, this.canvas.clientHeight);
-            
-            // Normalize radius: 0 = outermost, 1 = innermost
-            // Clamp to valid range in case of edge cases
-            const normalizedRadius = Math.max(0, Math.min(1, 1 - (avgRadius / maxRadius)));
-            
-            // Calculate darkness: 0 (white/no darkening) at outer edge, increasing toward center
-            // Use configurable maximum opacity
-            const maxDarkness = this.state.gradientOverlayOpacity;
-            const darkness = normalizedRadius * maxDarkness;
+            const darkness = this.getSteppedGradientOverlayOpacity(day, segment, radiusFunction, maxRadius, 6);
             
             const gradientOverlayColor = `rgba(0, 0, 0, ${darkness})`;
             

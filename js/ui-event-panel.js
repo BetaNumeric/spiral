@@ -2506,9 +2506,9 @@ Object.assign(SpiralCalendar.prototype, {
     }
 
     // Update value displays
-    const updateValueDisplay = (slider, display) => {
+    const updateValueDisplay = (slider, display, formatter = null) => {
       if (slider && display) {
-        display.textContent = slider.value;
+        display.textContent = formatter ? formatter(slider.value) : slider.value;
       }
     };
 
@@ -2546,8 +2546,9 @@ Object.assign(SpiralCalendar.prototype, {
     randMaxRange.addEventListener('input', clampLengths);
     
     if (randNightWeightRange && randNightWeightVal) {
-      randNightWeightRange.addEventListener('input', () => updateValueDisplay(randNightWeightRange, randNightWeightVal));
-      updateValueDisplay(randNightWeightRange, randNightWeightVal);
+      const formatNightWeight = (value) => `${value}%`;
+      randNightWeightRange.addEventListener('input', () => updateValueDisplay(randNightWeightRange, randNightWeightVal, formatNightWeight));
+      updateValueDisplay(randNightWeightRange, randNightWeightVal, formatNightWeight);
     }
     
     // Initial value display updates

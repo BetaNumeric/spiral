@@ -17,8 +17,8 @@ Object.assign(SpiralCalendar.prototype, {
     const canvasHeight = this.canvas.clientHeight;
     const { centerX, centerY } = this.calculateCenter(canvasWidth, canvasHeight);
 
-    let modelX = canvasX / devicePixelRatio - centerX;
-    let modelY = canvasY / devicePixelRatio - centerY;
+    let modelX = this.canvasPixelsToCss(canvasX) - centerX;
+    let modelY = this.canvasPixelsToCss(canvasY) - centerY;
     if (this.state.staticMode) {
       modelX = -modelX;
       modelY = -modelY;
@@ -2275,57 +2275,98 @@ clampRotationToEventWindow() {
   this.drawSpiral();
   },
 
+  shouldSkipOverlaySegment(overlay) {
+    return !!(
+      this.mouseState.selectedSegment &&
+      this.mouseState.selectedSegment.day === overlay.day &&
+      this.mouseState.selectedSegment.segment === overlay.segment
+    );
+  },
+
+  collectContiguousSpiralOverlaySpans(overlays, buildSpan, options = {}) {
+    const spans = [];
+    const mergeTolerance = Number.isFinite(options.mergeTolerance) ? options.mergeTolerance : 1e-6;
+    const mergeByColor = options.mergeByColor !== false;
+    let current = null;
+
+    for (const overlay of overlays) {
+      const nextSpan = buildSpan.call(this, overlay);
+      if (!nextSpan || !(nextSpan.endTheta > nextSpan.startTheta)) continue;
+
+      const canMerge = current &&
+        current.radiusFunction === nextSpan.radiusFunction &&
+        (!mergeByColor || current.color === nextSpan.color) &&
+        nextSpan.startTheta <= current.endTheta + mergeTolerance;
+
+      if (canMerge) {
+        current.endTheta = Math.max(current.endTheta, nextSpan.endTheta);
+        continue;
+      }
+
+      current = { ...nextSpan };
+      spans.push(current);
+    }
+
+    return spans;
+  },
+
+  fillCircleModeOverlaySegment(overlay, fillStyle) {
+    this.ctx.save();
+    this.ctx.beginPath();
+
+    const startAngle = overlay.startTheta + CONFIG.INITIAL_ROTATION_OFFSET;
+    const endAngle = overlay.endTheta + CONFIG.INITIAL_ROTATION_OFFSET;
+
+    this.ctx.arc(0, 0, overlay.outerRadius, startAngle, endAngle, true);
+    this.ctx.lineTo(overlay.innerRadius * Math.cos(endAngle), overlay.innerRadius * Math.sin(endAngle));
+    this.ctx.arc(0, 0, overlay.innerRadius, endAngle, startAngle, false);
+    this.ctx.lineTo(overlay.outerRadius * Math.cos(startAngle), overlay.outerRadius * Math.sin(startAngle));
+    this.ctx.closePath();
+
+    this.ctx.fillStyle = fillStyle;
+    this.ctx.fill();
+    this.ctx.restore();
+  },
+
+  drawMergedSpiralOverlays(overlays, buildSpan) {
+    const spiralSpans = this.collectContiguousSpiralOverlaySpans(overlays, buildSpan);
+    for (const span of spiralSpans) {
+      this.drawSpiralBand(span.startTheta, span.endTheta, span.radiusFunction, span.color);
+    }
+  },
+
   drawNightOverlays() {
     // Reset context state to ensure consistent rendering
     this.ctx.globalAlpha = 1.0;
     this.ctx.globalCompositeOperation = 'source-over';
+    const nightOverlayColor = `rgba(0, 0, 0, ${this.state.nightOverlayOpacity})`;
     
     for (const overlay of this.nightOverlays) {
-      // Skip overlay if this segment is currently selected
-      if (this.mouseState.selectedSegment && 
-          this.mouseState.selectedSegment.day === overlay.day && 
-          this.mouseState.selectedSegment.segment === overlay.segment) {
-        continue;
-      }
+      if (this.shouldSkipOverlaySegment(overlay)) continue;
       
       if (overlay.isCircleMode) {
-        // Circle mode night overlay
-        this.ctx.save();
-        this.ctx.beginPath();
-        
-        // Draw the ring segment path for night overlay
-        const startAngle = overlay.startTheta + CONFIG.INITIAL_ROTATION_OFFSET;
-        const endAngle = overlay.endTheta + CONFIG.INITIAL_ROTATION_OFFSET;
-        
-        // Outer arc
-        this.ctx.arc(0, 0, overlay.outerRadius, startAngle, endAngle, true);
-        // Radial line to inner radius
-        this.ctx.lineTo(overlay.innerRadius * Math.cos(endAngle), overlay.innerRadius * Math.sin(endAngle));
-        // Inner arc (reverse)
-        this.ctx.arc(0, 0, overlay.innerRadius, endAngle, startAngle, false);
-        // Radial line back to outer radius
-        this.ctx.lineTo(overlay.outerRadius * Math.cos(startAngle), overlay.outerRadius * Math.sin(startAngle));
-        this.ctx.closePath();
-        
-        // Use configurable opacity for night overlay
-        const nightOverlayColor = `rgba(0, 0, 0, ${this.state.nightOverlayOpacity})`;
-        this.ctx.fillStyle = nightOverlayColor;
-        this.ctx.fill();
-        this.ctx.restore();
-      } else {
-        // Spiral mode night overlay: use adaptive band drawing
+        this.fillCircleModeOverlaySegment(overlay, nightOverlayColor);
+      }
+    }
+
+    this.drawMergedSpiralOverlays(
+      this.nightOverlays,
+      function buildNightSpan(overlay) {
+        if (overlay.isCircleMode || this.shouldSkipOverlaySegment(overlay)) return null;
         const segmentAngleSize = overlay.rawEndAngle - overlay.rawStartAngle;
         const timeStartTheta = overlay.rawStartAngle + (1 - overlay.overlayEndFrac) * segmentAngleSize;
         const timeEndTheta = overlay.rawStartAngle + (1 - overlay.overlayStartFrac) * segmentAngleSize;
         const arcStart = Math.max(timeStartTheta, overlay.startTheta);
         const arcEnd = Math.min(timeEndTheta, overlay.endTheta);
-        if (arcEnd > arcStart) {
-          // Use configurable opacity for night overlay
-          const nightOverlayColor = `rgba(0, 0, 0, ${this.state.nightOverlayOpacity})`;
-          this.drawSpiralBand(arcStart, arcEnd, overlay.radiusFunction, nightOverlayColor);
-        }
+        if (!(arcEnd > arcStart)) return null;
+        return {
+          startTheta: arcStart,
+          endTheta: arcEnd,
+          radiusFunction: overlay.radiusFunction,
+          color: nightOverlayColor
+        };
       }
-    }
+    );
   },
 
   drawGradientOverlays() {
@@ -2336,40 +2377,25 @@ clampRotationToEventWindow() {
     this.ctx.globalCompositeOperation = 'source-over';
     
     for (const overlay of this.gradientOverlays) {
-      // Skip overlay if this segment is currently selected
-      if (this.mouseState.selectedSegment && 
-          this.mouseState.selectedSegment.day === overlay.day && 
-          this.mouseState.selectedSegment.segment === overlay.segment) {
-        continue;
-      }
+      if (this.shouldSkipOverlaySegment(overlay)) continue;
       
       if (overlay.isCircleMode) {
-        // Circle mode gradient overlay
-        this.ctx.save();
-        this.ctx.beginPath();
-        
-        // Draw the ring segment path for gradient overlay
-        const startAngle = overlay.startTheta + CONFIG.INITIAL_ROTATION_OFFSET;
-        const endAngle = overlay.endTheta + CONFIG.INITIAL_ROTATION_OFFSET;
-        
-        // Outer arc
-        this.ctx.arc(0, 0, overlay.outerRadius, startAngle, endAngle, true);
-        // Radial line to inner radius
-        this.ctx.lineTo(overlay.innerRadius * Math.cos(endAngle), overlay.innerRadius * Math.sin(endAngle));
-        // Inner arc (reverse)
-        this.ctx.arc(0, 0, overlay.innerRadius, endAngle, startAngle, false);
-        // Radial line back to outer radius
-        this.ctx.lineTo(overlay.outerRadius * Math.cos(startAngle), overlay.outerRadius * Math.sin(startAngle));
-        this.ctx.closePath();
-        
-        this.ctx.fillStyle = overlay.color;
-        this.ctx.fill();
-        this.ctx.restore();
-      } else {
-        // Spiral mode gradient overlay: use adaptive band drawing
-        this.drawSpiralBand(overlay.startTheta, overlay.endTheta, overlay.radiusFunction, overlay.color);
+        this.fillCircleModeOverlaySegment(overlay, overlay.color);
       }
     }
+
+    this.drawMergedSpiralOverlays(
+      this.gradientOverlays,
+      function buildGradientSpan(overlay) {
+        if (overlay.isCircleMode || this.shouldSkipOverlaySegment(overlay)) return null;
+        return {
+          startTheta: overlay.startTheta,
+          endTheta: overlay.endTheta,
+          radiusFunction: overlay.radiusFunction,
+          color: overlay.color
+        };
+      }
+    );
   },
 
   drawDayOverlays() {
@@ -2378,40 +2404,25 @@ clampRotationToEventWindow() {
     this.ctx.globalCompositeOperation = 'source-over';
     
     for (const overlay of this.dayOverlays) {
-      // Skip overlay if this segment is currently selected
-      if (this.mouseState.selectedSegment && 
-          this.mouseState.selectedSegment.day === overlay.day && 
-          this.mouseState.selectedSegment.segment === overlay.segment) {
-        continue;
-      }
+      if (this.shouldSkipOverlaySegment(overlay)) continue;
       
       if (overlay.isCircleMode) {
-        // Circle mode day overlay
-        this.ctx.save();
-        this.ctx.beginPath();
-        
-        // Draw the ring segment path for day overlay
-        const startAngle = overlay.startTheta + CONFIG.INITIAL_ROTATION_OFFSET;
-        const endAngle = overlay.endTheta + CONFIG.INITIAL_ROTATION_OFFSET;
-        
-        // Outer arc
-        this.ctx.arc(0, 0, overlay.outerRadius, startAngle, endAngle, true);
-        // Radial line to inner radius
-        this.ctx.lineTo(overlay.innerRadius * Math.cos(endAngle), overlay.innerRadius * Math.sin(endAngle));
-        // Inner arc (reverse)
-        this.ctx.arc(0, 0, overlay.innerRadius, endAngle, startAngle, false);
-        // Radial line back to outer radius
-        this.ctx.lineTo(overlay.outerRadius * Math.cos(startAngle), overlay.outerRadius * Math.sin(startAngle));
-        this.ctx.closePath();
-        
-        this.ctx.fillStyle = overlay.color;
-        this.ctx.fill();
-        this.ctx.restore();
-      } else {
-        // Spiral mode day overlay: use adaptive band drawing
-        this.drawSpiralBand(overlay.startTheta, overlay.endTheta, overlay.radiusFunction, overlay.color);
+        this.fillCircleModeOverlaySegment(overlay, overlay.color);
       }
     }
+
+    this.drawMergedSpiralOverlays(
+      this.dayOverlays,
+      function buildDaySpan(overlay) {
+        if (overlay.isCircleMode || this.shouldSkipOverlaySegment(overlay)) return null;
+        return {
+          startTheta: overlay.startTheta,
+          endTheta: overlay.endTheta,
+          radiusFunction: overlay.radiusFunction,
+          color: overlay.color
+        };
+      }
+    );
   },
 
   drawArcLines() {

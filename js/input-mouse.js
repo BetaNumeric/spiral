@@ -1,5 +1,20 @@
 // Canvas Setup and Mouse Interaction
 Object.assign(SpiralCalendar.prototype, {
+    getCanvasBackingScale(clientWidth = null, clientHeight = null) {
+      const dpr = window.devicePixelRatio || 1;
+      const width = Number.isFinite(clientWidth) ? clientWidth : (this.canvas ? this.canvas.clientWidth : window.innerWidth || 0);
+      const height = Number.isFinite(clientHeight) ? clientHeight : (this.canvas ? this.canvas.clientHeight : window.innerHeight || 0);
+      const pixelBudget = 9000000;
+      const desiredScale = dpr * (dpr >= 2 ? 1.5 : 2);
+      const budgetScale = Math.sqrt(pixelBudget / Math.max(1, width * height));
+      return Math.max(dpr, Math.min(3, desiredScale, budgetScale));
+    },
+
+    canvasPixelsToCss(canvasValue) {
+      const backingScale = this._canvasBackingScale || (window.devicePixelRatio || 1);
+      return canvasValue / backingScale;
+    },
+
     getViewportDimensions() {
       const viewport = window.visualViewport;
       const width = viewport && Number.isFinite(viewport.width) ? viewport.width : window.innerWidth;
@@ -28,10 +43,11 @@ Object.assign(SpiralCalendar.prototype, {
       const clientHeight = this.canvas.clientHeight;
       if (!clientWidth || !clientHeight) return;
 
-      const dpr = window.devicePixelRatio || 1;
-      this.canvas.width = Math.round(clientWidth * dpr);
-      this.canvas.height = Math.round(clientHeight * dpr);
-      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const backingScale = this.getCanvasBackingScale(clientWidth, clientHeight);
+      this._canvasBackingScale = backingScale;
+      this.canvas.width = Math.round(clientWidth * backingScale);
+      this.canvas.height = Math.round(clientHeight * backingScale);
+      this.ctx.setTransform(backingScale, 0, 0, backingScale, 0, 0);
       // Update event list max height to 1/3 of screen height
       if (this.timeDisplayState) {
         this.timeDisplayState.eventListMaxHeight = Math.floor(clientHeight / 3);
@@ -239,8 +255,8 @@ Object.assign(SpiralCalendar.prototype, {
           const canvasHeight = this.canvas.clientHeight;
           const { centerX, centerY } = this.calculateCenter(canvasWidth, canvasHeight);
           // Transform point to pre-rotation spiral space
-          let modelX = canvasX / devicePixelRatio - centerX;
-          let modelY = canvasY / devicePixelRatio - centerY;
+          let modelX = this.canvasPixelsToCss(canvasX) - centerX;
+          let modelY = this.canvasPixelsToCss(canvasY) - centerY;
           if (this.state.staticMode) {
             modelX = -modelX; modelY = -modelY;
           } else {
@@ -408,8 +424,8 @@ Object.assign(SpiralCalendar.prototype, {
       // First, check hover over event time handles (outside detail view)
       if (this.handleHandles) {
         // Convert to spiral-centered coordinates (CSS pixels)
-        let modelX = canvasX / devicePixelRatio - centerX;
-        let modelY = canvasY / devicePixelRatio - centerY;
+        let modelX = this.canvasPixelsToCss(canvasX) - centerX;
+        let modelY = this.canvasPixelsToCss(canvasY) - centerY;
         // Transform mouse vector into the same pre-rotation space used for handle coordinates
         if (this.state.staticMode) {
           // Canvas rotated by PI -> inverse is also PI (flip)
@@ -934,8 +950,8 @@ Object.assign(SpiralCalendar.prototype, {
           const canvasWidth = this.canvas.clientWidth;
           const canvasHeight = this.canvas.clientHeight;
           const { centerX, centerY } = this.calculateCenter(canvasWidth, canvasHeight);
-          const x = canvasX / (window.devicePixelRatio || 1) - centerX;
-          const y = canvasY / (window.devicePixelRatio || 1) - centerY;
+          const x = this.canvasPixelsToCss(canvasX) - centerX;
+          const y = this.canvasPixelsToCss(canvasY) - centerY;
           const dist = Math.sqrt(x * x + y * y);
           const { maxRadius, thetaMax } = this.calculateTransforms(canvasWidth, canvasHeight);
           const visibilityRange = this.getRenderVisibilityRange(thetaMax);
@@ -1364,8 +1380,8 @@ Object.assign(SpiralCalendar.prototype, {
       // Convert to spiral coordinate system (reverse all the canvas transforms)
     // Account for the shifted center when time display is enabled
     const { centerX, centerY } = this.calculateCenter(canvasWidth, canvasHeight);
-    let x = canvasX / devicePixelRatio - centerX;
-    let y = canvasY / devicePixelRatio - centerY;
+    let x = this.canvasPixelsToCss(canvasX) - centerX;
+    let y = this.canvasPixelsToCss(canvasY) - centerY;
 
       if (this.state.staticMode) {
         // Apply 180° rotation: (x, y) -> (-x, -y)

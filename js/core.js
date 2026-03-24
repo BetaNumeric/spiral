@@ -70,7 +70,7 @@ class SpiralCalendar {
         enableLongPressJoystick: true,
         nightOverlayOpacity: 0.05,
         dayOverlayOpacity: 0.15,
-        gradientOverlayOpacity: 0.05
+        gradientOverlayOpacity: 0.15
       };
       const configuredDefaultSettings =
         (typeof APP_SETTINGS_DEFAULTS !== 'undefined' &&

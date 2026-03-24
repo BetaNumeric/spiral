@@ -1939,14 +1939,8 @@ Object.assign(SpiralCalendar.prototype, {
 
         // --- GRADIENT OVERLAY LOGIC FOR CIRCLE MODE ---
         if (this.state.showGradientOverlay) {
-          // Match spiral mode: derive darkness from the segment's rendered radial position
-          // so the outermost currently visible ring stays light as the user scrolls.
-          const avgRadius = (innerRadius + outerRadius) / 2;
-          const normalizedRadius = Math.max(0, Math.min(1, 1 - (avgRadius / maxRadius)));
-
-          // Calculate darkness: 0 at outer edge, increasing toward center
-          const maxDarkness = this.state.gradientOverlayOpacity;
-          const darkness = normalizedRadius * maxDarkness;
+          const circleRadiusFunction = (theta) => (theta >= (day + 1) * 2 * Math.PI ? outerRadius : innerRadius);
+          const darkness = this.getSteppedGradientOverlayOpacity(day, segment, circleRadiusFunction, maxRadius, 6);
           
           const gradientOverlayColor = `rgba(0, 0, 0, ${darkness})`;
           

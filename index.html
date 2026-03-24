@@ -608,7 +608,38 @@
     #settingsPanel .palette-range-row {
       display: flex;
       align-items: center;
+      gap: 0.45em;
       width: 100%;
+    }
+    #settingsPanel .settings-range-control {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      column-gap: 0.55em;
+      row-gap: 0.3em;
+      width: 100%;
+      margin: 0.25em 0;
+    }
+    #settingsPanel .settings-range-caption {
+      grid-column: 1 / -1;
+      min-width: 0;
+    }
+    #settingsPanel .settings-range-track {
+      width: 100%;
+      min-width: 0;
+      margin: 0;
+    }
+    #settingsPanel .settings-range-value {
+      display: inline-block;
+      min-width: 4.5ch;
+      text-align: right;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum";
+    }
+    #settingsPanel .palette-range-row .settings-range-value {
+      flex: 0 0 4.5ch;
+      min-width: 4.5ch;
     }
     #settingsPanel .palette-input-row input[type="color"] {
       margin-left: 0;
@@ -922,18 +953,28 @@
             </div>
           </div>
           
-          <label>Events: <span id="randCountVal">25</span>
-            <input type="range" id="randCountRange" min="1" max="500" step="1" value="25" style="width:100%">
+          <label class="settings-range-control">
+            <span class="settings-range-caption">Events</span>
+            <input type="range" id="randCountRange" class="settings-range-track" min="1" max="500" step="1" value="25">
+            <span id="randCountVal" class="settings-range-value">25</span>
           </label>
           
-          <label>Length min: <span id="randMinVal">60</span> min, Max: <span id="randMaxVal">240</span> min
-            <input type="range" id="randMinRange" min="5" max="720" step="5" value="60" style="width:100%">
-          
-            <input type="range" id="randMaxRange" min="5" max="720" step="5" value="240" style="width:100%">
+          <label class="settings-range-control">
+            <span class="settings-range-caption">Length min (min)</span>
+            <input type="range" id="randMinRange" class="settings-range-track" min="5" max="720" step="5" value="60">
+            <span id="randMinVal" class="settings-range-value">60</span>
+          </label>
+
+          <label class="settings-range-control">
+            <span class="settings-range-caption">Length max (min)</span>
+            <input type="range" id="randMaxRange" class="settings-range-track" min="5" max="720" step="5" value="240">
+            <span id="randMaxVal" class="settings-range-value">240</span>
           </label>
           
-          <label>Night events: <span id="randNightWeightVal">5</span>%
-            <input type="range" id="randNightWeightRange" min="0" max="100" step="5" value="5" style="width:100%">
+          <label class="settings-range-control">
+            <span class="settings-range-caption">Night events</span>
+            <input type="range" id="randNightWeightRange" class="settings-range-track" min="0" max="100" step="5" value="5">
+            <span id="randNightWeightVal" class="settings-range-value">5%</span>
           </label>
           
           <label style="display:flex; align-items:center; gap:0.5em;">
@@ -981,9 +1022,21 @@
        
 
 
-        <label>Days:   <input type="range" id="daysSlider"   min="1" max="40" step="1"   value="7"><span id="daysVal">7</span></label>
-        <label>Scale:  <input type="range" id="scaleSlider" min="0.1" max="1" step="0.01" value="0.40"><span id="scaleVal">0.40</span></label>
-        <label>Radius:   <input type="range" id="radiusSlider"     min="1" max="10" step="0.05" value="2"><span id="radiusVal">2  </span></label>
+        <label class="settings-range-control">
+          <span class="settings-range-caption">Days</span>
+          <input type="range" id="daysSlider" class="settings-range-track" min="1" max="40" step="1" value="7">
+          <span id="daysVal" class="settings-range-value">7</span>
+        </label>
+        <label class="settings-range-control">
+          <span class="settings-range-caption">Scale</span>
+          <input type="range" id="scaleSlider" class="settings-range-track" min="0.1" max="1" step="0.01" value="0.40">
+          <span id="scaleVal" class="settings-range-value">0.40</span>
+        </label>
+        <label class="settings-range-control">
+          <span class="settings-range-caption">Radius</span>
+          <input type="range" id="radiusSlider" class="settings-range-track" min="1" max="10" step="0.05" value="2">
+          <span id="radiusVal" class="settings-range-value">2</span>
+        </label>
 
         <div id="paletteSelectorSection" class="palette-selector">
           <div class="palette-selector-header">
@@ -1030,7 +1083,7 @@
                   <span class="palette-input-label">Saturation</span>
                   <span class="palette-range-row">
                     <input type="range" id="saturationSlider" min="0" max="100" step="1" value="80">
-                    <span id="saturationVal">80</span>
+                    <span id="saturationVal" class="settings-range-value">80</span>
                   </span>
                 </label>
               </div>
@@ -1049,7 +1102,7 @@
                   <span class="palette-input-label">Hue</span>
                   <span class="palette-range-row">
                     <input type="range" id="baseHueSlider" min="0" max="360" step="1" value="200">
-                    <span id="baseHueVal">200</span>
+                    <span id="baseHueVal" class="settings-range-value">200</span>
                   </span>
                 </label>
               </div>
@@ -1118,8 +1171,10 @@
             <input type="checkbox" id="hourNumbersStartAtOne"/>
             <span>Start numbering at 1 (1-24 vs 0-23)</span>
           </label>
-          <label>Position: <span id="hourNumbersPositionVal">2</span>
-            <input type="range" id="hourNumbersPositionSlider" min="0" max="2" step="1" value="2" style="width:100%">
+          <label class="settings-range-control">
+            <span class="settings-range-caption">Position</span>
+            <input type="range" id="hourNumbersPositionSlider" class="settings-range-track" min="0" max="2" step="1" value="2">
+            <span id="hourNumbersPositionVal" class="settings-range-value">2</span>
           </label>
         </div>
         
@@ -1209,24 +1264,30 @@
         <label><input type="checkbox" id="dayOverlayToggle" checked> Weekday gradient</label>
         <!-- Weekday gradient opacity control (only visible when weekday gradient is enabled) -->
         <div id="dayOverlayOpacityControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
-          <label>Opacity: <span id="dayOverlayOpacityVal">15%</span>
-            <input type="range" id="dayOverlayOpacitySlider" min="0" max="100" step="1" value="15" style="width:100%">
+          <label class="settings-range-control">
+            <span class="settings-range-caption">Opacity</span>
+            <input type="range" id="dayOverlayOpacitySlider" class="settings-range-track" min="0" max="100" step="1" value="15">
+            <span id="dayOverlayOpacityVal" class="settings-range-value">15%</span>
           </label>
         </div>
         
         <label><input type="checkbox" id="gradientOverlayToggle" checked> Inward gradient</label>
         <!-- Inward gradient opacity control (only visible when inward gradient is enabled) -->
         <div id="gradientOverlayOpacityControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
-          <label>Max opacity (center): <span id="gradientOverlayOpacityVal">5%</span>
-            <input type="range" id="gradientOverlayOpacitySlider" min="0" max="100" step="1" value="5" style="width:100%">
+          <label class="settings-range-control">
+            <span class="settings-range-caption">Max opacity (center)</span>
+            <input type="range" id="gradientOverlayOpacitySlider" class="settings-range-track" min="0" max="100" step="1" value="15">
+            <span id="gradientOverlayOpacityVal" class="settings-range-value">15%</span>
           </label>
         </div>
                 
         <label><input type="checkbox" id="nightOverlayToggle" checked> Night time overlay</label>
         <!-- Night overlay opacity control (only visible when night overlay is enabled) -->
         <div id="nightOverlayOpacityControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
-          <label>Opacity: <span id="nightOverlayOpacityVal">5%</span>
-            <input type="range" id="nightOverlayOpacitySlider" min="0" max="100" step="1" value="5" style="width:100%">
+          <label class="settings-range-control">
+            <span class="settings-range-caption">Opacity</span>
+            <input type="range" id="nightOverlayOpacitySlider" class="settings-range-track" min="0" max="100" step="1" value="5">
+            <span id="nightOverlayOpacityVal" class="settings-range-value">5%</span>
           </label>
         </div>
         
