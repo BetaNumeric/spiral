@@ -77,6 +77,7 @@ const APP_SETTINGS_DEFAULTS = {
   showNoonLines: false,
   showSixAmPmLines: false,
   enableLongPressJoystick: true,
+  detailViewAutoCircleMode: true,
 
   // Overlay opacity values (0.0 - 1.0)
   nightOverlayOpacity: 0.05,
@@ -88,11 +89,13 @@ const APP_DEV_OPTIONS_CONFIG = {
   // Elements hidden when "Dev Options" is OFF.
   advancedOptionIds: [
     'circleMode',
+    'circleModeSubOptions',
     'daysSlider', 'daysVal',
     'scaleSlider', 'scaleVal',
     'radiusSlider', 'radiusVal',
     'showMidnightLinesToggle','showNoonLinesToggle','showSixAmPmLinesToggle',
     'longPressJoystickToggle',
+    'detailViewAutoCircleModeToggle',
     'showHourNumbers', 'hourNumbersControls',
     'showDayNumbers', 'dayNumbersControls',
     'timeDisplayToggle',

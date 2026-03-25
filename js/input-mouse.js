@@ -1562,7 +1562,12 @@ Object.assign(SpiralCalendar.prototype, {
       const allowSpiralOverflow = !!options.allowSpiralOverflow;
       const modeMorphProgress = Number.isFinite(options.modeMorphProgress)
         ? Math.max(0, Math.min(1, options.modeMorphProgress))
-        : this.getModeMorphProgress();
+        : (
+          typeof this.isModeTransitionGeometryMorphActive === 'function' &&
+          !this.isModeTransitionGeometryMorphActive()
+            ? 0
+            : this.getModeMorphProgress()
+        );
       const radialOffset = Number.isFinite(options.radialOffset)
         ? options.radialOffset
         : this.getCurrentRenderedRadialOffset();

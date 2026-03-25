@@ -689,6 +689,18 @@ Object.assign(SpiralCalendar.prototype, {
       });
     }
 
+    const detailViewAutoCircleModeToggle = document.getElementById('detailViewAutoCircleModeToggle');
+    if (detailViewAutoCircleModeToggle) {
+      detailViewAutoCircleModeToggle.addEventListener('change', function(e) {
+        self.state.detailViewAutoCircleMode = e.target.checked;
+        if (self.state.detailViewDay !== null && !self.state.circleMode) {
+          self._detailViewAutoCircleActive = e.target.checked;
+        }
+        self.drawSpiral();
+        self.saveSettingsToStorage();
+      });
+    }
+
     const eventBoundaryStrokesToggle = document.getElementById('eventBoundaryStrokesToggle');
     const eventBoundaryStrokeControls = document.getElementById('eventBoundaryStrokeControls');
     if (eventBoundaryStrokesToggle) {
