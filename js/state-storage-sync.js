@@ -320,6 +320,46 @@ Object.assign(SpiralCalendar.prototype, {
     this.autoTimeAlignState.enabled = false;
   },
 
+  getDetailViewAutoZoomCoilLimit() {
+    const daysSlider = document.getElementById('daysSlider');
+    const sliderMax = Number(daysSlider && daysSlider.max);
+    if (Number.isFinite(sliderMax) && sliderMax >= 0) {
+      return Math.max(0, Math.round(sliderMax));
+    }
+    if (this.cache && Number.isFinite(this.cache.maxDays)) {
+      return Math.max(0, Math.round(this.cache.maxDays));
+    }
+    return 40;
+  },
+
+  normalizeDetailViewAutoZoomCoils(value, fallback = 2) {
+    const limit = this.getDetailViewAutoZoomCoilLimit();
+    const parsedFallback = Number(fallback);
+    const safeFallback = Number.isFinite(parsedFallback) ? parsedFallback : 2;
+    const parsedValue = Number(value);
+    const numericValue = Number.isFinite(parsedValue) ? parsedValue : safeFallback;
+    return Math.max(0, Math.min(limit, Math.round(numericValue)));
+  },
+
+  formatDetailViewAutoZoomCoils(value) {
+    const coils = this.normalizeDetailViewAutoZoomCoils(value);
+    if (coils === 0) return 'outermost';
+    return `${coils} coil${coils === 1 ? '' : 's'}`;
+  },
+
+  getDetailViewAutoZoomSettings(options = {}) {
+    const defaultCoils = this.defaultSettings.detailViewAutoZoomCoils ?? 2;
+    const fallbackCoils = this.state.detailViewAutoZoomCoils ?? defaultCoils;
+    const requestedCoils = options.coils ?? options.targetCoils ?? options.triggerCoils;
+
+    return {
+      enabled: options.enabled !== undefined
+        ? !!options.enabled
+        : this.state.detailViewAutoZoomEnabled !== false,
+      coils: this.normalizeDetailViewAutoZoomCoils(requestedCoils, fallbackCoils)
+    };
+  },
+
   saveEventsToStorage() {
     try {
       const eventsData = this.events.map(event => ({
@@ -435,6 +475,8 @@ Object.assign(SpiralCalendar.prototype, {
         showSixAmPmLines: this.state.showSixAmPmLines,
         enableLongPressJoystick: this.state.enableLongPressJoystick,
         detailViewAutoCircleMode: this.state.detailViewAutoCircleMode,
+        detailViewAutoZoomEnabled: this.state.detailViewAutoZoomEnabled,
+        detailViewAutoZoomCoils: this.state.detailViewAutoZoomCoils,
         // Overlay opacity values
         nightOverlayOpacity: this.state.nightOverlayOpacity,
         dayOverlayOpacity: this.state.dayOverlayOpacity,
@@ -563,6 +605,15 @@ Object.assign(SpiralCalendar.prototype, {
 
         // Removed toggle: always keep overlap-hiding on.
         this.state.hideDayWhenHourInside = true;
+        const loadedDetailViewAutoZoomCoils =
+          settings.detailViewAutoZoomCoils ??
+          settings.detailViewAutoZoomTargetCoils ??
+          settings.detailViewAutoZoomTriggerCoils;
+        this.state.detailViewAutoZoomEnabled = this.state.detailViewAutoZoomEnabled !== false;
+        this.state.detailViewAutoZoomCoils = this.normalizeDetailViewAutoZoomCoils(
+          loadedDetailViewAutoZoomCoils,
+          this.defaultSettings.detailViewAutoZoomCoils ?? 2
+        );
         
         return true;
       }
@@ -683,6 +734,7 @@ Object.assign(SpiralCalendar.prototype, {
       { id: 'eventBoundaryAllEdgesToggle', value: this.state.showAllEventBoundaryStrokes },
       { id: 'longPressJoystickToggle', value: this.state.enableLongPressJoystick },
       { id: 'detailViewAutoCircleModeToggle', value: this.state.detailViewAutoCircleMode },
+      { id: 'detailViewAutoZoomToggle', value: this.state.detailViewAutoZoomEnabled !== false },
     ];
     
     checkboxes.forEach(checkbox => {
@@ -805,6 +857,29 @@ Object.assign(SpiralCalendar.prototype, {
     if (detailViewAutoCircleModeToggle) {
       detailViewAutoCircleModeToggle.checked = this.state.detailViewAutoCircleMode;
     }
+    const detailViewAutoZoomToggle = document.getElementById('detailViewAutoZoomToggle');
+    if (detailViewAutoZoomToggle) {
+      detailViewAutoZoomToggle.checked = this.state.detailViewAutoZoomEnabled !== false;
+    }
+    const detailViewAutoZoomControls = document.getElementById('detailViewAutoZoomControls');
+    if (detailViewAutoZoomControls) {
+      detailViewAutoZoomControls.style.display = this.state.detailViewAutoZoomEnabled !== false ? 'block' : 'none';
+    }
+    const detailViewAutoZoomCoilLimit = this.getDetailViewAutoZoomCoilLimit();
+    const detailViewAutoZoomSlider = document.getElementById('detailViewAutoZoomSlider');
+    const detailViewAutoZoomVal = document.getElementById('detailViewAutoZoomVal');
+    const detailViewAutoZoomCoils = this.normalizeDetailViewAutoZoomCoils(
+      this.state.detailViewAutoZoomCoils,
+      this.defaultSettings.detailViewAutoZoomCoils ?? 2
+    );
+    this.state.detailViewAutoZoomCoils = detailViewAutoZoomCoils;
+    if (detailViewAutoZoomSlider) {
+      detailViewAutoZoomSlider.max = String(detailViewAutoZoomCoilLimit);
+      detailViewAutoZoomSlider.value = String(detailViewAutoZoomCoils);
+    }
+    if (detailViewAutoZoomVal) {
+      detailViewAutoZoomVal.textContent = this.formatDetailViewAutoZoomCoils(detailViewAutoZoomCoils);
+    }
 
     const eventBoundaryStrokesToggle = document.getElementById('eventBoundaryStrokesToggle');
     if (eventBoundaryStrokesToggle) {
@@ -900,6 +975,16 @@ Object.assign(SpiralCalendar.prototype, {
     }
     this.autoTimeAlignState.enabled = enableAutoTimeAlign;
 
+    if (this.state.detailViewDay !== null) {
+      this._currentTimeResetAnimationId = null;
+      this._shouldUpdateEventList = true;
+      this.drawSpiral();
+      if (enableAutoTimeAlign) {
+        this.startAutoTimeAlign({ skipImmediateUpdate: true });
+      }
+      return;
+    }
+
     const finalize = () => {
       this._currentTimeResetAnimationId = null;
       this.state.rotation = targetRotation;
@@ -943,6 +1028,12 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   updateRotationToCurrentTime() {
+    if (this.state.detailViewDay !== null) {
+      if (typeof this.drawSpiral === 'function') {
+        this.drawSpiral();
+      }
+      return;
+    }
     const now = new Date();
     const rotation = this.getCurrentTimeRotation(now);
     this.state.rotation = rotation;
@@ -1110,6 +1201,156 @@ Object.assign(SpiralCalendar.prototype, {
     return 0;
   },
 
+  getAlignedVisibilityMaxForSegment(
+    segment = this.mouseState.selectedSegment,
+    thetaMax = this.state.days * 2 * Math.PI
+  ) {
+    if (!segment) return null;
+
+    const daySpan = 2 * Math.PI;
+    const epsilon = 1e-9;
+    const baseVisibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
+    const selectedDayStart = segment.day * daySpan;
+    const outerDayStart = Math.floor((baseVisibilityRange.max - epsilon) / daySpan) * daySpan;
+    const outerDayEnd = outerDayStart + daySpan;
+    const visibleOuterFraction = Math.max(0, Math.min(1, (baseVisibilityRange.max - outerDayStart) / daySpan));
+    const isSelectedOutermostDay = Math.abs(selectedDayStart - outerDayStart) < epsilon * 10;
+
+    return isSelectedOutermostDay || visibleOuterFraction >= 0.5
+      ? outerDayEnd
+      : outerDayStart;
+  },
+
+  getDetailViewMaxRotation(segment = this.mouseState.selectedSegment) {
+    if (!segment) return null;
+    const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
+    const eventHour = totalVisibleSegments - (segment.day * CONFIG.SEGMENTS_PER_DAY);
+    return ((eventHour - 23.999) / CONFIG.SEGMENTS_PER_DAY) * 2 * Math.PI;
+  },
+
+  getDetailViewAutoZoomTargetRotation(segment = this.mouseState.selectedSegment, options = {}) {
+    if (!segment) return null;
+
+    const autoZoomSettings = this.getDetailViewAutoZoomSettings(options);
+    if (!autoZoomSettings.enabled) {
+      return null;
+    }
+
+    const { coils } = autoZoomSettings;
+    const thetaMax = this.state.days * 2 * Math.PI;
+    const daySpan = 2 * Math.PI;
+    const epsilon = 1e-9;
+    const effectiveVisibilityMax = this.getAlignedVisibilityMaxForSegment(segment, thetaMax);
+    if (!Number.isFinite(effectiveVisibilityMax)) {
+      return null;
+    }
+
+    const outerVisibleDayIndex = Math.floor((effectiveVisibilityMax - epsilon) / daySpan);
+    const coilsInward = Math.max(0, outerVisibleDayIndex - segment.day);
+    if (coilsInward <= coils) {
+      return null;
+    }
+
+    const targetVisibleDayIndex = segment.day + coils;
+    const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
+    const targetEventHour = totalVisibleSegments - (targetVisibleDayIndex * CONFIG.SEGMENTS_PER_DAY);
+    let targetRotation = ((targetEventHour - 23.999) / CONFIG.SEGMENTS_PER_DAY) * 2 * Math.PI;
+    const maxRotation = this.getDetailViewMaxRotation(segment);
+    if (Number.isFinite(maxRotation)) {
+      targetRotation = Math.min(targetRotation, maxRotation);
+    }
+
+    return {
+      currentCoils: coilsInward,
+      coils,
+      targetRotation
+    };
+  },
+
+  cancelDetailViewAutoZoomAnimation() {
+    if (this._detailViewAutoZoomAnimationId) {
+      cancelAnimationFrame(this._detailViewAutoZoomAnimationId);
+      this._detailViewAutoZoomAnimationId = null;
+    }
+  },
+
+  startDetailViewAutoZoomAnimation(segment = this.mouseState.selectedSegment, options = {}) {
+    if (!segment || this.state.detailViewDay === null) return false;
+
+    const target = this.getDetailViewAutoZoomTargetRotation(segment, options);
+    if (!target || !Number.isFinite(target.targetRotation)) {
+      return false;
+    }
+
+    const fromRotation = this.state.rotation;
+    const toRotation = target.targetRotation;
+    if (!(toRotation > fromRotation + 0.01)) {
+      return false;
+    }
+
+    const prefersReducedMotion = typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const dayShift = Math.max(0, target.currentCoils - target.coils);
+    const durationMs = Number.isFinite(options.durationMs)
+      ? Math.max(120, options.durationMs)
+      : Math.max(180, Math.min(420, 160 + dayShift * 55));
+
+    this.cancelDetailViewAutoZoomAnimation();
+    this.state.pastLimitScrollCount = 0;
+
+    if (prefersReducedMotion) {
+      this.state.rotation = toRotation;
+      this._shouldUpdateEventList = true;
+      this.drawSpiral();
+      return true;
+    }
+
+    const startTs = performance.now();
+    const ease = (t) => (t < 0.5)
+      ? 4 * t * t * t
+      : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+    const step = (now) => {
+      if (this.state.detailViewDay === null || !this.mouseState.selectedSegment ||
+          this.mouseState.selectedSegment.day !== segment.day ||
+          this.mouseState.selectedSegment.segment !== segment.segment) {
+        this.cancelDetailViewAutoZoomAnimation();
+        return;
+      }
+
+      const linear = Math.max(0, Math.min(1, (now - startTs) / durationMs));
+      const eased = ease(linear);
+      this.state.rotation = fromRotation + (toRotation - fromRotation) * eased;
+      this._shouldUpdateEventList = true;
+      this.drawSpiral();
+
+      if (linear < 1) {
+        this._detailViewAutoZoomAnimationId = requestAnimationFrame(step);
+        return;
+      }
+
+      this.state.rotation = toRotation;
+      this._detailViewAutoZoomAnimationId = null;
+      this.drawSpiral();
+    };
+
+    this._detailViewAutoZoomAnimationId = requestAnimationFrame(step);
+    return true;
+  },
+
+  restoreDetailViewOpeningRotation() {
+    if (!Number.isFinite(this._detailViewOpeningRotation)) {
+      this._detailViewOpeningRotation = null;
+      return false;
+    }
+
+    this.state.rotation = this._detailViewOpeningRotation;
+    this._detailViewOpeningRotation = null;
+    this._shouldUpdateEventList = true;
+    return true;
+  },
+
   getMidnightAlignedCircleScale(baseSpiralScale = this.state.spiralScale, options = {}) {
     const outerRingPaddingMultiplier = Number.isFinite(options.outerRingPaddingMultiplier)
       ? Math.max(0, options.outerRingPaddingMultiplier)
@@ -1125,17 +1366,11 @@ Object.assign(SpiralCalendar.prototype, {
     const minDimension = Math.min(this.canvas.clientWidth, this.canvas.clientHeight);
     const currentMaxRadius = minDimension * baseSpiralScale;
     const rotationTurns = this.state.rotation / daySpan;
-    const baseVisibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
     const segment = options.segment || this.mouseState.selectedSegment;
-    const selectedDayStart = segment ? segment.day * daySpan : null;
-    const outerDayStart = Math.floor((baseVisibilityRange.max - epsilon) / daySpan) * daySpan;
-    const outerDayEnd = outerDayStart + daySpan;
-    const visibleOuterFraction = Math.max(0, Math.min(1, (baseVisibilityRange.max - outerDayStart) / daySpan));
-    const isSelectedOutermostDay = selectedDayStart !== null &&
-      Math.abs(selectedDayStart - outerDayStart) < epsilon * 10;
-    const effectiveVisibilityMax = isSelectedOutermostDay || visibleOuterFraction >= 0.5
-      ? outerDayEnd
-      : outerDayStart;
+    const effectiveVisibilityMax = this.getAlignedVisibilityMaxForSegment(segment, thetaMax);
+    if (!Number.isFinite(effectiveVisibilityMax)) {
+      return baseSpiralScale;
+    }
 
     const outerVisibleDayIndex = Math.floor((effectiveVisibilityMax - epsilon) / daySpan);
     const outerInnerT = Math.max(0, Math.min(1, (outerVisibleDayIndex + rotationTurns) / dayCount));
@@ -1317,6 +1552,47 @@ Object.assign(SpiralCalendar.prototype, {
     return Math.max(0, Math.min(1, this.getModeMorphProgress()));
   },
 
+  isDetailViewOpeningTransitionActive() {
+    return this.isDetailViewPreviewActive();
+  },
+
+  completeModeTransitionImmediately() {
+    const transition = this.modeTransitionState;
+    if (!transition || !transition.active) return false;
+
+    if (transition.animationId) {
+      cancelAnimationFrame(transition.animationId);
+      transition.animationId = null;
+    }
+
+    transition.active = false;
+    transition.progress = Number.isFinite(transition.toProgress)
+      ? transition.toProgress
+      : transition.progress;
+
+    const onComplete = typeof transition.onComplete === 'function'
+      ? transition.onComplete
+      : null;
+    transition.onComplete = null;
+
+    if (onComplete) {
+      onComplete();
+    }
+
+    transition.showDetailViewPreview = false;
+
+    if (transition.morphGeometry &&
+        !transition.targetCircleMode &&
+        transition.persistScaleState !== false &&
+        transition.restoreScaleOnExit) {
+      this.restoreOriginalSpiralScale();
+      this.saveSettingsToStorage();
+    }
+
+    this.drawSpiral();
+    return true;
+  },
+
   cancelModeTransition() {
     if (!this.modeTransitionState) return;
     if (this.modeTransitionState.animationId) {
@@ -1327,7 +1603,9 @@ Object.assign(SpiralCalendar.prototype, {
     this.modeTransitionState.startRadialOffset = 0;
     this.modeTransitionState.endRadialOffset = 0;
     this.modeTransitionState.morphGeometry = true;
+    this.modeTransitionState.persistScaleState = true;
     this.modeTransitionState.showDetailViewPreview = false;
+    this.modeTransitionState.onComplete = null;
   },
 
   startModeTransition(toCircleMode, options = {}) {
@@ -1411,14 +1689,17 @@ Object.assign(SpiralCalendar.prototype, {
     transition.endRadialOffset = targetRadialOffset;
     transition.targetCircleMode = !!toCircleMode;
     transition.morphGeometry = morphGeometry;
+    transition.persistScaleState = persistScaleState;
     transition.restoreScaleOnExit = restoreScaleOnExit;
     transition.alignVisibilityToMidnight = alignVisibilityToMidnight;
     transition.showDetailViewPreview = showDetailViewPreview;
+    transition.onComplete = onComplete;
     transition.progress = fromProgress;
 
     if (prefersReducedMotion || Math.abs(targetProgress - fromProgress) < 0.001) {
       transition.active = false;
       transition.progress = targetProgress;
+      transition.onComplete = null;
       if (onComplete) {
         onComplete();
       }
@@ -1453,6 +1734,7 @@ Object.assign(SpiralCalendar.prototype, {
       transition.animationId = null;
       transition.active = false;
       transition.progress = targetProgress;
+      transition.onComplete = null;
       if (onComplete) {
         onComplete();
       }
@@ -1589,6 +1871,7 @@ Object.assign(SpiralCalendar.prototype, {
   openDetailViewForSegment(segment, options = {}) {
     if (!segment) return null;
 
+    this.cancelDetailViewAutoZoomAnimation();
     const openingFromClosed = this.state.detailViewDay === null;
     const nextSegment = { day: segment.day, segment: segment.segment };
     const shouldAutoSwitchToCircle = this.state.detailViewAutoCircleMode !== false && !this.state.circleMode;
@@ -1596,9 +1879,11 @@ Object.assign(SpiralCalendar.prototype, {
       openingFromClosed &&
       !this.state.circleMode &&
       !this.isModeTransitionActive();
+    const shouldAutoZoomInward = options.autoZoomInward !== false && openingFromClosed;
 
     if (openingFromClosed) {
       this._detailViewAutoCircleActive = shouldAutoSwitchToCircle;
+      this._detailViewOpeningRotation = this.state.rotation;
     }
 
     this.mouseState.selectedSegment = nextSegment;
@@ -1618,6 +1903,9 @@ Object.assign(SpiralCalendar.prototype, {
       this.mouseState.hoveredDetailElement = null;
       if (typeof this.recordStudyDetailViewOpened === 'function') {
         this.recordStudyDetailViewOpened(nextSegment);
+      }
+      if (shouldAutoZoomInward) {
+        this.startDetailViewAutoZoomAnimation(nextSegment);
       }
     };
 
@@ -1643,6 +1931,8 @@ Object.assign(SpiralCalendar.prototype, {
       clearDraft = false,
       animateTransition = true
     } = options;
+
+    this.cancelDetailViewAutoZoomAnimation();
 
     const wasDetailViewOpen = this.state.detailViewDay !== null;
     const wasAutoCircleActive = !!this._detailViewAutoCircleActive;
@@ -1683,6 +1973,7 @@ Object.assign(SpiralCalendar.prototype, {
     }
 
     const finalizeClose = () => {
+      this.restoreDetailViewOpeningRotation();
       if (clearSelection) {
         this.mouseState.selectedSegment = null;
         this.mouseState.selectedSegmentId = null;

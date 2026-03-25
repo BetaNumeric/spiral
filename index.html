@@ -1145,7 +1145,17 @@
         <label><input type="checkbox" id="staticMode" checked> Static Mode</label>
         <label><input type="checkbox" id="circleMode"> Circle Mode</label>
         <div id="circleModeSubOptions" style="margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
-          <label><input type="checkbox" id="detailViewAutoCircleModeToggle" checked> Auto-switch detail view to circle mode</label>
+          <label><input type="checkbox" id="detailViewAutoCircleModeToggle" checked> Auto-switch to circle mode</label>
+          <label><input type="checkbox" id="detailViewAutoZoomToggle" checked> Auto-zoom detail view</label>
+          <div id="detailViewAutoZoomControls" style="margin: 0.4em 0 0 1em; padding-left: 0.5em; border-left: 2px solid #ddd;">
+            <label class="settings-range-control">
+              <span class="settings-range-caption">Auto-zoom depth</span>
+              <span class="settings-range-row">
+                <input type="range" id="detailViewAutoZoomSlider" class="settings-range-track" min="0" max="40" step="1" value="2">
+                <span id="detailViewAutoZoomVal" class="settings-range-value">2 coils</span>
+              </span>
+            </label>
+          </div>
         </div>
         <label><input type="checkbox" id="showHourNumbers" checked> Show Hour Numbers</label>
 

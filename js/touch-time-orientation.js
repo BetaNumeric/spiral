@@ -703,6 +703,15 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   handleTouchStart(e) {
+    if (typeof this.isDetailViewOpeningTransitionActive === 'function' &&
+        this.isDetailViewOpeningTransitionActive()) {
+      if (typeof this.completeModeTransitionImmediately === 'function') {
+        this.completeModeTransitionImmediately();
+      }
+    }
+    if (typeof this.cancelDetailViewAutoZoomAnimation === 'function') {
+      this.cancelDetailViewAutoZoomAnimation();
+    }
     // If page zoom is active, allow browser pinch zoom and ignore canvas gesture
     if (this.pageZoomActive) return;
     // Mark user interaction for audio/vibration feedback
@@ -891,6 +900,12 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   handleTouchMove(e) {
+    if (typeof this.isDetailViewOpeningTransitionActive === 'function' &&
+        this.isDetailViewOpeningTransitionActive()) {
+      if (typeof this.completeModeTransitionImmediately === 'function') {
+        this.completeModeTransitionImmediately();
+      }
+    }
     // If page zoom is active, allow browser pinch zoom and ignore canvas gesture
     if (this.pageZoomActive) return;
 

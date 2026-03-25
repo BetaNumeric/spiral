@@ -78,6 +78,8 @@ const APP_SETTINGS_DEFAULTS = {
   showSixAmPmLines: false,
   enableLongPressJoystick: true,
   detailViewAutoCircleMode: true,
+  detailViewAutoZoomEnabled: true,
+  detailViewAutoZoomCoils: 0,
 
   // Overlay opacity values (0.0 - 1.0)
   nightOverlayOpacity: 0.05,

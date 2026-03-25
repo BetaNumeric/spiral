@@ -701,6 +701,69 @@ Object.assign(SpiralCalendar.prototype, {
       });
     }
 
+    const syncDetailViewAutoZoomControls = () => {
+      const controls = document.getElementById('detailViewAutoZoomControls');
+      if (controls) {
+        controls.style.display = self.state.detailViewAutoZoomEnabled !== false ? 'block' : 'none';
+      }
+
+      const limit = typeof self.getDetailViewAutoZoomCoilLimit === 'function'
+        ? self.getDetailViewAutoZoomCoilLimit()
+        : 40;
+      const normalizedValue = typeof self.normalizeDetailViewAutoZoomCoils === 'function'
+        ? self.normalizeDetailViewAutoZoomCoils(self.state.detailViewAutoZoomCoils, 2)
+        : Math.max(0, Math.min(limit, Math.round(Number(self.state.detailViewAutoZoomCoils) || 0)));
+      self.state.detailViewAutoZoomCoils = normalizedValue;
+
+      const slider = document.getElementById('detailViewAutoZoomSlider');
+      if (slider) {
+        slider.max = String(limit);
+        slider.value = String(normalizedValue);
+      }
+
+      const display = document.getElementById('detailViewAutoZoomVal');
+      if (display) {
+        display.textContent = typeof self.formatDetailViewAutoZoomCoils === 'function'
+          ? self.formatDetailViewAutoZoomCoils(normalizedValue)
+          : `${normalizedValue} coil${normalizedValue === 1 ? '' : 's'}`;
+      }
+    };
+
+    const detailViewAutoZoomToggle = document.getElementById('detailViewAutoZoomToggle');
+    if (detailViewAutoZoomToggle) {
+      detailViewAutoZoomToggle.addEventListener('change', function(e) {
+        self.state.detailViewAutoZoomEnabled = e.target.checked;
+        if (!e.target.checked && typeof self.cancelDetailViewAutoZoomAnimation === 'function') {
+          self.cancelDetailViewAutoZoomAnimation();
+        }
+        syncDetailViewAutoZoomControls();
+        self.drawSpiral();
+        self.saveSettingsToStorage();
+      });
+    }
+
+    const detailViewAutoZoomSlider = document.getElementById('detailViewAutoZoomSlider');
+    if (detailViewAutoZoomSlider) {
+      detailViewAutoZoomSlider.addEventListener('input', function(e) {
+        const normalizedValue = typeof self.normalizeDetailViewAutoZoomCoils === 'function'
+          ? self.normalizeDetailViewAutoZoomCoils(e.target.value, self.state.detailViewAutoZoomCoils)
+          : Math.max(0, Math.round(Number(e.target.value) || 0));
+        self.state.detailViewAutoZoomCoils = normalizedValue;
+        e.target.value = String(normalizedValue);
+
+        const display = document.getElementById('detailViewAutoZoomVal');
+        if (display) {
+          display.textContent = typeof self.formatDetailViewAutoZoomCoils === 'function'
+            ? self.formatDetailViewAutoZoomCoils(normalizedValue)
+            : `${normalizedValue} coil${normalizedValue === 1 ? '' : 's'}`;
+        }
+
+        self.drawSpiral();
+        self.saveSettingsToStorage();
+      });
+    }
+    syncDetailViewAutoZoomControls();
+
     const eventBoundaryStrokesToggle = document.getElementById('eventBoundaryStrokesToggle');
     const eventBoundaryStrokeControls = document.getElementById('eventBoundaryStrokeControls');
     if (eventBoundaryStrokesToggle) {
@@ -1096,6 +1159,15 @@ Object.assign(SpiralCalendar.prototype, {
 
       // Add mouse wheel support for rotating the spiral
       this.canvas.addEventListener('wheel', (e) => {
+      if (typeof this.isDetailViewOpeningTransitionActive === 'function' &&
+          this.isDetailViewOpeningTransitionActive()) {
+        if (typeof this.completeModeTransitionImmediately === 'function') {
+          this.completeModeTransitionImmediately();
+        }
+      }
+      if (typeof this.cancelDetailViewAutoZoomAnimation === 'function') {
+        this.cancelDetailViewAutoZoomAnimation();
+      }
       // If page is zoomed, let browser handle zoom and ignore canvas gesture
       if (this.pageZoomActive) return;
       

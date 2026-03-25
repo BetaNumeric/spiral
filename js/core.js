@@ -69,6 +69,8 @@ class SpiralCalendar {
         showSixAmPmLines: false,
         enableLongPressJoystick: true,
         detailViewAutoCircleMode: true,
+        detailViewAutoZoomEnabled: true,
+        detailViewAutoZoomCoils: 0,
         nightOverlayOpacity: 0.05,
         dayOverlayOpacity: 0.15,
         gradientOverlayOpacity: 0.15
@@ -166,6 +168,8 @@ class SpiralCalendar {
         showSixAmPmLines: this.defaultSettings.showSixAmPmLines,
         enableLongPressJoystick: this.defaultSettings.enableLongPressJoystick,
         detailViewAutoCircleMode: this.defaultSettings.detailViewAutoCircleMode,
+        detailViewAutoZoomEnabled: this.defaultSettings.detailViewAutoZoomEnabled,
+        detailViewAutoZoomCoils: this.defaultSettings.detailViewAutoZoomCoils,
         // Overlay opacity values
         nightOverlayOpacity: this.defaultSettings.nightOverlayOpacity,
         dayOverlayOpacity: this.defaultSettings.dayOverlayOpacity,
@@ -232,6 +236,8 @@ class SpiralCalendar {
       
       // Store original spiral scale before adjustments
       this._originalSpiralScale = null;
+      this._detailViewAutoZoomAnimationId = null;
+      this._detailViewOpeningRotation = null;
       
       // Store clickable areas for canvas-drawn elements
       this.canvasClickAreas = {
@@ -309,9 +315,11 @@ class SpiralCalendar {
         durationMs: 650,
         targetCircleMode: false,
         morphGeometry: true,
+        persistScaleState: true,
         restoreScaleOnExit: true,
         alignVisibilityToMidnight: false,
-        showDetailViewPreview: false
+        showDetailViewPreview: false,
+        onComplete: null
       };
 
       this._detailViewAutoCircleActive = false;

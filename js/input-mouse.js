@@ -1052,6 +1052,15 @@ Object.assign(SpiralCalendar.prototype, {
       if (event.button !== 0 && event.button !== 1) {
         return;
       }
+      if (typeof this.isDetailViewOpeningTransitionActive === 'function' &&
+          this.isDetailViewOpeningTransitionActive()) {
+        if (typeof this.completeModeTransitionImmediately === 'function') {
+          this.completeModeTransitionImmediately();
+        }
+      }
+      if (typeof this.cancelDetailViewAutoZoomAnimation === 'function') {
+        this.cancelDetailViewAutoZoomAnimation();
+      }
 
       if (event.button === 1) {
         event.preventDefault();
