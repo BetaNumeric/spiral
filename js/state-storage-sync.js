@@ -939,6 +939,9 @@ Object.assign(SpiralCalendar.prototype, {
     const now = new Date();
     const rotation = this.getCurrentTimeRotation(now);
     this.state.rotation = rotation;
+    if (typeof this.drawSpiral === 'function') {
+      this.drawSpiral();
+    }
   },
 
   isDetailViewCircleModeActive() {
