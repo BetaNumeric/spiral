@@ -1723,16 +1723,18 @@ Object.assign(SpiralCalendar.prototype, {
         let visibilityRange = normalVisibilityRange;
         if (useStartupDrawIn) {
           const progress = Math.max(0, Math.min(1, startup.progress || 0));
-          const collapsedTheta = -this.state.rotation;
-          startupHourRevealOriginTheta = collapsedTheta;
+          // Reveal from the actual inner boundary outward so the center does
+          // not start with a temporary hole that fills in later.
+          const growthStartTheta = normalVisibilityRange.min;
           const visibleRotations = Math.max(1, this.state.days - 1);
           const revealStartProgress = Math.max(0, 1 - (1 / visibleRotations));
           const revealProgress = Math.max(0, Math.min(1, (progress - revealStartProgress) / Math.max(0.0001, 1 - revealStartProgress)));
           startupHourRevealCount = Math.max(0, Math.min(24, Math.floor(revealProgress * 24)));
           visibilityRange = {
-            min: collapsedTheta + (normalVisibilityRange.min - collapsedTheta) * progress,
-            max: collapsedTheta + (normalVisibilityRange.max - collapsedTheta) * progress
+            min: growthStartTheta,
+            max: growthStartTheta + (normalVisibilityRange.max - growthStartTheta) * progress
           };
+          startupHourRevealOriginTheta = visibilityRange.max;
         }
         const detailDayNormalization = (!useStartupDrawIn && this.mouseState.isHandleDragging)
           ? this.getDetailViewOutermostDayNormalization(thetaMax, visibilityRange)

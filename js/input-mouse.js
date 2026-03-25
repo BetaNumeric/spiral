@@ -1554,6 +1554,92 @@ Object.assign(SpiralCalendar.prototype, {
       return null;
     },
 
+    getRequestedRadiusThicknessRatio(exponent) {
+      const safeExponent = Number.isFinite(exponent) ? Math.max(1, exponent) : 1;
+      return safeExponent <= 1 ? 1 : Math.pow(safeExponent, 2);
+    },
+
+    getMinimumVisibleRadiusBandPixels(maxRadius, dayCount) {
+      const safeMaxRadius = Number.isFinite(maxRadius) ? maxRadius : 0;
+      const safeDayCount = Number.isFinite(dayCount) ? Math.max(1, Math.round(dayCount)) : 1;
+      if (!(safeMaxRadius > 0)) return 0;
+
+      // Aim for a visible inner coil, but never demand more than the linear
+      // layout could physically provide.
+      const preferredPixels = 1.6;
+      const maxLinearPixels = (safeMaxRadius / safeDayCount) * 0.9;
+      return Math.max(0, Math.min(preferredPixels, maxLinearPixels));
+    },
+
+    getFirstRadiusBandFactor(dayCount, ratio) {
+      const safeDayCount = Number.isFinite(dayCount) ? Math.max(1, Math.round(dayCount)) : 1;
+      const safeRatio = Number.isFinite(ratio) ? Math.max(1, ratio) : 1;
+      if (Math.abs(safeRatio - 1) < 1e-6) {
+        return 1 / safeDayCount;
+      }
+
+      const logRatio = Math.log(safeRatio);
+      return Math.expm1(logRatio / safeDayCount) / Math.expm1(logRatio);
+    },
+
+    getEffectiveRadiusThicknessRatio(exponent, dayCount, maxRadius) {
+      const requestedRatio = this.getRequestedRadiusThicknessRatio(exponent);
+      if (!(requestedRatio > 1)) {
+        return 1;
+      }
+
+      const safeDayCount = Number.isFinite(dayCount) ? Math.max(1, Math.round(dayCount)) : 1;
+      const safeMaxRadius = Number.isFinite(maxRadius) ? Math.max(0, maxRadius) : 0;
+      const minVisiblePixels = this.getMinimumVisibleRadiusBandPixels(safeMaxRadius, safeDayCount);
+      if (!(minVisiblePixels > 0) || !(safeMaxRadius > 0)) {
+        return requestedRatio;
+      }
+
+      const targetMinFactor = minVisiblePixels / safeMaxRadius;
+      if (this.getFirstRadiusBandFactor(safeDayCount, requestedRatio) >= targetMinFactor) {
+        return requestedRatio;
+      }
+
+      let low = 1;
+      let high = requestedRatio;
+      for (let i = 0; i < 32; i++) {
+        const mid = (low + high) * 0.5;
+        if (this.getFirstRadiusBandFactor(safeDayCount, mid) >= targetMinFactor) {
+          low = mid;
+        } else {
+          high = mid;
+        }
+      }
+
+      return low;
+    },
+
+    getRadiusCurveFactor(progress, exponent, options = {}) {
+      const clampUpper = options.clampUpper !== false;
+      const rawProgress = Number.isFinite(progress) ? progress : 0;
+      const t = clampUpper
+        ? Math.max(0, Math.min(1, rawProgress))
+        : Math.max(0, rawProgress);
+      const dayCount = Number.isFinite(options.dayCount)
+        ? Math.max(1, Math.round(options.dayCount))
+        : this.state.days;
+      const maxRadius = Number.isFinite(options.maxRadius) ? options.maxRadius : null;
+      const ratio = Number.isFinite(options.ratio)
+        ? Math.max(1, options.ratio)
+        : this.getEffectiveRadiusThicknessRatio(exponent, dayCount, maxRadius);
+
+      if (t <= 0) {
+        return 0;
+      }
+
+      if (Math.abs(ratio - 1) < 1e-6) {
+        return t;
+      }
+
+      const logRatio = Math.log(ratio);
+      return Math.expm1(logRatio * t) / Math.expm1(logRatio);
+    },
+
     createRadiusFunction(maxRadius, thetaMax, exponent, rotation, options = {}) {
       const circleMode = typeof options.circleMode === 'boolean'
         ? options.circleMode
@@ -1573,6 +1659,13 @@ Object.assign(SpiralCalendar.prototype, {
         : this.getCurrentRenderedRadialOffset();
       const turnsPerDay = 2 * Math.PI;
       const rotationTurns = rotation / turnsPerDay;
+      const radiusThicknessRatio = this.getEffectiveRadiusThicknessRatio(exponent, dayCount, maxRadius);
+      const getCurveFactor = (progress, curveOptions = {}) => this.getRadiusCurveFactor(progress, exponent, {
+        dayCount,
+        maxRadius,
+        ratio: radiusThicknessRatio,
+        ...curveOptions
+      });
       const computeBaseRadius = (theta) => {
         // Adjust theta to maintain constant spiral size during rotation
         const adjustedTheta = theta + rotation;
@@ -1586,7 +1679,7 @@ Object.assign(SpiralCalendar.prototype, {
           const dayIndex = Math.floor(rawDayTurns + 1e-9);
           const dayStartTurns = dayIndex + rotationTurns;
           const discreteT = Math.max(0, Math.min(1, dayStartTurns / dayCount));
-          radius = maxRadius * Math.pow(discreteT, exponent);
+          radius = maxRadius * getCurveFactor(discreteT);
           return Math.max(0, radius);
         }
 
@@ -1600,7 +1693,9 @@ Object.assign(SpiralCalendar.prototype, {
           const morphedT = allowSpiralOverflow && modeMorphProgress < 1
             ? Math.max(0, morphedTurns / dayCount)
             : Math.max(0, Math.min(1, morphedTurns / dayCount));
-          radius = maxRadius * Math.pow(morphedT, exponent);
+          radius = maxRadius * getCurveFactor(morphedT, {
+            clampUpper: !(allowSpiralOverflow && modeMorphProgress < 1)
+          });
           return Math.max(0, radius);
         }
 
@@ -1609,7 +1704,9 @@ Object.assign(SpiralCalendar.prototype, {
         const t = allowSpiralOverflow
           ? Math.max(0, normalizedTheta)
           : Math.max(0, Math.min(1, normalizedTheta));
-        radius = maxRadius * Math.pow(t, exponent);
+        radius = maxRadius * getCurveFactor(t, {
+          clampUpper: !allowSpiralOverflow
+        });
         return Math.max(0, radius);
       };
 

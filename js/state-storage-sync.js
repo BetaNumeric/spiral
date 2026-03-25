@@ -1122,6 +1122,8 @@ Object.assign(SpiralCalendar.prototype, {
     const daySpan = 2 * Math.PI;
     const epsilon = 1e-9;
     const thetaMax = dayCount * daySpan;
+    const minDimension = Math.min(this.canvas.clientWidth, this.canvas.clientHeight);
+    const currentMaxRadius = minDimension * baseSpiralScale;
     const rotationTurns = this.state.rotation / daySpan;
     const baseVisibilityRange = this.calculateVisibilityRange(this.state.rotation, thetaMax);
     const segment = options.segment || this.mouseState.selectedSegment;
@@ -1138,8 +1140,14 @@ Object.assign(SpiralCalendar.prototype, {
     const outerVisibleDayIndex = Math.floor((effectiveVisibilityMax - epsilon) / daySpan);
     const outerInnerT = Math.max(0, Math.min(1, (outerVisibleDayIndex + rotationTurns) / dayCount));
     const outerOuterT = Math.max(0, Math.min(1, (outerVisibleDayIndex + 1 + rotationTurns) / dayCount));
-    const outerInnerFactor = Math.pow(outerInnerT, this.state.radiusExponent);
-    const outerOuterFactor = Math.pow(outerOuterT, this.state.radiusExponent);
+    const outerInnerFactor = this.getRadiusCurveFactor(outerInnerT, this.state.radiusExponent, {
+      dayCount,
+      maxRadius: currentMaxRadius
+    });
+    const outerOuterFactor = this.getRadiusCurveFactor(outerOuterT, this.state.radiusExponent, {
+      dayCount,
+      maxRadius: currentMaxRadius
+    });
     const outerRingFactor = Math.max(0, outerOuterFactor - outerInnerFactor);
 
     if (!(outerOuterFactor > 0) || !(outerRingFactor > 0)) {
@@ -1200,8 +1208,14 @@ Object.assign(SpiralCalendar.prototype, {
     const innerT = Math.max(0, Math.min(1, (segment.day + rotationTurns) / this.state.days));
     const outerT = Math.max(0, Math.min(1, (segment.day + 1 + rotationTurns) / this.state.days));
     const discreteRadiusFactor = (
-      Math.pow(innerT, this.state.radiusExponent) +
-      Math.pow(outerT, this.state.radiusExponent)
+      this.getRadiusCurveFactor(innerT, this.state.radiusExponent, {
+        dayCount,
+        maxRadius: currentMaxRadius
+      }) +
+      this.getRadiusCurveFactor(outerT, this.state.radiusExponent, {
+        dayCount,
+        maxRadius: currentMaxRadius
+      })
     ) / 2;
 
     if (!(discreteRadiusFactor > 0)) {
@@ -1246,8 +1260,14 @@ Object.assign(SpiralCalendar.prototype, {
       const outerVisibleDayIndex = Math.floor((effectiveVisibilityMax - epsilon) / daySpan);
       const outerInnerT = Math.max(0, Math.min(1, (outerVisibleDayIndex + rotationTurns) / dayCount));
       const outerOuterT = Math.max(0, Math.min(1, (outerVisibleDayIndex + 1 + rotationTurns) / dayCount));
-      const outerInnerFactor = Math.pow(outerInnerT, this.state.radiusExponent);
-      const outerOuterFactor = Math.pow(outerOuterT, this.state.radiusExponent);
+      const outerInnerFactor = this.getRadiusCurveFactor(outerInnerT, this.state.radiusExponent, {
+        dayCount,
+        maxRadius: currentMaxRadius
+      });
+      const outerOuterFactor = this.getRadiusCurveFactor(outerOuterT, this.state.radiusExponent, {
+        dayCount,
+        maxRadius: currentMaxRadius
+      });
       const outerRingFactor = Math.max(0, outerOuterFactor - outerInnerFactor);
 
       if (outerOuterFactor > 0 && outerRingFactor > 0) {
