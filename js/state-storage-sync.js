@@ -1274,27 +1274,34 @@ Object.assign(SpiralCalendar.prototype, {
     }
   },
 
-  startDetailViewAutoZoomAnimation(segment = this.mouseState.selectedSegment, options = {}) {
-    if (!segment || this.state.detailViewDay === null) return false;
-
-    const target = this.getDetailViewAutoZoomTargetRotation(segment, options);
-    if (!target || !Number.isFinite(target.targetRotation)) {
+  animateDetailViewAutoZoomRotation(toRotation, options = {}) {
+    if (!Number.isFinite(toRotation)) {
       return false;
     }
 
-    const fromRotation = this.state.rotation;
-    const toRotation = target.targetRotation;
-    if (!(toRotation > fromRotation + 0.01)) {
+    const fromRotation = Number.isFinite(options.fromRotation)
+      ? options.fromRotation
+      : this.state.rotation;
+    if (Math.abs(toRotation - fromRotation) < 0.01) {
+      if (typeof options.onComplete === 'function') {
+        options.onComplete();
+      }
       return false;
     }
 
     const prefersReducedMotion = typeof window !== 'undefined' &&
       typeof window.matchMedia === 'function' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const dayShift = Math.max(0, target.currentCoils - target.coils);
+    const dayShift = Math.max(0, Math.abs(toRotation - fromRotation) / (2 * Math.PI));
     const durationMs = Number.isFinite(options.durationMs)
       ? Math.max(120, options.durationMs)
       : Math.max(180, Math.min(420, 160 + dayShift * 55));
+    const shouldContinue = typeof options.shouldContinue === 'function'
+      ? options.shouldContinue
+      : null;
+    const onComplete = typeof options.onComplete === 'function'
+      ? options.onComplete
+      : null;
 
     this.cancelDetailViewAutoZoomAnimation();
     this.state.pastLimitScrollCount = 0;
@@ -1303,6 +1310,9 @@ Object.assign(SpiralCalendar.prototype, {
       this.state.rotation = toRotation;
       this._shouldUpdateEventList = true;
       this.drawSpiral();
+      if (onComplete) {
+        onComplete();
+      }
       return true;
     }
 
@@ -1312,9 +1322,7 @@ Object.assign(SpiralCalendar.prototype, {
       : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
     const step = (now) => {
-      if (this.state.detailViewDay === null || !this.mouseState.selectedSegment ||
-          this.mouseState.selectedSegment.day !== segment.day ||
-          this.mouseState.selectedSegment.segment !== segment.segment) {
+      if (shouldContinue && !shouldContinue()) {
         this.cancelDetailViewAutoZoomAnimation();
         return;
       }
@@ -1333,10 +1341,34 @@ Object.assign(SpiralCalendar.prototype, {
       this.state.rotation = toRotation;
       this._detailViewAutoZoomAnimationId = null;
       this.drawSpiral();
+      if (onComplete) {
+        onComplete();
+      }
     };
 
     this._detailViewAutoZoomAnimationId = requestAnimationFrame(step);
     return true;
+  },
+
+  startDetailViewAutoZoomAnimation(segment = this.mouseState.selectedSegment, options = {}) {
+    if (!segment || this.state.detailViewDay === null) return false;
+
+    const target = this.getDetailViewAutoZoomTargetRotation(segment, options);
+    if (!target || !Number.isFinite(target.targetRotation)) {
+      return false;
+    }
+
+    if (!(target.targetRotation > this.state.rotation + 0.01)) {
+      return false;
+    }
+
+    return this.animateDetailViewAutoZoomRotation(target.targetRotation, {
+      durationMs: options.durationMs,
+      shouldContinue: () => this.state.detailViewDay !== null &&
+        !!this.mouseState.selectedSegment &&
+        this.mouseState.selectedSegment.day === segment.day &&
+        this.mouseState.selectedSegment.segment === segment.segment
+    });
   },
 
   restoreDetailViewOpeningRotation() {
@@ -1973,7 +2005,10 @@ Object.assign(SpiralCalendar.prototype, {
     }
 
     const finalizeClose = () => {
-      this.restoreDetailViewOpeningRotation();
+      const returnRotation = Number.isFinite(this._detailViewOpeningRotation)
+        ? this._detailViewOpeningRotation
+        : null;
+      this._detailViewOpeningRotation = null;
       if (clearSelection) {
         this.mouseState.selectedSegment = null;
         this.mouseState.selectedSegmentId = null;
@@ -1983,6 +2018,16 @@ Object.assign(SpiralCalendar.prototype, {
           this.refreshCanvasCursor(true);
         } else {
           this.canvas.style.cursor = 'default';
+        }
+      }
+      if (Number.isFinite(returnRotation)) {
+        const didAnimateReturn = animateTransition !== false &&
+          this.animateDetailViewAutoZoomRotation(returnRotation, {
+            shouldContinue: () => this.state.detailViewDay === null
+          });
+        if (!didAnimateReturn) {
+          this.state.rotation = returnRotation;
+          this._shouldUpdateEventList = true;
         }
       }
       if (typeof this.drawSpiral === 'function') {

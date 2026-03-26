@@ -1,0 +1,818 @@
+[
+  {
+    "title": "Algorithms Lecture",
+    "description": "Week 5 quiz at the start.",
+    "start": "2026-03-23T08:30:00",
+    "end": "2026-03-23T10:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Library Study Block",
+    "description": "",
+    "start": "2026-03-23T13:30:00",
+    "end": "2026-03-23T15:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Statistics Seminar",
+    "description": "",
+    "start": "2026-03-24T09:00:00",
+    "end": "2026-03-24T11:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Cafe Shift",
+    "description": "Cover patio close.",
+    "start": "2026-03-24T17:00:00",
+    "end": "2026-03-24T21:00:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "UX Research Studio",
+    "description": "",
+    "start": "2026-03-25T10:00:00",
+    "end": "2026-03-25T12:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Gym Session",
+    "description": "",
+    "start": "2026-03-25T18:15:00",
+    "end": "2026-03-25T19:30:00",
+    "color": "#2A9D8F",
+    "calendar": "Health"
+  },
+  {
+    "title": "Data Structures Tutorial",
+    "description": "Ask about linked-list assignment.",
+    "start": "2026-03-26T11:00:00",
+    "end": "2026-03-26T12:30:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Cafe Shift",
+    "description": "",
+    "start": "2026-03-26T17:30:00",
+    "end": "2026-03-26T21:30:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "Research Methods",
+    "description": "",
+    "start": "2026-03-27T09:30:00",
+    "end": "2026-03-27T11:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Groceries + Laundry",
+    "description": "",
+    "start": "2026-03-27T16:30:00",
+    "end": "2026-03-27T17:30:00",
+    "color": "#E9C46A",
+    "calendar": "Errands"
+  },
+  {
+    "title": "Cafe Shift",
+    "description": "",
+    "start": "2026-03-28T09:00:00",
+    "end": "2026-03-28T14:00:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "Meal Prep for the Week",
+    "description": "Pasta bake, overnight oats, cut fruit.",
+    "start": "2026-03-29T12:00:00",
+    "end": "2026-03-29T13:30:00",
+    "color": "#7BC96F",
+    "calendar": "Personal"
+  },
+  {
+    "title": "Algorithms Lecture",
+    "description": "",
+    "start": "2026-03-30T08:30:00",
+    "end": "2026-03-30T10:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Group Project Meeting",
+    "description": "Prototype review in the media lab.",
+    "start": "2026-03-30T14:00:00",
+    "end": "2026-03-30T16:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Statistics Seminar",
+    "description": "",
+    "start": "2026-03-31T09:00:00",
+    "end": "2026-03-31T11:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Cafe Shift",
+    "description": "",
+    "start": "2026-03-31T17:00:00",
+    "end": "2026-03-31T21:00:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "Pay Rent",
+    "description": "Transfer April rent and utilities.",
+    "start": "2026-03-31T21:15:00",
+    "end": "2026-03-31T21:30:00",
+    "color": "#E9C46A",
+    "calendar": "Errands"
+  },
+  {
+    "title": "UX Research Studio",
+    "description": "",
+    "start": "2026-04-01T10:00:00",
+    "end": "2026-04-01T12:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Office Hours with Lina",
+    "description": "Bring wireframe questions.",
+    "start": "2026-04-01T13:00:00",
+    "end": "2026-04-01T14:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Data Structures Tutorial",
+    "description": "",
+    "start": "2026-04-02T11:00:00",
+    "end": "2026-04-02T12:30:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "CV Clinic",
+    "description": "Career center drop-in session.",
+    "start": "2026-04-02T14:30:00",
+    "end": "2026-04-02T16:00:00",
+    "color": "#7BC96F",
+    "calendar": "Personal"
+  },
+  {
+    "title": "Cafe Shift",
+    "description": "",
+    "start": "2026-04-02T17:30:00",
+    "end": "2026-04-02T21:30:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "Research Methods",
+    "description": "",
+    "start": "2026-04-03T09:30:00",
+    "end": "2026-04-03T11:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Board Game Night",
+    "description": "",
+    "start": "2026-04-03T19:30:00",
+    "end": "2026-04-03T22:00:00",
+    "color": "#E76F51",
+    "calendar": "Social"
+  },
+  {
+    "title": "Cafe Shift",
+    "description": "",
+    "start": "2026-04-04T09:00:00",
+    "end": "2026-04-04T14:00:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "Deep Study Session",
+    "description": "",
+    "start": "2026-04-05T15:00:00",
+    "end": "2026-04-05T17:30:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Algorithms Lecture",
+    "description": "",
+    "start": "2026-04-06T08:30:00",
+    "end": "2026-04-06T10:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Assignment Sprint",
+    "description": "Finish stats worksheet and upload.",
+    "start": "2026-04-06T14:00:00",
+    "end": "2026-04-06T16:30:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Statistics Seminar",
+    "description": "",
+    "start": "2026-04-07T09:00:00",
+    "end": "2026-04-07T11:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Dentist Cleaning",
+    "description": "",
+    "start": "2026-04-07T12:15:00",
+    "end": "2026-04-07T13:00:00",
+    "color": "#2A9D8F",
+    "calendar": "Health"
+  },
+  {
+    "title": "Cafe Shift",
+    "description": "",
+    "start": "2026-04-07T17:00:00",
+    "end": "2026-04-07T21:00:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "UX Research Studio",
+    "description": "",
+    "start": "2026-04-08T10:00:00",
+    "end": "2026-04-08T12:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Student Union Meeting",
+    "description": "",
+    "start": "2026-04-08T17:30:00",
+    "end": "2026-04-08T18:30:00",
+    "color": "#E76F51",
+    "calendar": "Social"
+  },
+  {
+    "title": "Data Structures Tutorial",
+    "description": "",
+    "start": "2026-04-09T11:00:00",
+    "end": "2026-04-09T12:30:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Cafe Shift",
+    "description": "",
+    "start": "2026-04-09T17:30:00",
+    "end": "2026-04-09T21:30:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "Research Methods",
+    "description": "",
+    "start": "2026-04-10T09:30:00",
+    "end": "2026-04-10T11:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Flat Movie Night",
+    "description": "",
+    "start": "2026-04-10T20:00:00",
+    "end": "2026-04-10T22:30:00",
+    "color": "#E76F51",
+    "calendar": "Social"
+  },
+  {
+    "title": "Long Run by the River",
+    "description": "",
+    "start": "2026-04-11T10:00:00",
+    "end": "2026-04-11T12:00:00",
+    "color": "#2A9D8F",
+    "calendar": "Health"
+  },
+  {
+    "title": "Call Mum and Dad",
+    "description": "",
+    "start": "2026-04-12T11:00:00",
+    "end": "2026-04-12T12:00:00",
+    "color": "#B08968",
+    "calendar": "Family"
+  },
+  {
+    "title": "Slides for Stats Midterm",
+    "description": "",
+    "start": "2026-04-12T15:00:00",
+    "end": "2026-04-12T17:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Algorithms Lecture",
+    "description": "",
+    "start": "2026-04-13T08:30:00",
+    "end": "2026-04-13T10:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Flashcard Review",
+    "description": "",
+    "start": "2026-04-13T16:00:00",
+    "end": "2026-04-13T18:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Statistics Seminar",
+    "description": "",
+    "start": "2026-04-14T09:00:00",
+    "end": "2026-04-14T11:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Cafe Shift",
+    "description": "",
+    "start": "2026-04-14T17:00:00",
+    "end": "2026-04-14T20:00:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "Statistics Midterm",
+    "description": "Room B214. Calculator and student ID.",
+    "start": "2026-04-15T09:00:00",
+    "end": "2026-04-15T12:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Quiet Walk / Reset",
+    "description": "",
+    "start": "2026-04-15T18:30:00",
+    "end": "2026-04-15T19:15:00",
+    "color": "#7BC96F",
+    "calendar": "Personal"
+  },
+  {
+    "title": "Data Structures Tutorial",
+    "description": "",
+    "start": "2026-04-16T11:00:00",
+    "end": "2026-04-16T12:30:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Cafe Shift",
+    "description": "",
+    "start": "2026-04-16T17:30:00",
+    "end": "2026-04-16T21:30:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "Research Methods",
+    "description": "",
+    "start": "2026-04-17T09:30:00",
+    "end": "2026-04-17T11:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Cafe Shift",
+    "description": "",
+    "start": "2026-04-18T09:00:00",
+    "end": "2026-04-18T14:00:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "Nora's Birthday Dinner",
+    "description": "",
+    "start": "2026-04-18T18:30:00",
+    "end": "2026-04-18T22:30:00",
+    "color": "#E76F51",
+    "calendar": "Social"
+  },
+  {
+    "title": "Apartment Tidy + Sheets",
+    "description": "",
+    "start": "2026-04-19T13:00:00",
+    "end": "2026-04-19T15:00:00",
+    "color": "#7BC96F",
+    "calendar": "Personal"
+  },
+  {
+    "title": "Algorithms Lecture",
+    "description": "",
+    "start": "2026-04-20T08:30:00",
+    "end": "2026-04-20T10:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Meeting with Project Team",
+    "description": "",
+    "start": "2026-04-20T14:00:00",
+    "end": "2026-04-20T15:30:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Statistics Seminar",
+    "description": "",
+    "start": "2026-04-21T09:00:00",
+    "end": "2026-04-21T11:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Cafe Shift",
+    "description": "",
+    "start": "2026-04-21T17:00:00",
+    "end": "2026-04-21T21:00:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "UX Research Studio",
+    "description": "",
+    "start": "2026-04-22T10:00:00",
+    "end": "2026-04-22T12:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Advisor Check-in",
+    "description": "Talk through internship options.",
+    "start": "2026-04-22T15:00:00",
+    "end": "2026-04-22T15:45:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Data Structures Tutorial",
+    "description": "",
+    "start": "2026-04-23T11:00:00",
+    "end": "2026-04-23T12:30:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Cafe Shift",
+    "description": "",
+    "start": "2026-04-23T17:30:00",
+    "end": "2026-04-23T21:30:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "Research Methods",
+    "description": "",
+    "start": "2026-04-24T09:30:00",
+    "end": "2026-04-24T11:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Hackathon Prep Session",
+    "description": "",
+    "start": "2026-04-24T13:30:00",
+    "end": "2026-04-24T15:30:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Farmers Market + Groceries",
+    "description": "",
+    "start": "2026-04-25T10:30:00",
+    "end": "2026-04-25T12:00:00",
+    "color": "#E9C46A",
+    "calendar": "Errands"
+  },
+  {
+    "title": "Essay Drafting",
+    "description": "",
+    "start": "2026-04-26T16:00:00",
+    "end": "2026-04-26T18:30:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Algorithms Lecture",
+    "description": "",
+    "start": "2026-04-27T08:30:00",
+    "end": "2026-04-27T10:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Library Study Block",
+    "description": "",
+    "start": "2026-04-27T14:00:00",
+    "end": "2026-04-27T16:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Statistics Seminar",
+    "description": "",
+    "start": "2026-04-28T09:00:00",
+    "end": "2026-04-28T11:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Cafe Shift",
+    "description": "",
+    "start": "2026-04-28T17:00:00",
+    "end": "2026-04-28T21:00:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "Pay Rent",
+    "description": "",
+    "start": "2026-04-28T21:15:00",
+    "end": "2026-04-28T21:30:00",
+    "color": "#E9C46A",
+    "calendar": "Errands"
+  },
+  {
+    "title": "UX Research Studio",
+    "description": "",
+    "start": "2026-04-29T10:00:00",
+    "end": "2026-04-29T12:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Pilates Class",
+    "description": "",
+    "start": "2026-04-29T18:00:00",
+    "end": "2026-04-29T19:00:00",
+    "color": "#2A9D8F",
+    "calendar": "Health"
+  },
+  {
+    "title": "Data Structures Tutorial",
+    "description": "",
+    "start": "2026-04-30T11:00:00",
+    "end": "2026-04-30T12:30:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Open Mic Night",
+    "description": "",
+    "start": "2026-04-30T19:00:00",
+    "end": "2026-04-30T22:00:00",
+    "color": "#E76F51",
+    "calendar": "Social"
+  },
+  {
+    "title": "Budget Check + Bills",
+    "description": "",
+    "start": "2026-05-01T10:30:00",
+    "end": "2026-05-01T11:15:00",
+    "color": "#7BC96F",
+    "calendar": "Personal"
+  },
+  {
+    "title": "Picnic in the Park",
+    "description": "",
+    "start": "2026-05-01T15:00:00",
+    "end": "2026-05-01T17:00:00",
+    "color": "#E76F51",
+    "calendar": "Social"
+  },
+  {
+    "title": "Cafe Shift",
+    "description": "",
+    "start": "2026-05-02T09:00:00",
+    "end": "2026-05-02T14:00:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "Meal Prep for the Week",
+    "description": "",
+    "start": "2026-05-03T12:00:00",
+    "end": "2026-05-03T13:30:00",
+    "color": "#7BC96F",
+    "calendar": "Personal"
+  },
+  {
+    "title": "Algorithms Lecture",
+    "description": "",
+    "start": "2026-05-04T08:30:00",
+    "end": "2026-05-04T10:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Presentation Rehearsal",
+    "description": "",
+    "start": "2026-05-04T13:00:00",
+    "end": "2026-05-04T15:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Statistics Seminar",
+    "description": "",
+    "start": "2026-05-05T09:00:00",
+    "end": "2026-05-05T11:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Cafe Shift",
+    "description": "",
+    "start": "2026-05-05T17:00:00",
+    "end": "2026-05-05T21:00:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "UX Research Studio",
+    "description": "",
+    "start": "2026-05-06T10:00:00",
+    "end": "2026-05-06T12:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Climbing Hall",
+    "description": "",
+    "start": "2026-05-06T16:30:00",
+    "end": "2026-05-06T18:00:00",
+    "color": "#2A9D8F",
+    "calendar": "Health"
+  },
+  {
+    "title": "Data Structures Tutorial",
+    "description": "",
+    "start": "2026-05-07T11:00:00",
+    "end": "2026-05-07T12:30:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Cafe Shift",
+    "description": "",
+    "start": "2026-05-07T17:30:00",
+    "end": "2026-05-07T21:30:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "Project Presentation",
+    "description": "",
+    "start": "2026-05-08T10:00:00",
+    "end": "2026-05-08T12:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Semester Wrap Drinks",
+    "description": "",
+    "start": "2026-05-08T19:30:00",
+    "end": "2026-05-08T23:00:00",
+    "color": "#E76F51",
+    "calendar": "Social"
+  },
+  {
+    "title": "Double Shift at Cafe",
+    "description": "Cover morning opener and lunch rush.",
+    "start": "2026-05-09T07:30:00",
+    "end": "2026-05-09T16:30:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "Laundry + Room Reset",
+    "description": "",
+    "start": "2026-05-10T14:00:00",
+    "end": "2026-05-10T16:00:00",
+    "color": "#7BC96F",
+    "calendar": "Personal"
+  },
+  {
+    "title": "Algorithms Lecture",
+    "description": "",
+    "start": "2026-05-11T08:30:00",
+    "end": "2026-05-11T10:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Internship Application Hour",
+    "description": "",
+    "start": "2026-05-11T15:00:00",
+    "end": "2026-05-11T16:00:00",
+    "color": "#7BC96F",
+    "calendar": "Personal"
+  },
+  {
+    "title": "Statistics Seminar",
+    "description": "",
+    "start": "2026-05-12T09:00:00",
+    "end": "2026-05-12T11:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Viewing: Studio Sublet",
+    "description": "",
+    "start": "2026-05-12T14:30:00",
+    "end": "2026-05-12T15:15:00",
+    "color": "#7BC96F",
+    "calendar": "Personal"
+  },
+  {
+    "title": "Cafe Shift",
+    "description": "",
+    "start": "2026-05-12T17:00:00",
+    "end": "2026-05-12T21:00:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "UX Research Studio",
+    "description": "",
+    "start": "2026-05-13T10:00:00",
+    "end": "2026-05-13T12:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Video Call with Family",
+    "description": "",
+    "start": "2026-05-13T19:00:00",
+    "end": "2026-05-13T20:00:00",
+    "color": "#B08968",
+    "calendar": "Family"
+  },
+  {
+    "title": "Data Structures Tutorial",
+    "description": "",
+    "start": "2026-05-14T11:00:00",
+    "end": "2026-05-14T12:30:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Cafe Shift",
+    "description": "",
+    "start": "2026-05-14T17:30:00",
+    "end": "2026-05-14T21:30:00",
+    "color": "#F4A261",
+    "calendar": "Cafe Job"
+  },
+  {
+    "title": "Research Methods",
+    "description": "",
+    "start": "2026-05-15T09:30:00",
+    "end": "2026-05-15T11:00:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Potluck at Sam's Place",
+    "description": "",
+    "start": "2026-05-15T18:30:00",
+    "end": "2026-05-15T21:00:00",
+    "color": "#E76F51",
+    "calendar": "Social"
+  },
+  {
+    "title": "Campus Library Volunteer Shift",
+    "description": "",
+    "start": "2026-05-16T10:00:00",
+    "end": "2026-05-16T12:30:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  },
+  {
+    "title": "Plan Finals Week",
+    "description": "Map revision blocks and assignment deadlines.",
+    "start": "2026-05-17T16:00:00",
+    "end": "2026-05-17T18:30:00",
+    "color": "#4F86F7",
+    "calendar": "University"
+  }
+]
