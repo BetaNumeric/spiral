@@ -38,7 +38,9 @@ const STUDY_TRACKED_SETTINGS_KEYS = [
   'showSixAmPmLines',
   'enableLongPressJoystick',
   'detailViewAutoZoomEnabled',
-  'detailViewAutoZoomCoils'
+  'detailViewAutoZoomCoils',
+  'detailViewCloseButtonEnabled',
+  'detailViewCloseButtonAlignToSegment'
 ];
 
 Object.assign(SpiralCalendar.prototype, {

@@ -742,6 +742,37 @@ Object.assign(SpiralCalendar.prototype, {
       });
     }
 
+    const detailViewCloseButtonToggle = document.getElementById('detailViewCloseButtonToggle');
+    const detailViewCloseButtonAlignToggle = document.getElementById('detailViewCloseButtonAlignToggle');
+    const syncDetailViewCloseButtonControls = () => {
+      const controls = document.getElementById('detailViewCloseButtonControls');
+      if (controls) {
+        controls.style.display = self.state.detailViewCloseButtonEnabled !== false ? 'block' : 'none';
+      }
+      if (detailViewCloseButtonAlignToggle) {
+        detailViewCloseButtonAlignToggle.checked = !self.state.detailViewCloseButtonAlignToSegment;
+      }
+    };
+    if (detailViewCloseButtonToggle) {
+      detailViewCloseButtonToggle.addEventListener('change', function(e) {
+        self.state.detailViewCloseButtonEnabled = e.target.checked;
+        if (!e.target.checked && self.mouseState.hoveredDetailElement === 'closeButton') {
+          self.mouseState.hoveredDetailElement = null;
+        }
+        syncDetailViewCloseButtonControls();
+        self.drawSpiral();
+        self.saveSettingsToStorage();
+      });
+    }
+    if (detailViewCloseButtonAlignToggle) {
+      detailViewCloseButtonAlignToggle.addEventListener('change', function(e) {
+        self.state.detailViewCloseButtonAlignToSegment = !e.target.checked;
+        self.drawSpiral();
+        self.saveSettingsToStorage();
+      });
+    }
+    syncDetailViewCloseButtonControls();
+
     const detailViewAutoZoomSlider = document.getElementById('detailViewAutoZoomSlider');
     if (detailViewAutoZoomSlider) {
       detailViewAutoZoomSlider.addEventListener('input', function(e) {

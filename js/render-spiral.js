@@ -722,6 +722,7 @@ Object.assign(SpiralCalendar.prototype, {
         baseFontSize,
         smallFontSize,
         titleFontSize,
+        edgePadding,
         counterY,
         titleY,
         dateTimeY,
@@ -741,6 +742,7 @@ Object.assign(SpiralCalendar.prototype, {
       // Clear previous button info to prevent stale references
       this.deleteButtonInfo = null;
       this.addButtonInfo = null;
+      this.canvasClickAreas.closeDetailButton = null;
       this.canvasClickAreas.prevEventChevron = null;
       this.canvasClickAreas.nextEventChevron = null;
       this.canvasClickAreas.colorRing = null;
@@ -830,7 +832,8 @@ Object.assign(SpiralCalendar.prototype, {
           selectedEventCount,
           activeEventIndex,
           detailEvent,
-          isDraftEventActive
+          isDraftEventActive,
+          selectedSegment: detailSelectedSegment
         } = detailEventState;
 
         this.ctx.fillStyle = '#000';
@@ -838,6 +841,54 @@ Object.assign(SpiralCalendar.prototype, {
         this.ctx.textBaseline = 'middle';
 
         const smallLineHeight = smallFontSize;
+
+        if (allowInteraction && this.state.detailViewCloseButtonEnabled !== false) {
+          const closeGlyphSize = Math.max(12, smallFontSize);
+          const closeMidRadius = (outerRadius + circleRadius) / 2;
+          const segmentAngle = (2 * Math.PI) / CONFIG.SEGMENTS_PER_DAY;
+          const canvasRotation = this.state.staticMode ? Math.PI : -this.state.rotation;
+          const alignCloseButtonToSegment =
+            !!this.state.detailViewCloseButtonAlignToSegment &&
+            Number.isFinite(detailSelectedSegment?.segment);
+          const closeArcStart = alignCloseButtonToSegment
+            ? canvasRotation + CONFIG.INITIAL_ROTATION_OFFSET - ((detailSelectedSegment.segment + 1) * segmentAngle)
+            : -Math.PI / 2 - segmentAngle / 2;
+          const closeArcEnd = alignCloseButtonToSegment
+            ? canvasRotation + CONFIG.INITIAL_ROTATION_OFFSET - (detailSelectedSegment.segment * segmentAngle)
+            : -Math.PI / 2 + segmentAngle / 2;
+          const closeCenterAngle = (closeArcStart + closeArcEnd) / 2;
+          const closeCenterX = centerX + Math.cos(closeCenterAngle) * closeMidRadius;
+          const closeCenterY = centerY + Math.sin(closeCenterAngle) * closeMidRadius;
+          const closeArea = {
+            hitType: 'ringSector',
+            centerX,
+            centerY,
+            innerRadius: circleRadius,
+            outerRadius,
+            startAngle: closeArcStart,
+            endAngle: closeArcEnd
+          };
+          const isHoverClose = this.mouseState.hoveredDetailElement === 'closeButton';
+
+          this.canvasClickAreas.closeDetailButton = closeArea;
+
+          this.ctx.fillStyle = isHoverClose ? 'rgba(0, 0, 0, 0.24)' : 'rgba(0, 0, 0, 0.14)';
+          this.ctx.beginPath();
+          this.ctx.arc(centerX, centerY, outerRadius, closeArcStart, closeArcEnd);
+          this.ctx.arc(centerX, centerY, circleRadius, closeArcEnd, closeArcStart, true);
+          this.ctx.closePath();
+          this.ctx.fill();
+
+          this.ctx.fillStyle = isHoverClose ? 'rgba(255, 255, 255, 0.98)' : 'rgba(255, 255, 255, 0.88)';
+          this.ctx.save();
+          this.ctx.translate(closeCenterX, closeCenterY);
+          this.ctx.rotate(closeCenterAngle + Math.PI / 2);
+          this.ctx.font = getFontString(closeGlyphSize);
+          this.ctx.textAlign = 'center';
+          this.ctx.textBaseline = 'middle';
+          this.ctx.fillText('X', 0, 0);
+          this.ctx.restore();
+        }
 
         if (!isDraftEventActive && selectedEventCount > 1) {
           const eventCounterText = `Event ${activeEventIndex + 1} of ${selectedEventCount}`;
@@ -1671,6 +1722,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (this.state.detailViewDay === null) {
         this.deleteButtonInfo = null;
         this.addButtonInfo = null;
+        this.canvasClickAreas.closeDetailButton = null;
         this.titleClickArea = null;
         this.dateTimeClickArea = null;
         this.descClickArea = null;

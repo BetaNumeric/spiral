@@ -80,6 +80,8 @@ const APP_SETTINGS_DEFAULTS = {
   detailViewAutoCircleMode: true,
   detailViewAutoZoomEnabled: true,
   detailViewAutoZoomCoils: 0,
+  detailViewCloseButtonEnabled: true,
+  detailViewCloseButtonAlignToSegment: true,
 
   // Overlay opacity values (0.0 - 1.0)
   nightOverlayOpacity: 0.05,

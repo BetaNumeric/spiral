@@ -71,6 +71,8 @@ class SpiralCalendar {
         detailViewAutoCircleMode: true,
         detailViewAutoZoomEnabled: true,
         detailViewAutoZoomCoils: 0,
+        detailViewCloseButtonEnabled: true,
+        detailViewCloseButtonAlignToSegment: true,
         nightOverlayOpacity: 0.05,
         dayOverlayOpacity: 0.15,
         gradientOverlayOpacity: 0.15
@@ -170,6 +172,8 @@ class SpiralCalendar {
         detailViewAutoCircleMode: this.defaultSettings.detailViewAutoCircleMode,
         detailViewAutoZoomEnabled: this.defaultSettings.detailViewAutoZoomEnabled,
         detailViewAutoZoomCoils: this.defaultSettings.detailViewAutoZoomCoils,
+        detailViewCloseButtonEnabled: this.defaultSettings.detailViewCloseButtonEnabled,
+        detailViewCloseButtonAlignToSegment: this.defaultSettings.detailViewCloseButtonAlignToSegment,
         // Overlay opacity values
         nightOverlayOpacity: this.defaultSettings.nightOverlayOpacity,
         dayOverlayOpacity: this.defaultSettings.dayOverlayOpacity,
@@ -245,6 +249,7 @@ class SpiralCalendar {
         endDateBox: null,
         colorBox: null,
         colorRing: null,
+        closeDetailButton: null,
         prevEventChevron: null,
         nextEventChevron: null
       };

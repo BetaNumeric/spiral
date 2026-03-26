@@ -523,7 +523,10 @@ Object.assign(SpiralCalendar.prototype, {
   checkDetailViewHover(mouseX, mouseY, centerX, centerY) {
     let hoveredElement = null;
     
-    if (this.canvasClickAreas.prevEventChevron && this.isPointInRect(mouseX, mouseY, this.canvasClickAreas.prevEventChevron)) {
+    if (this.canvasClickAreas.closeDetailButton && this.isPointInDetailControlArea(mouseX, mouseY, this.canvasClickAreas.closeDetailButton)) {
+      hoveredElement = 'closeButton';
+    }
+    else if (this.canvasClickAreas.prevEventChevron && this.isPointInRect(mouseX, mouseY, this.canvasClickAreas.prevEventChevron)) {
       hoveredElement = 'prevEventChevron';
     }
     else if (this.canvasClickAreas.nextEventChevron && this.isPointInRect(mouseX, mouseY, this.canvasClickAreas.nextEventChevron)) {
@@ -577,7 +580,43 @@ Object.assign(SpiralCalendar.prototype, {
   isPointInCircle(x, y, circle) {
     const distance = Math.sqrt((x - circle.centerX) ** 2 + (y - circle.centerY) ** 2);
     return distance >= circle.innerRadius && distance <= circle.outerRadius;
-    },
+  },
+
+  normalizeCanvasAngle(angle) {
+    const fullTurn = Math.PI * 2;
+    return ((angle % fullTurn) + fullTurn) % fullTurn;
+  },
+
+  isAngleWithinArc(angle, startAngle, endAngle) {
+    const normalizedAngle = this.normalizeCanvasAngle(angle);
+    const normalizedStart = this.normalizeCanvasAngle(startAngle);
+    const normalizedEnd = this.normalizeCanvasAngle(endAngle);
+
+    if (normalizedStart <= normalizedEnd) {
+      return normalizedAngle >= normalizedStart && normalizedAngle <= normalizedEnd;
+    }
+
+    return normalizedAngle >= normalizedStart || normalizedAngle <= normalizedEnd;
+  },
+
+  isPointInDetailControlArea(x, y, area) {
+    if (!area) {
+      return false;
+    }
+
+    if (area.hitType === 'ringSector') {
+      const dx = x - area.centerX;
+      const dy = y - area.centerY;
+      const distance = Math.sqrt(dx ** 2 + dy ** 2);
+      if (distance < area.innerRadius || distance > area.outerRadius) {
+        return false;
+      }
+
+      return this.isAngleWithinArc(Math.atan2(dy, dx), area.startAngle, area.endAngle);
+    }
+
+    return this.isPointInRect(x, y, area);
+  },
 
     handleMouseLeave() {
       // Don't finalize time display drag on mouseleave - let window mouseup handle it
@@ -697,6 +736,14 @@ Object.assign(SpiralCalendar.prototype, {
             }
           }
           
+          if (this.canvasClickAreas.closeDetailButton &&
+              this.isPointInDetailControlArea(mouseX, mouseY, this.canvasClickAreas.closeDetailButton)) {
+            this.playFeedback(0.08, 8);
+            this.closeDetailView();
+            this.refreshCanvasCursor();
+            return;
+          }
+
           // Check for color ring click (outer ring but not inner circle)
           if (this.canvasClickAreas.colorRing) {
             const ring = this.canvasClickAreas.colorRing;

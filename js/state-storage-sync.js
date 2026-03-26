@@ -477,6 +477,8 @@ Object.assign(SpiralCalendar.prototype, {
         detailViewAutoCircleMode: this.state.detailViewAutoCircleMode,
         detailViewAutoZoomEnabled: this.state.detailViewAutoZoomEnabled,
         detailViewAutoZoomCoils: this.state.detailViewAutoZoomCoils,
+        detailViewCloseButtonEnabled: this.state.detailViewCloseButtonEnabled,
+        detailViewCloseButtonAlignToSegment: this.state.detailViewCloseButtonAlignToSegment,
         // Overlay opacity values
         nightOverlayOpacity: this.state.nightOverlayOpacity,
         dayOverlayOpacity: this.state.dayOverlayOpacity,
@@ -614,6 +616,8 @@ Object.assign(SpiralCalendar.prototype, {
           loadedDetailViewAutoZoomCoils,
           this.defaultSettings.detailViewAutoZoomCoils ?? 2
         );
+        this.state.detailViewCloseButtonEnabled = this.state.detailViewCloseButtonEnabled !== false;
+        this.state.detailViewCloseButtonAlignToSegment = !!this.state.detailViewCloseButtonAlignToSegment;
         
         return true;
       }
@@ -735,6 +739,8 @@ Object.assign(SpiralCalendar.prototype, {
       { id: 'longPressJoystickToggle', value: this.state.enableLongPressJoystick },
       { id: 'detailViewAutoCircleModeToggle', value: this.state.detailViewAutoCircleMode },
       { id: 'detailViewAutoZoomToggle', value: this.state.detailViewAutoZoomEnabled !== false },
+      { id: 'detailViewCloseButtonToggle', value: this.state.detailViewCloseButtonEnabled !== false },
+      { id: 'detailViewCloseButtonAlignToggle', value: !this.state.detailViewCloseButtonAlignToSegment },
     ];
     
     checkboxes.forEach(checkbox => {
@@ -861,9 +867,21 @@ Object.assign(SpiralCalendar.prototype, {
     if (detailViewAutoZoomToggle) {
       detailViewAutoZoomToggle.checked = this.state.detailViewAutoZoomEnabled !== false;
     }
+    const detailViewCloseButtonToggle = document.getElementById('detailViewCloseButtonToggle');
+    if (detailViewCloseButtonToggle) {
+      detailViewCloseButtonToggle.checked = this.state.detailViewCloseButtonEnabled !== false;
+    }
+    const detailViewCloseButtonAlignToggle = document.getElementById('detailViewCloseButtonAlignToggle');
+    if (detailViewCloseButtonAlignToggle) {
+      detailViewCloseButtonAlignToggle.checked = !this.state.detailViewCloseButtonAlignToSegment;
+    }
     const detailViewAutoZoomControls = document.getElementById('detailViewAutoZoomControls');
     if (detailViewAutoZoomControls) {
       detailViewAutoZoomControls.style.display = this.state.detailViewAutoZoomEnabled !== false ? 'block' : 'none';
+    }
+    const detailViewCloseButtonControls = document.getElementById('detailViewCloseButtonControls');
+    if (detailViewCloseButtonControls) {
+      detailViewCloseButtonControls.style.display = this.state.detailViewCloseButtonEnabled !== false ? 'block' : 'none';
     }
     const detailViewAutoZoomCoilLimit = this.getDetailViewAutoZoomCoilLimit();
     const detailViewAutoZoomSlider = document.getElementById('detailViewAutoZoomSlider');
@@ -2000,6 +2018,7 @@ Object.assign(SpiralCalendar.prototype, {
     this._detailViewHasChanges = false;
     this.mouseState.hoveredDetailElement = null;
     if (this.canvasClickAreas) {
+      this.canvasClickAreas.closeDetailButton = null;
       this.canvasClickAreas.prevEventChevron = null;
       this.canvasClickAreas.nextEventChevron = null;
     }
