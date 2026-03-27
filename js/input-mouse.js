@@ -739,7 +739,7 @@ Object.assign(SpiralCalendar.prototype, {
           if (this.canvasClickAreas.closeDetailButton &&
               this.isPointInDetailControlArea(mouseX, mouseY, this.canvasClickAreas.closeDetailButton)) {
             this.playFeedback(0.08, 8);
-            this.closeDetailView();
+            this.closeDetailView({ clearSelection: true });
             this.refreshCanvasCursor();
             return;
           }

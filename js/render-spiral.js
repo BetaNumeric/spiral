@@ -879,14 +879,19 @@ Object.assign(SpiralCalendar.prototype, {
           this.ctx.closePath();
           this.ctx.fill();
 
-          this.ctx.fillStyle = isHoverClose ? 'rgba(255, 255, 255, 0.98)' : 'rgba(255, 255, 255, 0.88)';
+          const closeCrossHalfSize = closeGlyphSize * 0.28;
+          this.ctx.strokeStyle = isHoverClose ? 'rgba(255, 255, 255, 0.98)' : 'rgba(255, 255, 255, 0.88)';
           this.ctx.save();
           this.ctx.translate(closeCenterX, closeCenterY);
           this.ctx.rotate(closeCenterAngle + Math.PI / 2);
-          this.ctx.font = getFontString(closeGlyphSize);
-          this.ctx.textAlign = 'center';
-          this.ctx.textBaseline = 'middle';
-          this.ctx.fillText('X', 0, 0);
+          this.ctx.lineWidth = Math.max(1.4, closeGlyphSize * 0.12);
+          this.ctx.lineCap = 'round';
+          this.ctx.beginPath();
+          this.ctx.moveTo(-closeCrossHalfSize, -closeCrossHalfSize);
+          this.ctx.lineTo(closeCrossHalfSize, closeCrossHalfSize);
+          this.ctx.moveTo(closeCrossHalfSize, -closeCrossHalfSize);
+          this.ctx.lineTo(-closeCrossHalfSize, closeCrossHalfSize);
+          this.ctx.stroke();
           this.ctx.restore();
         }
 
