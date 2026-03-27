@@ -826,6 +826,7 @@ Object.assign(SpiralCalendar.prototype, {
     const paletteSelectorSection = document.getElementById('paletteSelectorSection');
     const paletteSelectorToggle = document.getElementById('paletteSelectorToggle');
     const paletteSelectorContent = document.getElementById('paletteSelectorContent');
+    const paletteAffectsCustomColorsToggle = document.getElementById('paletteAffectsCustomColorsToggle');
     const singleColorWrapper = document.getElementById('singleColorWrapper');
     const singleColorInput = document.getElementById('singleColorInput');
     const saturationWrapper = document.getElementById('saturationWrapper');
@@ -1004,6 +1005,17 @@ Object.assign(SpiralCalendar.prototype, {
       });
     }
     setPaletteSelectorExpanded(false);
+    if (paletteAffectsCustomColorsToggle) {
+      paletteAffectsCustomColorsToggle.checked = !!this.state.paletteAffectsCustomColors;
+      paletteAffectsCustomColorsToggle.addEventListener('change', (e) => {
+        this.state.paletteAffectsCustomColors = e.target.checked;
+        this.drawSpiral();
+        this.saveSettingsToStorage();
+        if (typeof window.renderEventList === 'function') {
+          window.renderEventList();
+        }
+      });
+    }
     if (singleColorInput) {
       singleColorInput.value = this.state.singleColor || '#4CAF50';
       singleColorInput.addEventListener('input', (e) => {

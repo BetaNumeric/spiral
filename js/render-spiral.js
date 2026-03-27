@@ -1277,7 +1277,7 @@ Object.assign(SpiralCalendar.prototype, {
       const colorInput = document.createElement('input');
       colorInput.id = 'persistentColorPicker';
       colorInput.type = 'color';
-      colorInput.value = this.getDisplayColorForEvent(event);
+      colorInput.value = this.getColorPickerColorForEvent(event);
       
       const colorInputLeft = centerX - inputWidth / 2;
       const colorInputTop = endInputTop + inputHeight + 10;
@@ -1321,7 +1321,7 @@ Object.assign(SpiralCalendar.prototype, {
           }
 
           this.syncEventAutoColor(event);
-          colorInput.value = this.getDisplayColorForEvent(event);
+          colorInput.value = this.getColorPickerColorForEvent(event);
           
           event.lastModified = Date.now();
 
@@ -1346,7 +1346,7 @@ Object.assign(SpiralCalendar.prototype, {
       endInput.addEventListener('change', updateEvent);
       colorInput.addEventListener('change', () => {
         this.setEventCustomColor(event, colorInput.value);
-        colorInput.value = this.getDisplayColorForEvent(event);
+        colorInput.value = this.getColorPickerColorForEvent(event);
         event.lastModified = Date.now();
         // Mark that changes have been made
         this._detailViewHasChanges = true;

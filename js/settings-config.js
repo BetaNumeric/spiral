@@ -48,6 +48,7 @@ const APP_SETTINGS_DEFAULTS = {
   nightOverlayLng: LOCATION_COORDS.lng,
   showDayOverlay: true,
   colorMode: 'random',
+  paletteAffectsCustomColors: false,
   saturationLevel: 80,
   baseHue: 200,
   singleColor: '#4CAF50',

@@ -118,6 +118,18 @@ Object.assign(SpiralCalendar.prototype, {
       }
       return this.generateRandomColorForStorage(calendarName, getAddPanelStartDate(), addEventColorSeed);
     };
+    const getAddEventManualDisplayColor = () => {
+      const calendarName = (this.selectedEventCalendar || this.state.selectedCalendar || 'Home').trim();
+      if (this.state.paletteAffectsCustomColors) {
+        return this.generatePaletteColorFromCustomColor(
+          eventColor.value,
+          calendarName,
+          getAddPanelStartDate(),
+          eventColor.value
+        );
+      }
+      return eventColor.value;
+    };
     const applyAddEventPaletteSuggestion = (options = {}) => {
       try {
         if (options.resetSeed) {
@@ -127,7 +139,7 @@ Object.assign(SpiralCalendar.prototype, {
           addEventColorManualOverride = false;
         }
         if (addEventColorManualOverride && !options.forceAuto) {
-          colorBox.style.background = eventColor.value;
+          colorBox.style.background = getAddEventManualDisplayColor();
           return;
         }
         const suggestedColor = getAddEventSuggestedColor();
@@ -3395,7 +3407,7 @@ Object.assign(SpiralCalendar.prototype, {
         }
       } else {
         addEventColorManualOverride = true;
-        colorBox.style.background = eventColor.value;
+        colorBox.style.background = getAddEventManualDisplayColor();
       }
     });
     colorBox.addEventListener('click', () => {

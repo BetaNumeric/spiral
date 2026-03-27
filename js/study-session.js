@@ -29,6 +29,7 @@ const STUDY_TRACKED_SETTINGS_KEYS = [
   'audioFeedbackEnabled',
   'darkMode',
   'colorMode',
+  'paletteAffectsCustomColors',
   'saturationLevel',
   'baseHue',
   'singleColor',

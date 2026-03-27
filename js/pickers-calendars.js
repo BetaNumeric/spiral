@@ -35,7 +35,7 @@ Object.assign(SpiralCalendar.prototype, {
     this.syncEventAutoColor(event);
     const persistentColorPicker = document.getElementById('persistentColorPicker');
     if (persistentColorPicker) {
-      persistentColorPicker.value = this.getDisplayColorForEvent(event);
+      persistentColorPicker.value = this.getColorPickerColorForEvent(event);
     }
 
     event.lastModified = Date.now();
@@ -424,7 +424,7 @@ Object.assign(SpiralCalendar.prototype, {
     input.style.pointerEvents = 'none';
     input.style.width = '1px';
     input.style.height = '1px';
-    input.value = this.getDisplayColorForEvent(calendarEvent);
+    input.value = this.getColorPickerColorForEvent(calendarEvent);
     
     document.body.appendChild(input);
     input.focus();
@@ -1152,7 +1152,7 @@ Object.assign(SpiralCalendar.prototype, {
           // Update persistent color picker UI if present
           const persistentColorPicker = document.getElementById('persistentColorPicker');
           if (persistentColorPicker) {
-            persistentColorPicker.value = event.colorIsCustom ? updatedColor : this.getDisplayColorForEvent(event);
+            persistentColorPicker.value = this.getColorPickerColorForEvent(event);
           }
           event.lastModified = Date.now();
           // Mark that changes have been made
@@ -1201,7 +1201,7 @@ Object.assign(SpiralCalendar.prototype, {
           const updatedColor = this.syncEventAutoColor(event);
           const persistentColorPicker = document.getElementById('persistentColorPicker');
           if (persistentColorPicker) {
-            persistentColorPicker.value = event.colorIsCustom ? updatedColor : this.getDisplayColorForEvent(event);
+            persistentColorPicker.value = this.getColorPickerColorForEvent(event);
           }
 
           event.lastModified = Date.now();

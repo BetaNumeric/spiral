@@ -366,7 +366,6 @@ Object.assign(SpiralCalendar.prototype, {
         this.ensureEventColorMetadata(event);
         return {
           ...event,
-          color: this.getDisplayColorForEvent(event),
           start: event.start.toISOString(),
           end: event.end.toISOString()
         };
@@ -458,6 +457,7 @@ Object.assign(SpiralCalendar.prototype, {
         visibleCalendars: this.state.visibleCalendars,
         calendarColors: this.state.calendarColors,
         colorMode: this.state.colorMode,
+        paletteAffectsCustomColors: this.state.paletteAffectsCustomColors,
         saturationLevel: this.state.saturationLevel,
         baseHue: this.state.baseHue,
         singleColor: this.state.singleColor,
@@ -777,6 +777,10 @@ Object.assign(SpiralCalendar.prototype, {
     // Event color mode composite controls
     const colorModeSelect = document.getElementById('colorModeSelect');
     if (colorModeSelect) colorModeSelect.value = this.state.colorMode;
+    const paletteAffectsCustomColorsToggle = document.getElementById('paletteAffectsCustomColorsToggle');
+    if (paletteAffectsCustomColorsToggle) {
+      paletteAffectsCustomColorsToggle.checked = !!this.state.paletteAffectsCustomColors;
+    }
     const singleColorInput = document.getElementById('singleColorInput');
     if (singleColorInput) singleColorInput.value = this.state.singleColor || '#4CAF50';
     const baseHueSlider = document.getElementById('baseHueSlider');
