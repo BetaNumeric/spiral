@@ -563,6 +563,23 @@ Object.assign(SpiralCalendar.prototype, {
 
     this.touchState.joystickDx = pointX - this.touchState.joystickOriginX;
     this.touchState.joystickDy = pointY - this.touchState.joystickOriginY;
+
+    const { deadZone, maxTravel } = this.getTouchJoystickConfig();
+    const limited = this.getTouchJoystickTravel(this.touchState.joystickDx, this.touchState.joystickDy, maxTravel);
+    if (limited.distance > deadZone) {
+      const currentAngle = Math.atan2(limited.y, limited.x);
+      if (this.getTouchJoystickMode(limited.distance) === 'circular') {
+        if (this.touchState.joystickVisualLastRawAngle !== undefined && this.touchState.joystickVisualLastRawAngle !== null) {
+          const delta = this.normalizeTouchJoystickAngleDelta(currentAngle - this.touchState.joystickVisualLastRawAngle);
+          this.touchState.joystickVisualRotation = (this.touchState.joystickVisualRotation || 0) + delta;
+        }
+        this.touchState.joystickVisualLastRawAngle = currentAngle;
+      } else {
+        this.touchState.joystickVisualLastRawAngle = null;
+      }
+    } else {
+      this.touchState.joystickVisualLastRawAngle = null;
+    }
   },
 
   updateTouchJoystickFromTouch(touch) {
@@ -621,9 +638,6 @@ Object.assign(SpiralCalendar.prototype, {
         if (Number.isFinite(currentAngle) && Number.isFinite(previousAngle)) {
           let deltaAngle = this.normalizeTouchJoystickAngleDelta(currentAngle - previousAngle);
 
-          // Update the visual rotation for the inner spiral overlay
-          this.touchState.joystickVisualRotation = (this.touchState.joystickVisualRotation || 0) + deltaAngle;
-
           const circularNorm = Math.min(
             1,
             Math.max(0, (distance - deadZone) / Math.max(1, axialEnterRadius - deadZone))
@@ -665,7 +679,7 @@ Object.assign(SpiralCalendar.prototype, {
           const verticalNorm = Math.min(1, (Math.abs(limited.y) - deadZone) / (maxTravel - deadZone));
           const direction = limited.y > 0 ? -1 : 1;
           const dayStep = trueDistance > maxTravel ? 7 : 1;
-          const intervalMs = (420 - verticalNorm * 320) + (dayStep === 7 ? 80 : 0);
+          const intervalMs = (900 - verticalNorm * 800) + (dayStep === 7 ? 80 : 0);
           if (
             direction !== this.touchState.joystickLastDayDirection ||
             dayStep !== this.touchState.joystickLastDayStep
@@ -696,8 +710,13 @@ Object.assign(SpiralCalendar.prototype, {
         this.touchState.joystickLastDayStep = 0;
       }
 
-      if (rotationChanged) {
-        
+      const visualChanged = this.touchState.joystickLastRenderedDx !== this.touchState.joystickDx || 
+                            this.touchState.joystickLastRenderedDy !== this.touchState.joystickDy;
+      this.touchState.joystickLastRenderedDx = this.touchState.joystickDx;
+      this.touchState.joystickLastRenderedDy = this.touchState.joystickDy;
+
+      if (rotationChanged || visualChanged) {
+
         this.drawSpiral();
       }
 
@@ -1239,7 +1258,6 @@ Object.assign(SpiralCalendar.prototype, {
       if (this.touchState.joystickActive) {
         if (activeTouch.identifier === this.touchState.joystickTouchId) {
           this.updateTouchJoystickFromTouch(activeTouch);
-          this.drawSpiral();
           e.preventDefault();
         }
         return;
