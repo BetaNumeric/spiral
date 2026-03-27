@@ -510,6 +510,7 @@ Object.assign(SpiralCalendar.prototype, {
     this.touchState.joystickLastDayStep = 0;
     this.touchState.joystickMode = 'idle';
     this.touchState.joystickLastAngle = null;
+    this.touchState.joystickVisualRotation = 0;
     this.touchState.joystickLastFrameTs = performance.now();
 
     this.mouseState.isDragging = false;
@@ -619,6 +620,10 @@ Object.assign(SpiralCalendar.prototype, {
         const previousAngle = this.touchState.joystickLastAngle;
         if (Number.isFinite(currentAngle) && Number.isFinite(previousAngle)) {
           let deltaAngle = this.normalizeTouchJoystickAngleDelta(currentAngle - previousAngle);
+
+          // Update the visual rotation for the inner spiral overlay
+          this.touchState.joystickVisualRotation = (this.touchState.joystickVisualRotation || 0) + deltaAngle;
+
           const circularNorm = Math.min(
             1,
             Math.max(0, (distance - deadZone) / Math.max(1, axialEnterRadius - deadZone))
@@ -1678,12 +1683,13 @@ Object.assign(SpiralCalendar.prototype, {
     this.ctx.stroke();
 
     const maxSpiralRadius = axialEnterRadius;
+    const visualRotation = this.touchState.joystickVisualRotation || 0;
     const drawSpiral = (endAngle) => {
       const startAngle = endAngle - Math.PI*2;
       this.ctx.beginPath();
       for (let i = 0; i <= 600; i++) {
         const t = i / 600;
-        const currentAngle = startAngle + t * (Math.PI*2);
+        const currentAngle = startAngle + t * (Math.PI*2) + visualRotation;
         // Start from inner ring, end near the boundary
         const r = circularGuideRadius + t * (maxSpiralRadius - circularGuideRadius);
         const x = baseX + r * Math.cos(currentAngle);
