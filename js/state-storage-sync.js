@@ -1922,6 +1922,14 @@ Object.assign(SpiralCalendar.prototype, {
     if (!segment) return null;
 
     this.cancelDetailViewAutoZoomAnimation();
+    const interruptingClosingTransition = !!(
+      this.isModeTransitionActive() &&
+      this.modeTransitionState &&
+      !this.modeTransitionState.targetCircleMode
+    );
+    if (interruptingClosingTransition) {
+      this.cancelModeTransition();
+    }
     const openingFromClosed = this.state.detailViewDay === null;
     const nextSegment = { day: segment.day, segment: segment.segment };
     const shouldAutoSwitchToCircle = this.state.detailViewAutoCircleMode !== false && !this.state.circleMode;
@@ -2024,6 +2032,16 @@ Object.assign(SpiralCalendar.prototype, {
     }
 
     const finalizeClose = () => {
+      if (this.state.detailViewDay !== null) {
+        if (this.canvas && typeof this.refreshCanvasCursor === 'function') {
+          this.refreshCanvasCursor(true);
+        }
+        if (typeof this.drawSpiral === 'function') {
+          this.drawSpiral();
+        }
+        return;
+      }
+
       const returnRotation = Number.isFinite(this._detailViewOpeningRotation)
         ? this._detailViewOpeningRotation
         : null;

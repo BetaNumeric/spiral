@@ -183,6 +183,9 @@ Object.assign(SpiralCalendar.prototype, {
 
     drawHighlightedSegments() {
       const isMobile = isMobileDevice();
+      this.ctx.save();
+      this.ctx.lineJoin = 'round';
+      this.ctx.lineCap = 'round';
       for (const segment of this.highlightedSegments) {
         if (isMobile && segment.isHovered) continue; // suppress hover highlight on mobile
         if (segment.isHovered) {
@@ -345,6 +348,7 @@ Object.assign(SpiralCalendar.prototype, {
           }
         }
       }
+      this.ctx.restore();
     },
 
   drawEventSegments() {

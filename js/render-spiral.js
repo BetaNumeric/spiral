@@ -2526,7 +2526,7 @@ Object.assign(SpiralCalendar.prototype, {
       this.drawDayNumbers();
       
       const detailPreviewActive = this.isDetailViewPreviewActive();
-      const detailOverlayActive = (this.state.detailViewDay !== null || detailPreviewActive) &&
+      const detailOverlayActive = ((this.state.detailViewDay !== null && this.mouseState.selectedSegment) || detailPreviewActive) &&
         !this.mouseState.isHandleDragging;
 
       // Draw month lines on top of all segments
