@@ -2237,7 +2237,7 @@ Object.assign(SpiralCalendar.prototype, {
             const maxDimension = Math.min(radialHeight, arcWidth) * 0.4;
             const fontSize = Math.max(1, Math.min(24, maxDimension));
             let transitionFontSize = null;
-            if (this.isModeTransitionActive()) {
+            if (this.isModeTransitionGeometryMorphActive()) {
               const circleInnerRadius = radiusFunction(day * 2 * Math.PI);
               const circleOuterRadius = radiusFunction((day + 1) * 2 * Math.PI);
               const circleCenterRadius = (circleInnerRadius + circleOuterRadius) / 2;

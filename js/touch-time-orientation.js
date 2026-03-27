@@ -2325,6 +2325,35 @@ clampRotationToEventWindow() {
     return spans;
   },
 
+  collectContiguousCircleOverlaySpans(overlays, buildSpan, options = {}) {
+    const spans = [];
+    const mergeTolerance = Number.isFinite(options.mergeTolerance) ? options.mergeTolerance : 1e-5;
+    const radiusTolerance = Number.isFinite(options.radiusTolerance) ? options.radiusTolerance : 1e-5;
+    const mergeByColor = options.mergeByColor !== false;
+    let current = null;
+
+    for (const overlay of overlays) {
+      const nextSpan = buildSpan.call(this, overlay);
+      if (!nextSpan || !(nextSpan.startTheta > nextSpan.endTheta)) continue;
+
+      const canMerge = current &&
+        Math.abs(current.innerRadius - nextSpan.innerRadius) <= radiusTolerance &&
+        Math.abs(current.outerRadius - nextSpan.outerRadius) <= radiusTolerance &&
+        (!mergeByColor || current.color === nextSpan.color) &&
+        nextSpan.startTheta >= current.endTheta - mergeTolerance;
+
+      if (canMerge) {
+        current.endTheta = Math.min(current.endTheta, nextSpan.endTheta);
+        continue;
+      }
+
+      current = { ...nextSpan };
+      spans.push(current);
+    }
+
+    return spans;
+  },
+
   fillCircleModeOverlaySegment(overlay, fillStyle) {
     this.ctx.save();
     this.ctx.beginPath();
@@ -2350,19 +2379,32 @@ clampRotationToEventWindow() {
     }
   },
 
+  drawMergedCircleOverlays(overlays, buildSpan) {
+    const circleSpans = this.collectContiguousCircleOverlaySpans(overlays, buildSpan);
+    for (const span of circleSpans) {
+      this.fillCircleModeOverlaySegment(span, span.color);
+    }
+  },
+
   drawNightOverlays() {
     // Reset context state to ensure consistent rendering
     this.ctx.globalAlpha = 1.0;
     this.ctx.globalCompositeOperation = 'source-over';
     const nightOverlayColor = `rgba(0, 0, 0, ${this.state.nightOverlayOpacity})`;
-    
-    for (const overlay of this.nightOverlays) {
-      if (this.shouldSkipOverlaySegment(overlay)) continue;
-      
-      if (overlay.isCircleMode) {
-        this.fillCircleModeOverlaySegment(overlay, nightOverlayColor);
+
+    this.drawMergedCircleOverlays(
+      this.nightOverlays,
+      function buildNightCircleSpan(overlay) {
+        if (!overlay.isCircleMode || this.shouldSkipOverlaySegment(overlay)) return null;
+        return {
+          innerRadius: overlay.innerRadius,
+          outerRadius: overlay.outerRadius,
+          startTheta: overlay.startTheta,
+          endTheta: overlay.endTheta,
+          color: nightOverlayColor
+        };
       }
-    }
+    );
 
     this.drawMergedSpiralOverlays(
       this.nightOverlays,
@@ -2390,14 +2432,20 @@ clampRotationToEventWindow() {
     // Reset context state to ensure consistent rendering
     this.ctx.globalAlpha = 1.0;
     this.ctx.globalCompositeOperation = 'source-over';
-    
-    for (const overlay of this.gradientOverlays) {
-      if (this.shouldSkipOverlaySegment(overlay)) continue;
-      
-      if (overlay.isCircleMode) {
-        this.fillCircleModeOverlaySegment(overlay, overlay.color);
+
+    this.drawMergedCircleOverlays(
+      this.gradientOverlays,
+      function buildGradientCircleSpan(overlay) {
+        if (!overlay.isCircleMode || this.shouldSkipOverlaySegment(overlay)) return null;
+        return {
+          innerRadius: overlay.innerRadius,
+          outerRadius: overlay.outerRadius,
+          startTheta: overlay.startTheta,
+          endTheta: overlay.endTheta,
+          color: overlay.color
+        };
       }
-    }
+    );
 
     this.drawMergedSpiralOverlays(
       this.gradientOverlays,
@@ -2417,14 +2465,20 @@ clampRotationToEventWindow() {
     // Reset context state to ensure consistent rendering
     this.ctx.globalAlpha = 1.0;
     this.ctx.globalCompositeOperation = 'source-over';
-    
-    for (const overlay of this.dayOverlays) {
-      if (this.shouldSkipOverlaySegment(overlay)) continue;
-      
-      if (overlay.isCircleMode) {
-        this.fillCircleModeOverlaySegment(overlay, overlay.color);
+
+    this.drawMergedCircleOverlays(
+      this.dayOverlays,
+      function buildDayCircleSpan(overlay) {
+        if (!overlay.isCircleMode || this.shouldSkipOverlaySegment(overlay)) return null;
+        return {
+          innerRadius: overlay.innerRadius,
+          outerRadius: overlay.outerRadius,
+          startTheta: overlay.startTheta,
+          endTheta: overlay.endTheta,
+          color: overlay.color
+        };
       }
-    }
+    );
 
     this.drawMergedSpiralOverlays(
       this.dayOverlays,

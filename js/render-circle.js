@@ -942,7 +942,7 @@ Object.assign(SpiralCalendar.prototype, {
     };
     const getRenderedFontSize = (item) => {
       const baseSize = Math.max(1, Number(item.fontSize) || 0);
-      if (!Number.isFinite(item.transitionFontSize) || !this.isModeTransitionActive()) {
+      if (!Number.isFinite(item.transitionFontSize) || !this.isModeTransitionGeometryMorphActive()) {
         return baseSize;
       }
       const progress = this.getModeMorphProgress();
@@ -967,7 +967,7 @@ Object.assign(SpiralCalendar.prototype, {
       };
     };
     const getOuterEndClipTheta = (item) => {
-      return (!item.isCircleMode && Number.isFinite(item.outerEndClipTheta))
+      return Number.isFinite(item.outerEndClipTheta)
         ? item.outerEndClipTheta
         : null;
     };
@@ -1079,7 +1079,7 @@ Object.assign(SpiralCalendar.prototype, {
       }
       const totalWidth = prevWidth;
       if (!isFinite(totalWidth) || totalWidth < 0.5) { this.ctx.restore(); return; }
-      const outerEndClipTheta = (!item.isCircleMode && Number.isFinite(item.outerEndClipTheta))
+      const outerEndClipTheta = Number.isFinite(item.outerEndClipTheta)
         ? item.outerEndClipTheta
         : null;
       // Left-align: begin at anchor and advance along path, with a small pre-offset so text starts earlier
@@ -1188,7 +1188,7 @@ Object.assign(SpiralCalendar.prototype, {
           this.ctx.fillText(dayNum.text, 0, 0);
           this.ctx.restore();
         };
-        const outerEndClipTheta = (!dayNum.isCircleMode && Number.isFinite(dayNum.outerEndClipTheta))
+        const outerEndClipTheta = Number.isFinite(dayNum.outerEndClipTheta)
           ? dayNum.outerEndClipTheta
           : null;
         if (outerEndClipTheta !== null) {
@@ -1523,9 +1523,9 @@ Object.assign(SpiralCalendar.prototype, {
 
             // Skip day number if hiding outermost due to inside hour numbers
             const skipForHourOverlap = (this.state.hideDayWhenHourInside && this.state.hourNumbersInsideSegment && this.state.showHourNumbers && isOutermostTwoDays);
-            if (!skipForHourOverlap && segmentStart === segmentStartAngle && segmentEnd === segmentEndAngle) {
+            if (!skipForHourOverlap) {
             const dayNumber = this.getDayNumber(day, segment);
-            const centerAngle = (circleSegmentStart + circleSegmentEnd) / 2;
+            const centerAngle = (circleSegmentStartAngle + circleSegmentEndAngle) / 2;
             const centerRadius = (innerRadius + outerRadius) / 2;
             // Build weekday + day label (e.g., Mon 28)
             // Defaults in case of errors (circle mode)
@@ -1581,7 +1581,7 @@ Object.assign(SpiralCalendar.prototype, {
             }
             
             // Calculate font size based on segment dimensions in circle mode
-            const segmentAngleSize = circleSegmentEnd - circleSegmentStart;
+            const segmentAngleSize = circleSegmentEndAngle - circleSegmentStartAngle;
             const radialHeight = outerRadius - innerRadius;
             const arcWidth = centerRadius * segmentAngleSize;
             
@@ -1598,8 +1598,10 @@ Object.assign(SpiralCalendar.prototype, {
               text: fullDayLabel,
               fontSize: fontSize,
               isCircleMode: true,
+              centerTheta: centerAngle,
               centerAngle: centerAngle,
               centerRadius: centerRadius,
+              outerEndClipTheta: circleSegmentEnd < circleSegmentEndAngle - 0.0001 ? circleSegmentEnd : null,
               onlyNumeric: (!showWeekday && !includeMonth && !includeYear)
             });
             }
