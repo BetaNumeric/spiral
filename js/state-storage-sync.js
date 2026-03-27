@@ -627,9 +627,13 @@ Object.assign(SpiralCalendar.prototype, {
     return false;
   },
 
-  resetSettingsToDefaults() {
-    // Keys to exclude from resetting so that user calendars are not unintentionally lost
-    const keysToExclude = ['calendars', 'visibleCalendars', 'calendarColors'];
+  resetSettingsToDefaults(options = {}) {
+    const { preserveCalendars = true } = options;
+    // Keep calendars for the normal settings reset, but allow destructive
+    // flows like "Delete all data" to restore the built-in defaults too.
+    const keysToExclude = preserveCalendars
+      ? ['calendars', 'visibleCalendars', 'calendarColors']
+      : [];
 
     // Reset state
     Object.keys(this.defaultSettings).forEach(key => {

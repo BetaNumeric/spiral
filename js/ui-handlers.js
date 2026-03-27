@@ -1576,8 +1576,13 @@ Object.assign(SpiralCalendar.prototype, {
           try {
             if (typeof Storage !== 'undefined') {
               localStorage.removeItem('spiralCalendarEvents');
+              localStorage.removeItem('spiralCalendarSettings');
             }
           } catch(e) { }
+
+          if (typeof this.resetSettingsToDefaults === 'function') {
+            this.resetSettingsToDefaults({ preserveCalendars: false });
+          }
 
           // Close detail views
           const eventDetailOverlay = document.getElementById('eventDetailOverlay');
@@ -1614,7 +1619,7 @@ Object.assign(SpiralCalendar.prototype, {
             this.drawSpiral();
           }
 
-          alert('All event data has been deleted.');
+          alert('All data has been deleted.');
         }
       });
     }
