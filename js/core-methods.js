@@ -599,7 +599,7 @@ Object.assign(SpiralCalendar.prototype, {
       }
       
       return {
-        color: events[eventIndex].color,
+        color: this.getDisplayColorForEvent(events[eventIndex].event),
         startMinute: events[eventIndex].startMinute,
         endMinute: events[eventIndex].endMinute
       };

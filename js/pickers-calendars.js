@@ -32,6 +32,12 @@ Object.assign(SpiralCalendar.prototype, {
       }
     }
 
+    this.syncEventAutoColor(event);
+    const persistentColorPicker = document.getElementById('persistentColorPicker');
+    if (persistentColorPicker) {
+      persistentColorPicker.value = this.getDisplayColorForEvent(event);
+    }
+
     event.lastModified = Date.now();
     this._eventsVersion++;
     this._detailViewHasChanges = true;
@@ -418,7 +424,7 @@ Object.assign(SpiralCalendar.prototype, {
     input.style.pointerEvents = 'none';
     input.style.width = '1px';
     input.style.height = '1px';
-    input.value = calendarEvent.color;
+    input.value = this.getDisplayColorForEvent(calendarEvent);
     
     document.body.appendChild(input);
     input.focus();
@@ -435,7 +441,7 @@ Object.assign(SpiralCalendar.prototype, {
     }
     
     const handleChange = () => {
-      calendarEvent.color = input.value;
+      this.setEventCustomColor(calendarEvent, input.value);
       calendarEvent.lastModified = Date.now();
       // Mark that changes have been made
       this._detailViewHasChanges = true;
@@ -663,6 +669,7 @@ Object.assign(SpiralCalendar.prototype, {
             this.state.calendarColors = {};
           }
           this.state.calendarColors[trimmed] = colorInput.value;
+          this.refreshAutoEventColors({ includeDraft: true });
           this.saveSettingsToStorage();
           
           // Call success callback first
@@ -905,6 +912,7 @@ Object.assign(SpiralCalendar.prototype, {
         delete this.state.calendarColors[oldName];
       }
       this.state.calendarColors[newName] = colorInput.value;
+      this.refreshAutoEventColors({ includeDraft: true });
       this.saveSettingsToStorage();
 
       if (onSuccess) {
@@ -1020,19 +1028,9 @@ Object.assign(SpiralCalendar.prototype, {
         e.stopPropagation(); // Prevent event from bubbling up
         this.selectedEventCalendar = calendarName;
         this.updateEventCalendarDisplay();
-        // If palette is 'calendar', suggest that calendar color (both preview and input)
-        try {
-          if (this.state.colorMode === 'calendar') {
-            const calColor = this.state.calendarColors && this.state.calendarColors[calendarName];
-            if (calColor && colorBox) {
-              const hex = calColor.startsWith('#') ? calColor : this.hslToHex(calColor);
-              colorBox.style.background = hex;
-              if (eventColor) eventColor.value = hex;
-            }
-          } else {
-            if (colorBox) colorBox.style.background = eventColor.value;
-          }
-        } catch (_) {}
+        if (typeof this.refreshAddEventColorSuggestion === 'function') {
+          this.refreshAddEventColorSuggestion();
+        }
         dropdown.remove();
         this.playFeedback();
       });
@@ -1056,6 +1054,9 @@ Object.assign(SpiralCalendar.prototype, {
       this.addNewCalendar((newCalendarName) => {
         this.selectedEventCalendar = newCalendarName;
         this.updateEventCalendarDisplay();
+        if (typeof this.refreshAddEventColorSuggestion === 'function') {
+          this.refreshAddEventColorSuggestion();
+        }
         // Refresh the calendar menu
         const buildCalendarMenu = () => {
           // This function is defined in setupEventInputPanel
@@ -1147,19 +1148,12 @@ Object.assign(SpiralCalendar.prototype, {
         } else {
           // Direct event modification for existing events
           event.calendar = calendarName;
-          // In Calendar Color mode, also suggest/update the color to the calendar's color
-          try {
-            if (this.state.colorMode === 'calendar') {
-              const calColor = this.state.calendarColors && this.state.calendarColors[calendarName];
-              if (calColor) {
-                const hex = calColor.startsWith('#') ? calColor : this.hslToHex(calColor);
-                event.color = hex;
-                // Update persistent color picker UI if present
-                const persistentColorPicker = document.getElementById('persistentColorPicker');
-                if (persistentColorPicker) persistentColorPicker.value = hex;
-              }
-            }
-          } catch (_) {}
+          const updatedColor = this.syncEventAutoColor(event);
+          // Update persistent color picker UI if present
+          const persistentColorPicker = document.getElementById('persistentColorPicker');
+          if (persistentColorPicker) {
+            persistentColorPicker.value = event.colorIsCustom ? updatedColor : this.getDisplayColorForEvent(event);
+          }
           event.lastModified = Date.now();
           // Mark that changes have been made
           this._detailViewHasChanges = true;
@@ -1204,19 +1198,11 @@ Object.assign(SpiralCalendar.prototype, {
         } else {
           // Direct event modification for existing events
           event.calendar = newCalendarName;
-          
-          // In Calendar Color mode, also suggest/update the color to the new calendar's color
-          try {
-            if (this.state.colorMode === 'calendar') {
-              const calColor = this.state.calendarColors && this.state.calendarColors[newCalendarName];
-              if (calColor) {
-                const hex = calColor.startsWith('#') ? calColor : this.hslToHex(calColor);
-                event.color = hex;
-                const persistentColorPicker = document.getElementById('persistentColorPicker');
-                if (persistentColorPicker) persistentColorPicker.value = hex;
-              }
-            }
-          } catch (_) {}
+          const updatedColor = this.syncEventAutoColor(event);
+          const persistentColorPicker = document.getElementById('persistentColorPicker');
+          if (persistentColorPicker) {
+            persistentColorPicker.value = event.colorIsCustom ? updatedColor : this.getDisplayColorForEvent(event);
+          }
 
           event.lastModified = Date.now();
           // Mark that changes have been made

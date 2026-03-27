@@ -31,19 +31,118 @@ Object.assign(SpiralCalendar.prototype, {
     return `hsl(${Math.round(hue)}, ${saturation}%, ${lightness}%)`;
   },
 
-  generateRandomColor(calendarName = null, eventDate = null) {
+  isValidHexColor(value) {
+    return typeof value === 'string' && /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value.trim());
+  },
+
+  normalizeEventColorHex(value, fallback = '#888888') {
+    const raw = typeof value === 'string' ? value.trim() : '';
+    if (!raw) return fallback;
+    if (this.isValidHexColor(raw)) {
+      return raw;
+    }
+    if (/^hsl/i.test(raw)) {
+      try {
+        return this.hslToHex(raw);
+      } catch (_) {}
+    }
+    return fallback;
+  },
+
+  hashEventColorSeed(value) {
+    const text = String(value || '');
+    let hash = 2166136261;
+    for (let i = 0; i < text.length; i++) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+  },
+
+  createEventColorSeed() {
+    return Math.floor(Math.random() * 0x100000000) >>> 0;
+  },
+
+  generateEventColorSeedFromEvent(eventOrSource = null) {
+    if (eventOrSource && typeof eventOrSource === 'object') {
+      const event = eventOrSource;
+      const startIso = event.start instanceof Date
+        ? event.start.toISOString()
+        : String(event.start || '');
+      const endIso = event.end instanceof Date
+        ? event.end.toISOString()
+        : String(event.end || '');
+      const base = event.persistentUID || [
+        event.calendar || 'Home',
+        event.title || '',
+        event.description || '',
+        startIso,
+        endIso
+      ].join('|');
+      return this.hashEventColorSeed(base);
+    }
+    if (eventOrSource !== null && eventOrSource !== undefined) {
+      return this.hashEventColorSeed(eventOrSource);
+    }
+    return this.createEventColorSeed();
+  },
+
+  normalizeEventColorSeed(seed, fallbackSource = null) {
+    if (typeof seed === 'number' && Number.isFinite(seed)) {
+      return seed >>> 0;
+    }
+    if (typeof seed === 'string') {
+      const trimmed = seed.trim();
+      if (trimmed) {
+        const numericSeed = Number(trimmed);
+        if (Number.isFinite(numericSeed)) {
+          return numericSeed >>> 0;
+        }
+        return this.hashEventColorSeed(trimmed);
+      }
+    }
+    return this.generateEventColorSeedFromEvent(fallbackSource);
+  },
+
+  getSeededUnitValue(seed, salt = 0) {
+    let value = (this.normalizeEventColorSeed(seed) ^ (salt >>> 0) ^ 0x9e3779b9) >>> 0;
+    value = Math.imul(value ^ (value >>> 16), 0x7feb352d);
+    value = Math.imul(value ^ (value >>> 15), 0x846ca68b);
+    value = (value ^ (value >>> 16)) >>> 0;
+    return value / 4294967296;
+  },
+
+  getSeededPaletteProfile(seed, fallbackSource = null) {
+    const normalizedSeed = this.normalizeEventColorSeed(seed, fallbackSource);
+    const hue = this.getSeededUnitValue(normalizedSeed, 1) * 360;
+    const saturationUnit = this.getSeededUnitValue(normalizedSeed, 2);
+    const lightnessUnit = this.getSeededUnitValue(normalizedSeed, 3);
+    return {
+      seed: normalizedSeed,
+      hue,
+      saturationUnit,
+      lightnessUnit,
+      randomSaturation: 60 + saturationUnit * 30,
+      randomLightness: 70 + lightnessUnit * 10
+    };
+  },
+
+  generatePaletteColorFromSeed(seed, calendarName = null, eventDate = null) {
     const mode = this.state?.colorMode || 'random';
+    const paletteProfile = this.getSeededPaletteProfile(
+      seed,
+      `${calendarName || 'Home'}|${eventDate instanceof Date ? eventDate.toISOString() : String(eventDate || '')}`
+    );
     if (mode === 'single') {
-      return this.state.singleColor || '#4CAF50';
+      return this.normalizeEventColorHex(this.state.singleColor || '#4CAF50', '#4CAF50');
     }
     if (mode === 'calendar') {
       // Use calendar color if available, otherwise fallback to random
       if (calendarName && this.state.calendarColors && this.state.calendarColors[calendarName]) {
-        return this.state.calendarColors[calendarName];
+        return this.normalizeEventColorHex(this.state.calendarColors[calendarName], '#888888');
       }
       // Fallback to random if calendar color not found
-      const hue = Math.random() * 360;
-      return this.hslToHex(`hsl(${hue}, 70%, 60%)`);
+      return this.hslToHex(`hsl(${paletteProfile.hue}, ${paletteProfile.randomSaturation}%, ${paletteProfile.randomLightness}%)`);
     }
     if (mode === 'colorblind') {
       // Okabe–Ito colorblind-safe qualitative palette (excluding black)
@@ -56,68 +155,139 @@ Object.assign(SpiralCalendar.prototype, {
         '#D55E00', // vermillion
         '#CC79A7'  // reddish purple
       ];
-      return palette[Math.floor(Math.random() * palette.length)];
+      return palette[Math.floor(paletteProfile.saturationUnit * palette.length) % palette.length];
     }
     if (mode === 'seasonal') {
-      return this.generateSeasonalColor(eventDate);
+      return this.normalizeEventColorHex(this.generateSeasonalColor(eventDate), '#888888');
     }
     if (mode === 'saturation') {
-      const hue = Math.random() * 360;
       const saturation = Math.max(0, Math.min(100, Number(this.state?.saturationLevel ?? 80)));
       const lightnessBase = saturation < 15 ? 62 : 58;
       const lightnessRange = saturation < 15 ? 14 : 10;
-      const lightness = lightnessBase + Math.random() * lightnessRange;
-      return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+      const lightness = lightnessBase + paletteProfile.lightnessUnit * lightnessRange;
+      return this.hslToHex(`hsl(${paletteProfile.hue}, ${saturation}%, ${lightness}%)`);
     }
     if (mode === 'monoHue') {
       const hue = this.state.baseHue || 200;
-      const saturation = 60 + Math.random() * 30; // 60-90%
-      const lightness = 60 + Math.random() * 15; // 60-75%
-      return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+      const saturation = 60 + paletteProfile.saturationUnit * 30; // 60-90%
+      const lightness = 60 + paletteProfile.lightnessUnit * 15; // 60-75%
+      return this.hslToHex(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
     }
     if (mode === 'pastel') {
-      const hue = Math.random() * 360;
-      const saturation = 45 + Math.random() * 15; // 45-60%
-      const lightness = 75 + Math.random() * 10; // 75-85%
-      return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+      const saturation = 45 + paletteProfile.saturationUnit * 15; // 45-60%
+      const lightness = 75 + paletteProfile.lightnessUnit * 10; // 75-85%
+      return this.hslToHex(`hsl(${paletteProfile.hue}, ${saturation}%, ${lightness}%)`);
     }
     // default 'random'
-    const hue = Math.random() * 360;
-    const saturation = 60 + Math.random() * 30; // 60-90% saturation
-    const lightness = 70 + Math.random() * 10; // 70-80% lightness
-    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+    return this.hslToHex(`hsl(${paletteProfile.hue}, ${paletteProfile.randomSaturation}%, ${paletteProfile.randomLightness}%)`);
   },
 
-  generateRandomColorForStorage(calendarName = null, eventDate = null) {
-    const mode = this.state?.colorMode || 'random';
-    if (mode === 'calendar') {
-      // Pleasant random color independent of calendar color
-      const hue = Math.random() * 360;
-      return this.hslToHex(`hsl(${hue}, 70%, 60%)`);
+  ensureEventColorMetadata(event) {
+    if (!event || typeof event !== 'object') return event;
+
+    event.colorIsCustom = event.colorIsCustom === true;
+    event.colorSeed = this.normalizeEventColorSeed(event.colorSeed, event);
+    const autoColor = this.generatePaletteColorFromSeed(
+      event.colorSeed,
+      event.calendar || 'Home',
+      event.start instanceof Date ? event.start : new Date(event.start || Date.now())
+    );
+
+    if (event.colorIsCustom) {
+      event.color = this.normalizeEventColorHex(event.color, autoColor);
+      return event;
     }
-    const generated = this.generateRandomColor(calendarName, eventDate);
-    return generated.startsWith('#') ? generated : this.hslToHex(generated);
+
+    event.color = autoColor;
+    return event;
+  },
+
+  createEventColorState(options = {}) {
+    const event = options.event && typeof options.event === 'object' ? options.event : null;
+    const calendarName = options.calendarName || event?.calendar || 'Home';
+    const eventDate = options.eventDate || event?.start || new Date();
+    const seedSource = event || `${calendarName}|${eventDate instanceof Date ? eventDate.toISOString() : String(eventDate || '')}|${Date.now()}|${Math.random()}`;
+    const colorSeed = this.normalizeEventColorSeed(options.colorSeed, seedSource);
+    const manualColor = this.normalizeEventColorHex(options.customColor, '');
+
+    if (manualColor) {
+      return {
+        color: manualColor,
+        colorSeed,
+        colorIsCustom: true
+      };
+    }
+
+    return {
+      color: this.generatePaletteColorFromSeed(colorSeed, calendarName, eventDate),
+      colorSeed,
+      colorIsCustom: false
+    };
+  },
+
+  syncEventAutoColor(event) {
+    if (!event || typeof event !== 'object') {
+      return '#888888';
+    }
+
+    this.ensureEventColorMetadata(event);
+    return event.color;
+  },
+
+  refreshAutoEventColors(options = {}) {
+    const events = Array.isArray(options.events) ? options.events : (this.events || []);
+    let updatedCount = 0;
+    for (const event of events) {
+      const previousColor = event ? event.color : null;
+      const nextColor = this.syncEventAutoColor(event);
+      if (event && previousColor !== nextColor) {
+        updatedCount++;
+      }
+    }
+    if (options.includeDraft && this.draftEvent) {
+      const previousColor = this.draftEvent.color;
+      const nextColor = this.syncEventAutoColor(this.draftEvent);
+      if (previousColor !== nextColor) {
+        updatedCount++;
+      }
+    }
+    return { updatedCount };
+  },
+
+  setEventCustomColor(event, color) {
+    if (!event || typeof event !== 'object') {
+      return '#888888';
+    }
+
+    const fallbackAutoColor = this.generatePaletteColorFromSeed(
+      this.normalizeEventColorSeed(event.colorSeed, event),
+      event.calendar || 'Home',
+      event.start instanceof Date ? event.start : new Date(event.start || Date.now())
+    );
+    event.colorSeed = this.normalizeEventColorSeed(event.colorSeed, event);
+    event.color = this.normalizeEventColorHex(color, fallbackAutoColor);
+    event.colorIsCustom = true;
+    return event.color;
+  },
+
+  generateRandomColor(calendarName = null, eventDate = null) {
+    return this.generatePaletteColorFromSeed(this.createEventColorSeed(), calendarName, eventDate);
+  },
+
+  generateRandomColorForStorage(calendarName = null, eventDate = null, colorSeed = null) {
+    return this.generatePaletteColorFromSeed(
+      colorSeed === null || colorSeed === undefined ? this.createEventColorSeed() : colorSeed,
+      calendarName,
+      eventDate
+    );
   },
 
   getDisplayColorForEvent(event) {
     let finalColor = '#888888';
     try {
-      if (this.state && this.state.colorMode === 'seasonal') {
-        const eventStart = event && event.start ? new Date(event.start) : new Date();
-        const seasonal = this.generateSeasonalColor(eventStart);
-        finalColor = seasonal.startsWith('#') ? seasonal : this.hslToHex(seasonal);
-      } else if (this.state && this.state.colorMode === 'calendar') {
-        const calName = event && ((event.calendar || 'Home').trim());
-        const calColor = this.state.calendarColors && this.state.calendarColors[calName];
-        if (calColor) {
-          finalColor = calColor;
-        } else {
-          const c = event && event.color ? event.color : '#888888';
-          finalColor = c.startsWith('#') ? c : this.hslToHex(c);
-        }
-      } else {
-        const c = event && event.color ? event.color : '#888888';
-        finalColor = c.startsWith('#') ? c : this.hslToHex(c);
+      if (event) {
+        this.ensureEventColorMetadata(event);
+        finalColor = this.normalizeEventColorHex(event.color, '#888888');
       }
     } catch (_) {
     }

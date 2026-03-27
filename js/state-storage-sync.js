@@ -362,11 +362,15 @@ Object.assign(SpiralCalendar.prototype, {
 
   saveEventsToStorage() {
     try {
-      const eventsData = this.events.map(event => ({
-        ...event,
-        start: event.start.toISOString(),
-        end: event.end.toISOString()
-      }));
+      const eventsData = this.events.map(event => {
+        this.ensureEventColorMetadata(event);
+        return {
+          ...event,
+          color: this.getDisplayColorForEvent(event),
+          start: event.start.toISOString(),
+          end: event.end.toISOString()
+        };
+      });
       localStorage.setItem('spiralCalendarEvents', JSON.stringify(eventsData));
       if (typeof this.recordStudyEventSnapshotDiff === 'function') {
         this.recordStudyEventSnapshotDiff();
@@ -399,6 +403,7 @@ Object.assign(SpiralCalendar.prototype, {
           if (!ev.lastAddedToCalendar) {
             ev.lastAddedToCalendar = null;
           }
+          this.ensureEventColorMetadata(ev);
         });
         this._eventsVersion++; // Trigger layout cache rebuild
         // Draw the spiral immediately with loaded events
@@ -2556,14 +2561,17 @@ Object.assign(SpiralCalendar.prototype, {
     segmentStart.setUTCMinutes(0, 0, 0);
     const segmentEnd = new Date(segmentStart);
     segmentEnd.setUTCHours(segmentStart.getUTCHours() + 1);
-    const randomColor = this.generateRandomColor('Home', segmentStart);
+    const colorState = this.createEventColorState({
+      calendarName: 'Home',
+      eventDate: segmentStart
+    });
 
     return {
       title: '',
       description: '',
       start: new Date(segmentStart),
       end: new Date(segmentEnd),
-      color: randomColor.startsWith('#') ? randomColor : this.hslToHex(randomColor),
+      ...colorState,
       calendar: 'Home',
       isDraft: true,
       segmentId

@@ -949,43 +949,14 @@ Object.assign(SpiralCalendar.prototype, {
     };
     const updateAddEventColorPreview = () => {
       try {
+        if (typeof this.refreshAddEventColorSuggestion === 'function') {
+          this.refreshAddEventColorSuggestion();
+          return;
+        }
         const colorBox = document.getElementById('colorBox');
-        const eventCalendarDisplay = document.getElementById('eventCalendarDisplay');
         const eventColor = document.getElementById('eventColor');
-        if (colorBox && eventCalendarDisplay && eventColor) {
-          if (this.state.colorMode === 'single') {
-            const singleColor = this.state.singleColor || '#4CAF50';
-            colorBox.style.background = singleColor;
-            eventColor.value = singleColor;
-            return;
-          }
-          if (this.state.colorMode === 'seasonal') {
-            let seasonalDate = new Date();
-            try {
-              const eventStartInput = document.getElementById('eventStart');
-              if (eventStartInput && eventStartInput.value) {
-                seasonalDate = (typeof parseDateTimeLocalAsUTC === 'function')
-                  ? parseDateTimeLocalAsUTC(eventStartInput.value)
-                  : new Date(eventStartInput.value);
-              }
-            } catch (_) {}
-            const seasonalColor = typeof this.generateSeasonalColor === 'function'
-              ? this.generateSeasonalColor(seasonalDate)
-              : '#4CAF50';
-            const seasonalHex = seasonalColor.startsWith('#') ? seasonalColor : this.hslToHex(seasonalColor);
-            colorBox.style.background = seasonalHex;
-            eventColor.value = seasonalHex;
-            return;
-          }
-          const calName = (this.selectedEventCalendar || 'Home').trim();
-          const calColor = this.state.calendarColors && this.state.calendarColors[calName];
-          if (this.state.colorMode === 'calendar' && calColor) {
-            let hex = calColor.startsWith('#') ? calColor : this.hslToHex(calColor);
-            colorBox.style.background = hex;
-            eventColor.value = hex;
-          } else {
-            colorBox.style.background = eventColor.value;
-          }
+        if (colorBox && eventColor) {
+          colorBox.style.background = eventColor.value;
         }
       } catch (_) {}
     };
@@ -1006,6 +977,7 @@ Object.assign(SpiralCalendar.prototype, {
     const applyColorMode = (mode) => {
       if (!mode) return;
       this.state.colorMode = mode;
+      this.refreshAutoEventColors({ includeDraft: true });
       syncColorModePickerUI();
       this.drawSpiral();
       this.saveSettingsToStorage();
@@ -1036,6 +1008,7 @@ Object.assign(SpiralCalendar.prototype, {
       singleColorInput.value = this.state.singleColor || '#4CAF50';
       singleColorInput.addEventListener('input', (e) => {
         this.state.singleColor = e.target.value;
+        this.refreshAutoEventColors({ includeDraft: true });
         renderColorModePreviews();
         updateAddEventColorPreview();
         this.drawSpiral();
@@ -1049,6 +1022,7 @@ Object.assign(SpiralCalendar.prototype, {
       saturationSlider.addEventListener('input', (e) => {
         const v = Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0));
         this.state.saturationLevel = v;
+        this.refreshAutoEventColors({ includeDraft: true });
         saturationVal.textContent = String(v);
         renderColorModePreviews();
         updateAddEventColorPreview();
@@ -1062,6 +1036,7 @@ Object.assign(SpiralCalendar.prototype, {
       baseHueSlider.addEventListener('input', (e) => {
         const v = parseInt(e.target.value, 10) || 0;
         this.state.baseHue = v;
+        this.refreshAutoEventColors({ includeDraft: true });
         baseHueVal.textContent = String(v);
         renderColorModePreviews();
         updateAddEventColorPreview();

@@ -103,28 +103,42 @@ Object.assign(SpiralCalendar.prototype, {
       } catch (_) {}
       return '#4CAF50';
     };
-    const applyAddEventPaletteSuggestion = () => {
+    let addEventColorSeed = this.createEventColorSeed();
+    let addEventColorManualOverride = false;
+    const getAddEventSuggestedColor = () => {
+      const calendarName = (this.selectedEventCalendar || this.state.selectedCalendar || 'Home').trim();
+      if (this.state.colorMode === 'calendar') {
+        const calColor = this.state.calendarColors && this.state.calendarColors[calendarName];
+        return calColor
+          ? this.normalizeEventColorHex(calColor, '#888888')
+          : this.generateRandomColorForStorage(calendarName, getAddPanelStartDate(), addEventColorSeed);
+      }
+      if (this.state.colorMode === 'seasonal') {
+        return getSeasonalSuggestedColor();
+      }
+      return this.generateRandomColorForStorage(calendarName, getAddPanelStartDate(), addEventColorSeed);
+    };
+    const applyAddEventPaletteSuggestion = (options = {}) => {
       try {
-        if (this.state.colorMode === 'calendar') {
-          const calName = (this.selectedEventCalendar || 'Home').trim();
-          const calColor = this.state.calendarColors && this.state.calendarColors[calName];
-          const hex = calColor
-            ? (calColor.startsWith('#') ? calColor : this.hslToHex(calColor))
-            : this.generateRandomColorForStorage(this.state.selectedCalendar || 'Home');
-          eventColor.value = hex;
-          colorBox.style.background = hex;
+        if (options.resetSeed) {
+          addEventColorSeed = this.createEventColorSeed();
+        }
+        if (options.resetManual || options.forceAuto) {
+          addEventColorManualOverride = false;
+        }
+        if (addEventColorManualOverride && !options.forceAuto) {
+          colorBox.style.background = eventColor.value;
           return;
         }
-        if (this.state.colorMode === 'seasonal') {
-          const seasonalHex = getSeasonalSuggestedColor();
-          eventColor.value = seasonalHex;
-          colorBox.style.background = seasonalHex;
-          return;
-        }
-        colorBox.style.background = eventColor.value;
+        const suggestedColor = getAddEventSuggestedColor();
+        eventColor.value = suggestedColor;
+        colorBox.style.background = suggestedColor;
       } catch (_) {
         colorBox.style.background = eventColor.value;
       }
+    };
+    this.refreshAddEventColorSuggestion = (options = {}) => {
+      applyAddEventPaletteSuggestion(options);
     };
     const normalizeHexColor = (value, fallback = '#888888') => {
       const color = typeof value === 'string' ? value.trim() : '';
@@ -2075,14 +2089,6 @@ Object.assign(SpiralCalendar.prototype, {
         } else if (line === 'END:VEVENT') {
           inEvent = false;
           if (currentEvent && currentEvent.start && currentEvent.end) {
-            // Preserve color if provided; otherwise assign a random color
-            if (!currentEvent.color) {
-              const eventCalendar = currentEvent.calendar || 'Home';
-              const randomColor = this.generateRandomColor(eventCalendar, currentEvent.start);
-              // If generateRandomColor returns hex (single mode), keep it;
-              // if it returns HSL, convert to hex for consistency
-              currentEvent.color = randomColor.startsWith('#') ? randomColor : this.hslToHex(randomColor);
-            }
             // Set default calendar if not provided
             if (!currentEvent.calendar) {
               currentEvent.calendar = 'Home';
@@ -2136,6 +2142,7 @@ Object.assign(SpiralCalendar.prototype, {
               case 'X-SPIRAL-COLOR':
                 // Accept hex, rgb(), or hsl(); if hsl, convert to hex for consistency
                 {
+                  currentEvent.colorIsCustom = true;
                   const raw = value.trim();
                   if (/^hsl/i.test(raw)) {
                     try {
@@ -2161,7 +2168,7 @@ Object.assign(SpiralCalendar.prototype, {
     const toValidDate = (value) => {
       return parseEventDateValue(value);
     };
-    const normalizeImportedColor = (value, calendar, startDate) => {
+    const normalizeImportedColor = (value) => {
       if (typeof value === 'string') {
         const raw = value.trim();
         if (raw) {
@@ -2176,10 +2183,7 @@ Object.assign(SpiralCalendar.prototype, {
           }
         }
       }
-      const fallbackColor = this.generateRandomColor(calendar || 'Home', startDate || new Date());
-      return normalizeHexColor(
-        fallbackColor.startsWith('#') ? fallbackColor : this.hslToHex(fallbackColor)
-      );
+      return '';
     };
     const normalizeImportedEvent = (event) => {
       if (!event || typeof event !== 'object') return null;
@@ -2199,6 +2203,13 @@ Object.assign(SpiralCalendar.prototype, {
       const persistentUID = (typeof event.persistentUID === 'string' && event.persistentUID.trim())
         ? event.persistentUID.trim()
         : '';
+      const importedColor = normalizeImportedColor(event.color);
+      const colorState = this.createEventColorState({
+        calendarName: calendar,
+        eventDate: start,
+        colorSeed: event.colorSeed,
+        customColor: event.colorIsCustom === true ? importedColor : null
+      });
 
       const normalized = {
         ...event,
@@ -2207,7 +2218,7 @@ Object.assign(SpiralCalendar.prototype, {
         start,
         end,
         calendar,
-        color: normalizeImportedColor(event.color, calendar, start),
+        ...colorState,
         addedToCalendar: !!event.addedToCalendar,
         lastModified: Number.isFinite(Number(event.lastModified))
           ? Number(event.lastModified)
@@ -2780,6 +2791,7 @@ Object.assign(SpiralCalendar.prototype, {
           if (eventCalendarDisplay) {
             this.selectedEventCalendar = newCalendarName;
             this.updateEventCalendarDisplay();
+            applyAddEventPaletteSuggestion();
           }
           renderEventList();
           this.drawSpiral();
@@ -3061,13 +3073,16 @@ Object.assign(SpiralCalendar.prototype, {
             }
           }
 
-          const randomColor = this.generateRandomColor('Random', startDate);
+          const colorState = this.createEventColorState({
+            calendarName: 'Random',
+            eventDate: startDate
+          });
           const ev = {
             title: `Random Event ${i + 1}`,
             description: '',
             start: startDate,
             end: endDate,
-            color: randomColor.startsWith('#') ? randomColor : this.hslToHex(randomColor),
+            ...colorState,
             calendar: 'Random',
             addedToCalendar: false,
             lastModified: Date.now(),
@@ -3204,12 +3219,7 @@ Object.assign(SpiralCalendar.prototype, {
       endTime.setHours(nextHour.getHours() + 1); // Add 1 hour in local time
       eventEnd.value = formatDateTimeLocalForInput(endTime);
       if (typeof syncEventBoxes === 'function') syncEventBoxes();
-      if (this.state.colorMode === 'seasonal') {
-        eventColor.value = getSeasonalSuggestedColor();
-      } else {
-        eventColor.value = this.generateRandomColorForStorage(this.state.selectedCalendar || 'Home', getAddPanelStartDate());
-      }
-      applyAddEventPaletteSuggestion();
+      applyAddEventPaletteSuggestion({ resetSeed: true, resetManual: true, forceAuto: true });
       eventTitle.value = '';
       eventDescription.value = '';
       titleCharCount.textContent = '0';
@@ -3312,16 +3322,22 @@ Object.assign(SpiralCalendar.prototype, {
       const description = eventDescription.value.trim();
       const startDate = eventStart.value;
       const endDate = eventEnd.value;
-      // Store exactly what the user sees in the color input
-      let color = eventColor.value;
       const chosenCalendar = this.selectedEventCalendar;
       if (startDate && endDate) {
+        const parsedStartDate = parseDateTimeLocalAsUTC(startDate);
+        const parsedEndDate = parseDateTimeLocalAsUTC(endDate);
+        const colorState = this.createEventColorState({
+          calendarName: chosenCalendar,
+          eventDate: parsedStartDate,
+          colorSeed: addEventColorSeed,
+          customColor: addEventColorManualOverride ? eventColor.value : null
+        });
         const event = {
           title: title || 'Untitled Event',
           description: description || '',
-          start: parseDateTimeLocalAsUTC(startDate),
-          end: parseDateTimeLocalAsUTC(endDate),
-        color: color,
+          start: parsedStartDate,
+          end: parsedEndDate,
+          ...colorState,
           calendar: chosenCalendar,
           addedToCalendar: false,
           lastModified: Date.now(),
@@ -3329,9 +3345,9 @@ Object.assign(SpiralCalendar.prototype, {
           persistentUID: generateEventUID({
             title: title || 'Untitled Event',
             description: description || '',
-            start: parseDateTimeLocalAsUTC(startDate),
-            end: parseDateTimeLocalAsUTC(endDate),
-        calendar: chosenCalendar
+            start: parsedStartDate,
+            end: parsedEndDate,
+            calendar: chosenCalendar
           })
         };
         this.runWithStudyEventSource('add_panel', () => {
@@ -3347,12 +3363,7 @@ Object.assign(SpiralCalendar.prototype, {
         titleCharCount.textContent = '0';
         descCharCount.textContent = '0';
         // Generate new suggested color for next event
-        if (this.state.colorMode === 'seasonal') {
-          eventColor.value = getSeasonalSuggestedColor();
-        } else {
-          eventColor.value = this.generateRandomColorForStorage(this.state.selectedCalendar || 'Home', getAddPanelStartDate());
-        }
-        applyAddEventPaletteSuggestion();
+        applyAddEventPaletteSuggestion({ resetSeed: true, resetManual: true, forceAuto: true });
         // Reset auto-activated settings
         this.resetAutoActivatedSettings();
         
@@ -3367,6 +3378,7 @@ Object.assign(SpiralCalendar.prototype, {
     eventColor.addEventListener('input', () => {
       // If user picks a color, reflect it unless we are in 'calendar' palette
       if (this.state.colorMode === 'calendar' || this.state.colorMode === 'seasonal') {
+        addEventColorManualOverride = false;
         // Keep showing computed palette color as preview in fixed palette modes
         try {
           if (this.state.colorMode === 'seasonal') {
@@ -3379,9 +3391,10 @@ Object.assign(SpiralCalendar.prototype, {
             colorBox.style.background = calColor ? (calColor.startsWith('#') ? calColor : this.hslToHex(calColor)) : eventColor.value;
           }
         } catch (_) {
-      colorBox.style.background = eventColor.value;
+          colorBox.style.background = eventColor.value;
         }
       } else {
+        addEventColorManualOverride = true;
         colorBox.style.background = eventColor.value;
       }
     });
@@ -3435,9 +3448,7 @@ Object.assign(SpiralCalendar.prototype, {
         const endTimeStr = `${endHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
       eventEnd.value = `${endDateStr}T${endTimeStr}`;
       if (typeof syncEventBoxes === 'function') syncEventBoxes();
-      if (this.state.colorMode === 'seasonal') {
-        applyAddEventPaletteSuggestion();
-      }
+      applyAddEventPaletteSuggestion();
     });
     // Prevent end date from being set earlier than start date
     eventEnd.addEventListener('change', (e) => {

@@ -852,6 +852,8 @@ Object.assign(SpiralCalendar.prototype, {
                     start: new Date(btn.event.start),
                     end: new Date(btn.event.end),
                     color: btn.event.color,
+                    colorSeed: btn.event.colorSeed,
+                    colorIsCustom: !!btn.event.colorIsCustom,
                     calendar: btn.event.calendar || 'Home',
                     addedToCalendar: false,
                     lastModified: Date.now(),
