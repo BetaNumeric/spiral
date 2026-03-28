@@ -69,6 +69,7 @@ Object.assign(SpiralCalendar.prototype, {
       
       // Load settings before setting up event handlers
       this.loadSettingsFromStorage();
+      this.applyUrlSettingsOverrides();
       
       this.setupEventHandlers();
       this.setupCanvas();

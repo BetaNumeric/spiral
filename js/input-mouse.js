@@ -328,7 +328,6 @@ Object.assign(SpiralCalendar.prototype, {
       // Handle drag rotation
       if (this.touchState && this.touchState.joystickActive && this.touchState.joystickTouchId === 'mouse') {
         this.updateMouseJoystick(mouseX, mouseY);
-        this.drawSpiral();
         this.refreshCanvasCursor();
         return;
       }

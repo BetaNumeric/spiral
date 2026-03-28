@@ -309,6 +309,12 @@ class SpiralCalendar {
         revealedHourSegmentKeys: []
       };
 
+      this.urlSettingsOverrides = {
+        active: false,
+        forcedKeys: [],
+        baseSettings: null
+      };
+
       this.modeTransitionState = {
         active: false,
         progress: 0,

@@ -415,80 +415,287 @@ Object.assign(SpiralCalendar.prototype, {
     return false;
   },
 
+  getLayoutPresetFields() {
+    return [
+      'dayLabelShowWeekday',
+      'hourNumbersStartAtOne',
+      'showEverySixthHour',
+      'hourNumbersPosition',
+      'showArcLines',
+      'dayLabelWeekdayOnOutermost',
+      'dayLabelMonthOnOutermost',
+      'dayLabelYearOnOutermost',
+      'dayLabelUseShortNames',
+      'dayLabelUseShortMonth',
+      'dayLabelMonthOnFirstOnly',
+      'dayLabelYearOnFirstOnly',
+      'dayLabelUseOrdinal',
+      'showAllEventBoundaryStrokes',
+      'showNoonLines',
+      'showSixAmPmLines'
+    ];
+  },
+
+  buildSettingsStoragePayload() {
+    const persistedTimeDisplay = isMobileDevice()
+      ? this.mobileOrientationState.timeDisplayWasEnabled
+      : (this.state.originalTimeDisplay !== null ? this.state.originalTimeDisplay : this.state.showTimeDisplay);
+
+    return {
+      days: this.state.days,
+      // Only save original values if auto-activation is active, otherwise save current values
+      radiusExponent: this.state.originalRadiusExponent !== null ? this.state.originalRadiusExponent : this.state.radiusExponent,
+      rotation: this.state.rotation,
+      staticMode: this.state.staticMode,
+      showHourNumbers: this.state.showHourNumbers,
+      showDayNumbers: this.state.showDayNumbers,
+      showTooltip: this.state.showTooltip,
+      hourNumbersOutward: this.state.hourNumbersOutward,
+      // Only save original value if auto-activation is active, otherwise save current value
+      hourNumbersInsideSegment: this.state.autoInsideSegmentNumbers ? false : this.state.hourNumbersInsideSegment,
+      hourNumbersUpright: this.state.hourNumbersUpright,
+      dayNumbersUpright: this.state.dayNumbersUpright,
+      showEverySixthHour: this.state.showEverySixthHour,
+      hourNumbersStartAtOne: this.state.hourNumbersStartAtOne,
+      hourNumbersPosition: this.state.hourNumbersPosition,
+      showNightOverlay: this.state.showNightOverlay,
+      useLocationTimezone: this.state.useLocationTimezone,
+      locationTimezoneId: this.state.locationTimezoneId,
+      nightOverlayLat: this.state.nightOverlayLat,
+      nightOverlayLng: this.state.nightOverlayLng,
+      showDayOverlay: this.state.showDayOverlay,
+      showGradientOverlay: this.state.showGradientOverlay,
+      showTimeDisplay: persistedTimeDisplay,
+      showSegmentEdges: this.state.showSegmentEdges,
+      showArcLines: this.state.showArcLines,
+      overlayStackMode: this.state.overlayStackMode,
+      showEventBoundaryStrokes: this.state.showEventBoundaryStrokes,
+      showAllEventBoundaryStrokes: this.state.showAllEventBoundaryStrokes,
+      audioFeedbackEnabled: this.state.audioFeedbackEnabled,
+      darkMode: this.state.darkMode,
+      calendars: this.state.calendars.slice(),
+      selectedCalendar: this.state.selectedCalendar,
+      visibleCalendars: this.state.visibleCalendars.slice(),
+      calendarColors: JSON.parse(JSON.stringify(this.state.calendarColors)),
+      colorMode: this.state.colorMode,
+      paletteAffectsCustomColors: this.state.paletteAffectsCustomColors,
+      saturationLevel: this.state.saturationLevel,
+      baseHue: this.state.baseHue,
+      singleColor: this.state.singleColor,
+      dayLabelShowWeekday: this.state.dayLabelShowWeekday,
+      dayLabelShowMonth: this.state.dayLabelShowMonth,
+      dayLabelShowYear: this.state.dayLabelShowYear,
+      dayLabelWeekdayOnOutermost: this.state.dayLabelWeekdayOnOutermost,
+      dayLabelMonthOnOutermost: this.state.dayLabelMonthOnOutermost,
+      dayLabelYearOnOutermost: this.state.dayLabelYearOnOutermost,
+      dayLabelUseShortNames: this.state.dayLabelUseShortNames,
+      dayLabelUseShortMonth: this.state.dayLabelUseShortMonth,
+      dayLabelUseShortYear: this.state.dayLabelUseShortYear,
+      dayLabelMonthOnFirstOnly: this.state.dayLabelMonthOnFirstOnly,
+      dayLabelYearOnFirstOnly: this.state.dayLabelYearOnFirstOnly,
+      dayLabelUseOrdinal: this.state.dayLabelUseOrdinal,
+      // Dev mode line toggles
+      showMonthLines: this.state.showMonthLines,
+      showMidnightLines: this.state.showMidnightLines,
+      showNoonLines: this.state.showNoonLines,
+      showSixAmPmLines: this.state.showSixAmPmLines,
+      enableLongPressJoystick: this.state.enableLongPressJoystick,
+      detailViewAutoCircleMode: this.state.detailViewAutoCircleMode,
+      detailViewAutoZoomEnabled: this.state.detailViewAutoZoomEnabled,
+      detailViewAutoZoomCoils: this.state.detailViewAutoZoomCoils,
+      detailViewCloseButtonEnabled: this.state.detailViewCloseButtonEnabled,
+      detailViewCloseButtonAlignToSegment: this.state.detailViewCloseButtonAlignToSegment,
+      // Overlay opacity values
+      nightOverlayOpacity: this.state.nightOverlayOpacity,
+      dayOverlayOpacity: this.state.dayOverlayOpacity,
+      gradientOverlayOpacity: this.state.gradientOverlayOpacity,
+    };
+  },
+
+  setDarkModeEnabled(enabled, options = {}) {
+    const shouldPersist = options.persist !== false;
+    const shouldRedraw = options.redraw !== false;
+    const shouldSyncControls = options.syncControls !== false;
+
+    this.state.darkMode = !!enabled;
+    try {
+      document.body.classList.toggle('dark-mode', this.state.darkMode);
+    } catch (_) {}
+
+    if (shouldSyncControls) {
+      const darkModeToggle = document.getElementById('darkModeToggle');
+      if (darkModeToggle) {
+        darkModeToggle.checked = this.state.darkMode;
+      }
+    }
+
+    this.updateThemeColor();
+
+    if (shouldRedraw) {
+      this.drawSpiral();
+    }
+    if (shouldPersist) {
+      this.saveSettingsToStorage();
+    }
+
+    if (typeof window.renderEventList === 'function') {
+      window.renderEventList();
+    }
+    if (typeof updateLocationButtonIcons === 'function') {
+      updateLocationButtonIcons();
+    }
+
+    const audioFeedbackIcon = document.getElementById('audioFeedbackIcon');
+    if (audioFeedbackIcon && typeof updateAudioIcon === 'function') {
+      updateAudioIcon(audioFeedbackIcon, this.state.audioFeedbackEnabled);
+    }
+  },
+
+  applyLayoutPreset(preset, options = {}) {
+    const normalizedPreset = typeof preset === 'string' ? preset.trim().toLowerCase() : '';
+    const validPresets = new Set(['minimal', 'default', 'complex']);
+    if (!validPresets.has(normalizedPreset)) {
+      return [];
+    }
+
+    const shouldPersist = options.persist !== false;
+    const shouldRedraw = options.redraw !== false;
+    const shouldSyncControls = options.syncControls !== false;
+    const shouldResetSelect = options.resetSelect === true;
+    const affectedFields = this.getLayoutPresetFields();
+
+    affectedFields.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(this.defaultSettings, key)) {
+        this.state[key] = this.defaultSettings[key];
+      }
+    });
+
+    if (normalizedPreset === 'minimal') {
+      this.state.hourNumbersStartAtOne = true;
+      this.state.showEverySixthHour = true;
+      this.state.hourNumbersPosition = 1;
+      this.state.showArcLines = false;
+      this.state.dayLabelShowWeekday = false;
+      this.state.dayLabelWeekdayOnOutermost = true;
+    } else if (normalizedPreset === 'complex') {
+      this.state.dayLabelShowWeekday = true;
+      this.state.dayLabelWeekdayOnOutermost = false;
+      this.state.dayLabelUseShortNames = false;
+      this.state.hourNumbersStartAtOne = true;
+      this.state.hourNumbersPosition = 0;
+      this.state.dayLabelUseShortMonth = false;
+      this.state.dayLabelMonthOnFirstOnly = false;
+      this.state.dayLabelYearOnFirstOnly = false;
+      this.state.dayLabelUseOrdinal = true;
+      this.state.showAllEventBoundaryStrokes = true;
+      this.state.showNoonLines = true;
+      this.state.showSixAmPmLines = true;
+    }
+
+    if (shouldSyncControls && typeof this.syncAllUIControls === 'function') {
+      this.syncAllUIControls();
+    }
+    if (shouldRedraw) {
+      this.drawSpiral();
+    }
+    if (shouldPersist) {
+      this.saveSettingsToStorage();
+    }
+
+    if (shouldResetSelect) {
+      const layoutPresetSelect = document.getElementById('layoutPresetSelect');
+      if (layoutPresetSelect) {
+        setTimeout(() => {
+          layoutPresetSelect.value = '';
+        }, 300);
+      }
+    }
+
+    return affectedFields;
+  },
+
+  getUrlSettingsOverrides() {
+    if (typeof window === 'undefined') return null;
+
+    const params = new URLSearchParams(window.location.search);
+    const rawTheme = params.get('theme') ?? params.get('darkMode');
+    const rawPreset = params.get('preset') ?? params.get('layoutPreset');
+
+    const parseBooleanOverride = (value) => {
+      if (typeof value !== 'string') return null;
+      const normalized = value.trim().toLowerCase();
+      if (!normalized) return null;
+      if (['1', 'true', 'on', 'yes', 'dark'].includes(normalized)) return true;
+      if (['0', 'false', 'off', 'no', 'light'].includes(normalized)) return false;
+      return null;
+    };
+
+    const darkMode = parseBooleanOverride(rawTheme);
+    const preset = typeof rawPreset === 'string' ? rawPreset.trim().toLowerCase() : '';
+    const layoutPreset = ['minimal', 'default', 'complex'].includes(preset) ? preset : null;
+
+    if (darkMode === null && !layoutPreset) {
+      return null;
+    }
+
+    return {
+      darkMode,
+      layoutPreset
+    };
+  },
+
+  applyUrlSettingsOverrides() {
+    const overrides = this.getUrlSettingsOverrides();
+    if (!overrides) {
+      this.urlSettingsOverrides = {
+        active: false,
+        forcedKeys: [],
+        baseSettings: null
+      };
+      return [];
+    }
+
+    const baseSettings = this.buildSettingsStoragePayload();
+    const forcedKeys = [];
+
+    if (typeof overrides.darkMode === 'boolean') {
+      this.setDarkModeEnabled(overrides.darkMode, {
+        persist: false,
+        redraw: false,
+        syncControls: false
+      });
+      forcedKeys.push('darkMode');
+    }
+
+    if (overrides.layoutPreset) {
+      forcedKeys.push(...this.applyLayoutPreset(overrides.layoutPreset, {
+        persist: false,
+        redraw: false,
+        syncControls: false
+      }));
+    }
+
+    const uniqueForcedKeys = Array.from(new Set(forcedKeys));
+    this.urlSettingsOverrides = {
+      active: uniqueForcedKeys.length > 0,
+      forcedKeys: uniqueForcedKeys,
+      baseSettings
+    };
+
+    return uniqueForcedKeys;
+  },
+
   saveSettingsToStorage() {
     try {
-      const persistedTimeDisplay = isMobileDevice()
-        ? this.mobileOrientationState.timeDisplayWasEnabled
-        : (this.state.originalTimeDisplay !== null ? this.state.originalTimeDisplay : this.state.showTimeDisplay);
-      const settingsToSave = {
-        days: this.state.days,
-        // Only save original values if auto-activation is active, otherwise save current values
-        radiusExponent: this.state.originalRadiusExponent !== null ? this.state.originalRadiusExponent : this.state.radiusExponent,
-        rotation: this.state.rotation,
-        staticMode: this.state.staticMode,
-        showHourNumbers: this.state.showHourNumbers,
-        showDayNumbers: this.state.showDayNumbers,
-        showTooltip: this.state.showTooltip,
-        hourNumbersOutward: this.state.hourNumbersOutward,
-        // Only save original value if auto-activation is active, otherwise save current value
-        hourNumbersInsideSegment: this.state.autoInsideSegmentNumbers ? false : this.state.hourNumbersInsideSegment,
-        hourNumbersUpright: this.state.hourNumbersUpright,
-        dayNumbersUpright: this.state.dayNumbersUpright,
-        showEverySixthHour: this.state.showEverySixthHour,
-        hourNumbersStartAtOne: this.state.hourNumbersStartAtOne,
-        hourNumbersPosition: this.state.hourNumbersPosition,
-        showNightOverlay: this.state.showNightOverlay,
-        useLocationTimezone: this.state.useLocationTimezone,
-        locationTimezoneId: this.state.locationTimezoneId,
-        nightOverlayLat: this.state.nightOverlayLat,
-        nightOverlayLng: this.state.nightOverlayLng,
-        showDayOverlay: this.state.showDayOverlay,
-        showGradientOverlay: this.state.showGradientOverlay,
-        showTimeDisplay: persistedTimeDisplay,
-        showSegmentEdges: this.state.showSegmentEdges,
-        showArcLines: this.state.showArcLines,
-        overlayStackMode: this.state.overlayStackMode,
-        showEventBoundaryStrokes: this.state.showEventBoundaryStrokes,
-        showAllEventBoundaryStrokes: this.state.showAllEventBoundaryStrokes,
-        audioFeedbackEnabled: this.state.audioFeedbackEnabled,
-        darkMode: this.state.darkMode,
-        calendars: this.state.calendars,
-        selectedCalendar: this.state.selectedCalendar,
-        visibleCalendars: this.state.visibleCalendars,
-        calendarColors: this.state.calendarColors,
-        colorMode: this.state.colorMode,
-        paletteAffectsCustomColors: this.state.paletteAffectsCustomColors,
-        saturationLevel: this.state.saturationLevel,
-        baseHue: this.state.baseHue,
-        singleColor: this.state.singleColor,
-        dayLabelShowWeekday: this.state.dayLabelShowWeekday,
-        dayLabelShowMonth: this.state.dayLabelShowMonth,
-        dayLabelShowYear: this.state.dayLabelShowYear,
-        dayLabelWeekdayOnOutermost: this.state.dayLabelWeekdayOnOutermost,
-        dayLabelMonthOnOutermost: this.state.dayLabelMonthOnOutermost,
-        dayLabelYearOnOutermost: this.state.dayLabelYearOnOutermost,
-        dayLabelUseShortNames: this.state.dayLabelUseShortNames,
-        dayLabelUseShortMonth: this.state.dayLabelUseShortMonth,
-        dayLabelUseShortYear: this.state.dayLabelUseShortYear,
-        dayLabelMonthOnFirstOnly: this.state.dayLabelMonthOnFirstOnly,
-        dayLabelYearOnFirstOnly: this.state.dayLabelYearOnFirstOnly,
-        dayLabelUseOrdinal: this.state.dayLabelUseOrdinal,
-        // Dev mode line toggles
-        showMonthLines: this.state.showMonthLines,
-        showMidnightLines: this.state.showMidnightLines,
-        showNoonLines: this.state.showNoonLines,
-        showSixAmPmLines: this.state.showSixAmPmLines,
-        enableLongPressJoystick: this.state.enableLongPressJoystick,
-        detailViewAutoCircleMode: this.state.detailViewAutoCircleMode,
-        detailViewAutoZoomEnabled: this.state.detailViewAutoZoomEnabled,
-        detailViewAutoZoomCoils: this.state.detailViewAutoZoomCoils,
-        detailViewCloseButtonEnabled: this.state.detailViewCloseButtonEnabled,
-        detailViewCloseButtonAlignToSegment: this.state.detailViewCloseButtonAlignToSegment,
-        // Overlay opacity values
-        nightOverlayOpacity: this.state.nightOverlayOpacity,
-        dayOverlayOpacity: this.state.dayOverlayOpacity,
-        gradientOverlayOpacity: this.state.gradientOverlayOpacity,
-      };
+      const settingsToSave = this.buildSettingsStoragePayload();
+      const urlSettingsOverrides = this.urlSettingsOverrides;
+      if (urlSettingsOverrides && urlSettingsOverrides.active && urlSettingsOverrides.baseSettings) {
+        urlSettingsOverrides.forcedKeys.forEach((key) => {
+          if (Object.prototype.hasOwnProperty.call(urlSettingsOverrides.baseSettings, key)) {
+            settingsToSave[key] = urlSettingsOverrides.baseSettings[key];
+          }
+        });
+      }
       localStorage.setItem('spiralCalendarSettings', JSON.stringify(settingsToSave));
       if (typeof this.recordStudySettingsSnapshotDiff === 'function') {
         this.recordStudySettingsSnapshotDiff(settingsToSave);

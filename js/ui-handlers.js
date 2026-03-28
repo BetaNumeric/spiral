@@ -73,69 +73,7 @@ Object.assign(SpiralCalendar.prototype, {
         layoutPresetSelect.addEventListener('change', (e) => {
           const preset = e.target.value;
           if (!preset) return;
-
-          // First, reset all affected layout fields to defaults as a baseline
-          const fieldsToReset = [
-            'hourNumbersStartAtOne',
-            'showEverySixthHour',
-            'hourNumbersPosition',
-            'showArcLines',
-            'dayLabelWeekdayOnOutermost',
-            'dayLabelMonthOnOutermost',
-            'dayLabelYearOnOutermost',
-            'dayLabelUseShortNames',
-            'dayLabelUseShortMonth',
-            'dayLabelMonthOnFirstOnly',
-            'dayLabelYearOnFirstOnly',
-            'dayLabelUseOrdinal',
-            'showAllEventBoundaryStrokes',
-            'showNoonLines',
-            'showSixAmPmLines'
-          ];
-          
-          fieldsToReset.forEach(key => {
-            if (this.defaultSettings.hasOwnProperty(key)) {
-              this.state[key] = this.defaultSettings[key];
-            }
-          });
-
-          // Apply specific overrides
-          if (preset === 'minimal') {
-            this.state.hourNumbersStartAtOne = true;
-            this.state.showEverySixthHour = true;
-            this.state.hourNumbersPosition = 1;
-            this.state.showArcLines = false;
-            this.state.dayLabelShowWeekday = false;
-            this.state.dayLabelWeekdayOnOutermost = true;
-          } else if (preset === 'default') {
-            this.state.dayLabelShowWeekday = true;
-            this.state.dayLabelWeekdayOnOutermost = false;
-          } else if (preset === 'complex') {
-            this.state.dayLabelShowWeekday = true;
-            this.state.dayLabelWeekdayOnOutermost = false;
-            this.state.dayLabelUseShortNames = false;
-            this.state.hourNumbersStartAtOne = true;
-            this.state.hourNumbersPosition = 0;
-            this.state.dayLabelUseShortMonth = false;
-            this.state.dayLabelMonthOnFirstOnly = false;
-            this.state.dayLabelYearOnFirstOnly = false;
-            this.state.dayLabelUseOrdinal = true;
-            this.state.showAllEventBoundaryStrokes = true;
-            this.state.showNoonLines = true;
-            this.state.showSixAmPmLines = true;
-          }
-          // 'default' just uses the reset baseline
-
-          if (typeof this.syncAllUIControls === 'function') {
-            this.syncAllUIControls();
-          }
-          this.drawSpiral();
-          this.saveSettingsToStorage();
-
-          // Reset the select box
-          setTimeout(() => {
-            e.target.value = '';
-          }, 300);
+          this.applyLayoutPreset(preset, { resetSelect: true });
         });
       }
 
@@ -1120,24 +1058,7 @@ Object.assign(SpiralCalendar.prototype, {
       const darkModeToggle = document.getElementById('darkModeToggle');
       if (darkModeToggle) {
         darkModeToggle.addEventListener('change', (e) => {
-          this.state.darkMode = e.target.checked;
-          try { document.body.classList.toggle('dark-mode', this.state.darkMode); } catch (_) {}
-          this.updateThemeColor();
-          this.drawSpiral();
-          this.saveSettingsToStorage();
-          // Refresh event list to update calendar icons for dark mode
-          if (typeof window.renderEventList === 'function') {
-            window.renderEventList();
-          }
-          // Update location button icons for dark mode
-          if (typeof updateLocationButtonIcons === 'function') {
-            updateLocationButtonIcons();
-          }
-          // Update audio icon for dark mode
-          const audioFeedbackIcon = document.getElementById('audioFeedbackIcon');
-          if (audioFeedbackIcon) {
-            updateAudioIcon(audioFeedbackIcon, this.state.audioFeedbackEnabled);
-          }
+          this.setDarkModeEnabled(e.target.checked);
         });
       }
 
