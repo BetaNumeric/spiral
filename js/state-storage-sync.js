@@ -538,16 +538,29 @@ Object.assign(SpiralCalendar.prototype, {
       this.saveSettingsToStorage();
     }
 
-    if (typeof window.renderEventList === 'function') {
-      window.renderEventList();
-    }
-    if (typeof updateLocationButtonIcons === 'function') {
-      updateLocationButtonIcons();
-    }
+    const refreshAuxiliaryUi = () => {
+      if (typeof window.renderEventList === 'function') {
+        window.renderEventList();
+      }
 
-    const audioFeedbackIcon = document.getElementById('audioFeedbackIcon');
-    if (audioFeedbackIcon && typeof updateAudioIcon === 'function') {
-      updateAudioIcon(audioFeedbackIcon, this.state.audioFeedbackEnabled);
+      try {
+        if (typeof updateLocationButtonIcons === 'function') {
+          updateLocationButtonIcons();
+        }
+      } catch (_) {}
+
+      try {
+        const audioFeedbackIcon = document.getElementById('audioFeedbackIcon');
+        if (audioFeedbackIcon && typeof updateAudioIcon === 'function') {
+          updateAudioIcon(audioFeedbackIcon, this.state.audioFeedbackEnabled);
+        }
+      } catch (_) {}
+    };
+
+    if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+      window.setTimeout(refreshAuxiliaryUi, 0);
+    } else {
+      refreshAuxiliaryUi();
     }
   },
 
