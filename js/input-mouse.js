@@ -1819,26 +1819,23 @@ Object.assign(SpiralCalendar.prototype, {
         : this.getRenderSpiralScale();
       let maxRadius = Math.min(canvasWidth, canvasHeight) * spiralScale;
 
-      // Scale down spiral when time display is pulled up, but only if the spiral would exceed available space
+      // Scale down spiral to ensure it fits the available area, protecting hour numbers at top and bottom.
       if (this.state.showTimeDisplay && this.timeDisplayState) {
         const pullUpOffset = this.timeDisplayState.pullUpOffset || 0;
-        if (pullUpOffset > 0) {
-          // Calculate available space above the time display
-          // Center Y accounts for time display height and pull-up offset
-          const effectiveTD = this.getTimeDisplayHeight();
-          const totalBottomOffset = effectiveTD + pullUpOffset;
-          const centerY = canvasHeight / 2 - totalBottomOffset / 2;
-          // Add a small margin from the top (e.g., 5% of canvas height)
-          const topMargin = canvasHeight * 0.05;
-          const availableSpace = centerY - topMargin;
-          
-          // Only scale if the spiral radius would exceed the available space
-          if (maxRadius > availableSpace && availableSpace > 0) {
-            // Scale down to fit in available space, with a small safety margin
-            const safetyMargin = 0.95; // Use 95% of available space to avoid touching edges
-            const scaleFactor = (availableSpace * safetyMargin) / maxRadius;
-            maxRadius *= Math.max(0.5, scaleFactor); // Don't scale below 50% to keep it usable
-          }
+        // Calculate available space above the time display
+        const effectiveTD = this.getTimeDisplayHeight();
+        const totalBottomOffset = effectiveTD + pullUpOffset;
+        const centerY = canvasHeight / 2 - totalBottomOffset / 2;
+        
+        // Add a margin to ensure hour labels (0 at top, 12 at bottom) aren't cut off
+        const topMargin = Math.max(canvasHeight * 0.05, 32); 
+        const availableSpace = centerY - topMargin;
+        
+        // Only scale if the spiral radius would exceed the available space
+        if (maxRadius > availableSpace && availableSpace > 0) {
+          // Scale down to fit neatly without overlap
+          const scaleFactor = availableSpace / maxRadius;
+          maxRadius *= Math.max(0.4, scaleFactor); // Keep a reasonable min scale
         }
       }
 
