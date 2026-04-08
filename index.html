@@ -776,25 +776,14 @@
 
     /* Responsive panel positioning */
     @media (max-width: 768px) {
-      #eventInputPanel {
+      #eventInputPanel, #settingsPanel {
         left: 50% !important;
         top: 50% !important;
         transform: translate(-50%, -50%) !important;
         max-width: 90vw !important;
         min-width: 320px !important;
-        max-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 2em) !important;
-      }
-      
-      #settingsPanel {
-        left: calc(env(safe-area-inset-top) + 4.7em) !important;
-        right: calc(env(safe-area-inset-top) + 4.7em) !important;
-        top: calc(env(safe-area-inset-top) + 4.7em) !important;
-        bottom: calc(env(safe-area-inset-top) + 4.7em) !important;
-        transform: none !important;
-        width: auto !important;
-        max-width: none !important;
-        min-width: 0 !important;
-        max-height: none !important;
+        max-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 10em) !important;
+        width: 360px !important; /* Allow the panel to hit max-width */
       }
 
       #eventInputPanel .event-panel-action-btn {
@@ -841,7 +830,7 @@
       /* Fix for iOS Safari viewport height issues */
       @media (max-width: 768px) {
         #eventInputPanel, #settingsPanel {
-          max-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 2em) !important;
+          max-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 10em) !important;
         }
       }
     }
