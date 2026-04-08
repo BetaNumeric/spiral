@@ -565,7 +565,6 @@ Object.assign(SpiralCalendar.prototype, {
         statusDiv.textContent = `Session ready to download • ${this.formatStudyDuration(durationMs)} • ${count} entries`;
         statusDiv.style.color = '#2196F3';
       } else {
-        statusDiv.textContent = 'Record a lightweight interaction log for play testing.';
         statusDiv.style.color = '#666';
       }
     }
