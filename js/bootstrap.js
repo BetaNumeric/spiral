@@ -71,15 +71,15 @@ const updateLocationTimezoneInfo = () => {
     const offset = (typeof spiralCalendar.getTimezoneOffsetHours === 'function')
       ? spiralCalendar.getTimezoneOffsetHours(new Date())
       : (new Date().getTimezoneOffset() / -60);
-    locationTimezoneInfo.textContent = `Timezone: ${tzId} (${formatOffsetHours(offset)})`;
+    locationTimezoneInfo.textContent = `${tzId} (${formatOffsetHours(offset)})`;
     return;
   }
   if (usingLocationTz) {
-    locationTimezoneInfo.textContent = 'Timezone: Location (not resolved yet)';
+    locationTimezoneInfo.textContent = 'Location (not resolved yet)';
     return;
   }
   const deviceOffset = new Date().getTimezoneOffset() / -60;
-  locationTimezoneInfo.textContent = `Timezone: Device (${formatOffsetHours(deviceOffset)})`;
+  locationTimezoneInfo.textContent = `Device (${formatOffsetHours(deviceOffset)})`;
 };
 window.updateLocationTimezoneInfo = updateLocationTimezoneInfo;
 
@@ -99,7 +99,7 @@ const compactLocationLabel = (label, fallbackLat = LOCATION_COORDS.lat, fallback
 
 const updateLocationCurrentInfo = (label = null, lat = LOCATION_COORDS.lat, lng = LOCATION_COORDS.lng) => {
   if (!locationCurrentInfo) return;
-  locationCurrentInfo.textContent = `Location: ${compactLocationLabel(label, lat, lng)}`;
+  locationCurrentInfo.textContent = compactLocationLabel(label, lat, lng);
 };
 
 const extractTimezoneId = (payload) => {
@@ -401,8 +401,7 @@ if (useLocationTimezoneToggle) {
 }
 
 updateLocationTimezoneInfo();
-if (!spiralCalendar.state.locationTimezoneId &&
-    Number.isFinite(Number(LOCATION_COORDS.lat)) &&
+if (Number.isFinite(Number(LOCATION_COORDS.lat)) &&
     Number.isFinite(Number(LOCATION_COORDS.lng))) {
   void updateLocationTimezoneFromCoordinates(LOCATION_COORDS.lat, LOCATION_COORDS.lng);
 }

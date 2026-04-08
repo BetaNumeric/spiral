@@ -1138,9 +1138,9 @@
 
         <div style="margin: 1em 0 0.5em 0; padding-bottom: 0.5em; border-bottom: 1px solid rgba(128,128,128,0.2);">
           <label style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-            <span style="font-weight: bold;">Layout Presets</span>
+            <span style="font-weight: bold;">Layout</span>
             <select id="layoutPresetSelect" style="padding: 0.2em; border-radius: 0.2em; max-width: 50%; font-size: 0.9em;">
-              <option value="" disabled selected>Choose preset...</option>
+              <option value="" disabled selected>Preset...</option>
               <option value="minimal">Minimal</option>
               <option value="default">Default</option>
               <option value="complex">Detailed</option>
@@ -1317,7 +1317,7 @@
         <!-- Location controls (only visible when night overlay is enabled) -->
         <div id="locationControls">
           <div class="location-control-row location-search-row">
-            <input type="text" id="locationSearch" class="location-field location-field-search" placeholder="Search city or address">
+            <input type="text" id="locationSearch" class="location-field location-field-search" placeholder="Search location">
             <button id="locationSearchBtn" class="location-action-btn location-icon-btn" title="Search"></button>
             <button id="geoLocationBtn" class="location-action-btn location-icon-btn" title="Use device location"></button>
           </div>
@@ -1329,10 +1329,10 @@
           </div>
           <label style="display:flex; align-items:center; gap:0.45em; margin-top: 0.4em; font-size: 0.9em;">
             <input type="checkbox" id="useLocationTimezoneToggle">
-            <span>Use location timezone</span>
+            <span>Location timezone</span>
           </label>
-          <div id="locationTimezoneInfo" style="margin-top: 0.2em; font-size: 0.8em; color: #666; min-height: 1.2em;">Timezone: Device</div>
-          <div id="locationCurrentInfo" style="margin-top: 0.1em; font-size: 0.78em; color: #666; min-height: 1.2em;">Location: 53.0793, 8.8017</div>
+          <div id="locationTimezoneInfo" style="margin-top: 0.2em; font-size: 0.8em; color: #888; min-height: 1.2em;">Device</div>
+          <div id="locationCurrentInfo" style="margin-top: 0.1em; font-size: 0.78em; color: #888; min-height: 1.2em;">53.0793, 8.8017</div>
         </div>
         
         <!-- Event Input section removed from here -->
