@@ -1304,7 +1304,7 @@
           </label>
         </div>
                 
-        <label><input type="checkbox" id="nightOverlayToggle" checked> Night time overlay</label>
+        <label><input type="checkbox" id="nightOverlayToggle" checked> Nighttime Shading</label>
         <!-- Night overlay opacity control (only visible when night overlay is enabled) -->
         <div id="nightOverlayOpacityControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
           <label class="settings-range-control">
@@ -1430,12 +1430,15 @@
         ? devOptionsConfig.advancedOptionIds
         : [
             'daysSlider', 'scaleSlider', 'radiusSlider',
+            'staticMode',
             'showHourNumbers', 'hourNumbersControls',
             'showDayNumbers', 'dayNumbersControls',
             'timeDisplayToggle',
             'segmentEdgesToggle',
             'arcLinesToggle',
             'overlayStackMode',
+            'dayOverlayToggle', 'dayOverlayOpacityControls',
+            'gradientOverlayToggle', 'gradientOverlayOpacityControls',
             'tooltipToggle'
           ];
       const devOnlySectionIds = Array.isArray(devOptionsConfig.devOnlySectionIds)

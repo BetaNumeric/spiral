@@ -33,7 +33,7 @@ const CONFIG = {
 };
 
 // Development flag - set to false to hide advanced options
-const DEV_MODE = true;
+const DEV_MODE = false;
 
 // Study mode flag - set to true to enable study session controls
 const STUDY_MODE = true;

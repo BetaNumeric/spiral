@@ -57,9 +57,9 @@ if (nightOverlayToggle) {
 
 const formatOffsetHours = (offsetHours) => {
   const sign = offsetHours >= 0 ? '+' : '-';
-  const abs = Math.abs(offsetHours);
-  const hours = Math.floor(abs);
-  const minutes = Math.round((abs - hours) * 60);
+  const totalMinutes = Math.round(Math.abs(offsetHours) * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
   return `UTC${sign}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 };
 

@@ -93,6 +93,7 @@ const APP_SETTINGS_DEFAULTS = {
 const APP_DEV_OPTIONS_CONFIG = {
   // Elements hidden when "Dev Options" is OFF.
   advancedOptionIds: [
+    'staticMode',
     'circleMode',
     'circleModeSubOptions',
     'daysSlider', 'daysVal',
@@ -109,6 +110,8 @@ const APP_DEV_OPTIONS_CONFIG = {
     'overlayStackMode',
     'eventBoundaryStrokesToggle',
     'eventBoundaryStrokeControls',
+    'dayOverlayToggle', 'dayOverlayOpacityControls',
+    'gradientOverlayToggle', 'gradientOverlayOpacityControls',
     'tooltipToggle'
   ],
 
