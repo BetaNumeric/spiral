@@ -1335,7 +1335,14 @@
           
           <div id="studySessionContent" style="display: none; flex-direction: column; gap: 0.5em; max-width: 360px; overflow: hidden; transition: all 0.3s ease;">
             <div style="margin-bottom: 0.5em;">
-              <input type="text" id="participantName" placeholder="Enter participant name" style="width: 100%; padding: 0.3em; border: 1px solid #ccc; border-radius: 0.3em; font-size: 0.9em;">
+              <input type="text" id="participantId" placeholder="Enter participant ID" style="width: 100%; padding: 0.3em; border: 1px solid #ccc; border-radius: 0.3em; font-size: 0.9em;">
+            </div>
+            <div style="margin-bottom: 0.5em;">
+              <select id="studySessionPhase" style="width: 100%; padding: 0.3em; border: 1px solid #ccc; border-radius: 0.3em; font-size: 0.9em;">
+                <option value="explore">Explore</option>
+                <option value="task">Task</option>
+                <option value="debrief">Debrief</option>
+              </select>
             </div>
             <div style="display: flex; gap: 0.3em; margin-bottom: 0.5em;">
               <button id="startRecordingBtn" style="flex: 1; padding: 0.4em; background: #4CAF50; color: white; border: none; border-radius: 0.3em; cursor: pointer; font-size: 0.9em;">Start Recording</button>

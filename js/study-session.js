@@ -1,5 +1,6 @@
 const STUDY_SESSION_STORAGE_KEY = 'spiralCalendarStudySessionDraft';
-const STUDY_SESSION_SCHEMA_VERSION = 3;
+const STUDY_SESSION_SCHEMA_VERSION = 4;
+const STUDY_SESSION_PHASES = ['explore', 'task', 'debrief'];
 const STUDY_TRACKED_SETTINGS_KEYS = [
   'days',
   'radiusExponent',
@@ -50,7 +51,8 @@ Object.assign(SpiralCalendar.prototype, {
       schemaVersion: STUDY_SESSION_SCHEMA_VERSION,
       sessionId: null,
       isRecording: false,
-      participantName: '',
+      participantId: '',
+      sessionPhase: 'explore',
       startTime: null,
       endTime: null,
       recovered: false,
@@ -70,10 +72,24 @@ Object.assign(SpiralCalendar.prototype, {
     if (!this.studySession || typeof this.studySession !== 'object') {
       this.studySession = this.createEmptyStudySession();
     }
+    if (!this.studySession.participantId && this.studySession.participantName) {
+      this.studySession.participantId = String(this.studySession.participantName || '');
+    }
+    this.studySession.sessionPhase = this.normalizeStudySessionPhase(this.studySession.sessionPhase);
     if (!Array.isArray(this.studySession.interactions)) {
       this.studySession.interactions = [];
     }
     return this.studySession;
+  },
+
+  normalizeStudySessionPhase(value) {
+    const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+    return STUDY_SESSION_PHASES.includes(normalized) ? normalized : 'explore';
+  },
+
+  formatStudySessionPhase(phase) {
+    const normalized = this.normalizeStudySessionPhase(phase);
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
   },
 
   cloneStudyValue(value) {
@@ -352,6 +368,7 @@ Object.assign(SpiralCalendar.prototype, {
     return {
       index: session.interactions.length,
       type,
+      phase: this.normalizeStudySessionPhase(session.sessionPhase),
       timestamp,
       offsetMs: session.startTime ? Math.max(0, new Date(timestamp) - new Date(session.startTime)) : null,
       payload: this.cloneStudyValue(payload)
@@ -398,6 +415,10 @@ Object.assign(SpiralCalendar.prototype, {
       return {
         ...this.createEmptyStudySession(),
         ...parsed,
+        participantId: typeof parsed.participantId === 'string'
+          ? parsed.participantId
+          : (typeof parsed.participantName === 'string' ? parsed.participantName : ''),
+        sessionPhase: this.normalizeStudySessionPhase(parsed.sessionPhase),
         interactions: Array.isArray(parsed.interactions) ? parsed.interactions : []
       };
     } catch (error) {
@@ -450,12 +471,20 @@ Object.assign(SpiralCalendar.prototype, {
       createdEventCount: 0,
       updatedEventCount: 0,
       deletedEventCount: 0,
+      phaseChangeCount: 0,
       settingsChangeCount: 0,
+      interactionsByPhase: {
+        explore: 0,
+        task: 0,
+        debrief: 0
+      },
       changedSettings: {}
     };
 
     for (const interaction of session.interactions || []) {
       if (!interaction || typeof interaction !== 'object') continue;
+      const phase = this.normalizeStudySessionPhase(interaction.phase);
+      summary.interactionsByPhase[phase] = (summary.interactionsByPhase[phase] || 0) + 1;
       if (interaction.type === 'detail_view_opened') {
         summary.detailViewOpenCount += 1;
       } else if (interaction.type === 'detail_view_switched') {
@@ -465,6 +494,8 @@ Object.assign(SpiralCalendar.prototype, {
         summary.panelOpenCount += 1;
       } else if (interaction.type === 'orientation_changed') {
         summary.orientationChangeCount += 1;
+      } else if (interaction.type === 'phase_changed') {
+        summary.phaseChangeCount += 1;
       } else if (interaction.type === 'events_changed') {
         const payload = interaction.payload || {};
         summary.createdEventCount += Array.isArray(payload.created) ? payload.created.length : 0;
@@ -494,7 +525,8 @@ Object.assign(SpiralCalendar.prototype, {
       exportTime: new Date().toISOString(),
       appVersion: typeof APP_VERSION !== 'undefined' ? APP_VERSION : null,
       sessionId: session.sessionId,
-      participantName: session.participantName,
+      participantId: session.participantId,
+      sessionPhase: this.normalizeStudySessionPhase(session.sessionPhase),
       startTime: session.startTime,
       endTime: session.endTime,
       sessionDurationMs: durationMs,
@@ -532,16 +564,23 @@ Object.assign(SpiralCalendar.prototype, {
     const startBtn = document.getElementById('startRecordingBtn');
     const stopBtn = document.getElementById('stopRecordingBtn');
     const downloadBtn = document.getElementById('downloadDataBtn');
-    const participantNameInput = document.getElementById('participantName');
+    const participantIdInput = document.getElementById('participantId');
+    const phaseSelect = document.getElementById('studySessionPhase');
     const statusDiv = document.getElementById('recordingStatus');
+    const phaseLabel = this.formatStudySessionPhase(session.sessionPhase);
 
     studySection.style.display = 'block';
 
-    if (participantNameInput) {
-      if (!participantNameInput.value && session.participantName) {
-        participantNameInput.value = session.participantName;
+    if (participantIdInput) {
+      if (!participantIdInput.value && session.participantId) {
+        participantIdInput.value = session.participantId;
       }
-      participantNameInput.disabled = !!session.isRecording;
+      participantIdInput.disabled = !!session.isRecording;
+    }
+
+    if (phaseSelect) {
+      phaseSelect.value = this.normalizeStudySessionPhase(session.sessionPhase);
+      phaseSelect.disabled = !!session.isRecording;
     }
 
     if (startBtn) startBtn.style.display = session.isRecording ? 'none' : 'block';
@@ -555,14 +594,14 @@ Object.assign(SpiralCalendar.prototype, {
       if (session.isRecording) {
         const count = Array.isArray(session.interactions) ? session.interactions.length : 0;
         const recoveredText = session.recovered ? ' (recovered)' : '';
-        statusDiv.textContent = `Recording session for ${session.participantName}${recoveredText} • ${count} entries`;
+        statusDiv.textContent = `Recording ${phaseLabel.toLowerCase()} phase for ${session.participantId}${recoveredText} • ${count} entries`;
         statusDiv.style.color = '#4CAF50';
       } else if (session.startTime) {
         const durationMs = session.endTime
           ? new Date(session.endTime) - new Date(session.startTime)
           : 0;
         const count = Array.isArray(session.interactions) ? session.interactions.length : 0;
-        statusDiv.textContent = `Session ready to download • ${this.formatStudyDuration(durationMs)} • ${count} entries`;
+        statusDiv.textContent = `Session ready to download • ${phaseLabel} phase • ${this.formatStudyDuration(durationMs)} • ${count} entries`;
         statusDiv.style.color = '#2196F3';
       } else {
         statusDiv.style.color = '#666';
@@ -600,20 +639,37 @@ Object.assign(SpiralCalendar.prototype, {
     const startBtn = document.getElementById('startRecordingBtn');
     const stopBtn = document.getElementById('stopRecordingBtn');
     const downloadBtn = document.getElementById('downloadDataBtn');
-    const participantNameInput = document.getElementById('participantName');
+    const participantIdInput = document.getElementById('participantId');
+    const phaseSelect = document.getElementById('studySessionPhase');
 
     if (toggle) {
       toggle.addEventListener('click', () => this.toggleStudySessionSection());
     }
 
-    if (startBtn && participantNameInput) {
+    if (startBtn && participantIdInput) {
       startBtn.addEventListener('click', () => {
-        const name = participantNameInput.value.trim();
-        if (!name) {
-          alert('Please enter a participant name before starting recording.');
+        const participantId = participantIdInput.value.trim();
+        const sessionPhase = phaseSelect ? phaseSelect.value : 'explore';
+        if (!participantId) {
+          alert('Please enter a participant ID before starting recording.');
           return;
         }
-        this.startStudySession(name);
+        this.startStudySession(participantId, sessionPhase);
+      });
+    }
+
+    if (participantIdInput) {
+      participantIdInput.addEventListener('input', () => {
+        const session = this.ensureStudySessionState();
+        if (session.startTime) return;
+        session.participantId = participantIdInput.value.trim();
+        this.saveStudySessionDraft();
+      });
+    }
+
+    if (phaseSelect) {
+      phaseSelect.addEventListener('change', () => {
+        this.updateStudySessionPhase(phaseSelect.value);
       });
     }
 
@@ -633,12 +689,13 @@ Object.assign(SpiralCalendar.prototype, {
     this.syncStudySessionUI();
   },
 
-  startStudySession(participantName) {
+  startStudySession(participantId, sessionPhase = 'explore') {
     const now = new Date().toISOString();
     this.studySession = this.createEmptyStudySession();
     this.studySession.sessionId = `study-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     this.studySession.isRecording = true;
-    this.studySession.participantName = participantName;
+    this.studySession.participantId = participantId;
+    this.studySession.sessionPhase = this.normalizeStudySessionPhase(sessionPhase);
     this.studySession.startTime = now;
     this.studySession.endTime = null;
     this.studySession.recovered = false;
@@ -656,6 +713,7 @@ Object.assign(SpiralCalendar.prototype, {
     );
 
     this.recordStudyEvent('session_started', {
+      phase: this.studySession.sessionPhase,
       viewport: this.getStudyViewportSnapshot(),
       visibleEventCount: Array.isArray(this.events) ? this.events.length : 0,
       uiState: this.cloneStudyValue(this.studySession.initialUiState)
@@ -669,6 +727,7 @@ Object.assign(SpiralCalendar.prototype, {
 
     session.endTime = new Date().toISOString();
     this.recordStudyEvent('session_stopped', {
+      phase: this.normalizeStudySessionPhase(session.sessionPhase),
       viewport: this.getStudyViewportSnapshot(),
       visibleEventCount: Array.isArray(this.events) ? this.events.length : 0,
       uiState: this.captureStudyUiStateSnapshot()
@@ -682,7 +741,7 @@ Object.assign(SpiralCalendar.prototype, {
 
   downloadStudyData() {
     const session = this.ensureStudySessionState();
-    if (!session.participantName || !session.startTime) {
+    if (!session.participantId || !session.startTime) {
       alert('No study session data to download.');
       return;
     }
@@ -694,7 +753,7 @@ Object.assign(SpiralCalendar.prototype, {
 
     const a = document.createElement('a');
     a.href = url;
-    a.download = `study-session-${this.sanitizeStudyFilePart(session.participantName)}-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `study-session-${this.sanitizeStudyFilePart(session.participantId)}-${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -703,6 +762,32 @@ Object.assign(SpiralCalendar.prototype, {
     session.lastDownloadedAt = new Date().toISOString();
     this.saveStudySessionDraft();
     this.syncStudySessionUI();
+  },
+
+  updateStudySessionPhase(nextPhase) {
+    const session = this.ensureStudySessionState();
+    const normalizedNextPhase = this.normalizeStudySessionPhase(nextPhase);
+    const previousPhase = this.normalizeStudySessionPhase(session.sessionPhase);
+
+    session.sessionPhase = normalizedNextPhase;
+
+    if (previousPhase === normalizedNextPhase) {
+      this.saveStudySessionDraft();
+      this.syncStudySessionUI();
+      return false;
+    }
+
+    if (session.isRecording) {
+      this.recordStudyEvent('phase_changed', {
+        fromPhase: previousPhase,
+        toPhase: normalizedNextPhase
+      });
+    } else {
+      this.saveStudySessionDraft();
+      this.syncStudySessionUI();
+    }
+
+    return true;
   },
 
   recordStudyEventSnapshotDiff() {
