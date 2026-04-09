@@ -870,6 +870,7 @@ Object.assign(SpiralCalendar.prototype, {
                     this._eventsVersion++;
                     this.saveEventsToStorage();
                   });
+                  this._detailViewHasChanges = true;
                   if (typeof window.renderEventList === 'function') {
                     window.renderEventList();
                   }
@@ -908,6 +909,7 @@ Object.assign(SpiralCalendar.prototype, {
                     this._eventsVersion++;
                     this.saveEventsToStorage();
                   });
+                  this._detailViewHasChanges = true;
                   if (typeof window.renderEventList === 'function') {
                     window.renderEventList();
                   }

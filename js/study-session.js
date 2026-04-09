@@ -1,5 +1,5 @@
 const STUDY_SESSION_STORAGE_KEY = 'spiralCalendarStudySessionDraft';
-const STUDY_SESSION_SCHEMA_VERSION = 4;
+const STUDY_SESSION_SCHEMA_VERSION = 5;
 const STUDY_SESSION_PHASES = ['explore', 'task', 'debrief'];
 const STUDY_TRACKED_SETTINGS_KEYS = [
   'days',
@@ -72,8 +72,8 @@ Object.assign(SpiralCalendar.prototype, {
     if (!this.studySession || typeof this.studySession !== 'object') {
       this.studySession = this.createEmptyStudySession();
     }
-    if (!this.studySession.participantId && this.studySession.participantName) {
-      this.studySession.participantId = String(this.studySession.participantName || '');
+    if (typeof this.studySession.participantId !== 'string') {
+      this.studySession.participantId = '';
     }
     this.studySession.sessionPhase = this.normalizeStudySessionPhase(this.studySession.sessionPhase);
     if (!Array.isArray(this.studySession.interactions)) {
@@ -90,6 +90,31 @@ Object.assign(SpiralCalendar.prototype, {
   formatStudySessionPhase(phase) {
     const normalized = this.normalizeStudySessionPhase(phase);
     return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+  },
+
+  createEmptyStudyPhaseMap(factory = () => 0) {
+    const phaseMap = {};
+    STUDY_SESSION_PHASES.forEach((phase) => {
+      phaseMap[phase] = factory(phase);
+    });
+    return phaseMap;
+  },
+
+  createEmptyStudySummaryMetrics() {
+    return {
+      interactionCount: 0,
+      detailViewOpenCount: 0,
+      detailViewSwitchCount: 0,
+      panelOpenCount: 0,
+      orientationChangeCount: 0,
+      createdEventCount: 0,
+      updatedEventCount: 0,
+      deletedEventCount: 0,
+      phaseChangeCount: 0,
+      settingsInteractionCount: 0,
+      settingsFieldChangeCount: 0,
+      changedSettings: {}
+    };
   },
 
   cloneStudyValue(value) {
@@ -402,6 +427,16 @@ Object.assign(SpiralCalendar.prototype, {
     }
   },
 
+  clearStudySessionDraft() {
+    if (typeof STUDY_MODE !== 'undefined' && !STUDY_MODE) return;
+
+    try {
+      localStorage.removeItem(STUDY_SESSION_STORAGE_KEY);
+    } catch (error) {
+      console.warn('Failed to clear study session draft:', error);
+    }
+  },
+
   loadStudySessionDraft() {
     if (typeof STUDY_MODE !== 'undefined' && !STUDY_MODE) return null;
 
@@ -411,13 +446,15 @@ Object.assign(SpiralCalendar.prototype, {
 
       const parsed = JSON.parse(stored);
       if (!parsed || typeof parsed !== 'object') return null;
+      if (parsed.schemaVersion !== STUDY_SESSION_SCHEMA_VERSION) {
+        this.clearStudySessionDraft();
+        return null;
+      }
 
       return {
         ...this.createEmptyStudySession(),
         ...parsed,
-        participantId: typeof parsed.participantId === 'string'
-          ? parsed.participantId
-          : (typeof parsed.participantName === 'string' ? parsed.participantName : ''),
+        participantId: typeof parsed.participantId === 'string' ? parsed.participantId : '',
         sessionPhase: this.normalizeStudySessionPhase(parsed.sessionPhase),
         interactions: Array.isArray(parsed.interactions) ? parsed.interactions : []
       };
@@ -462,54 +499,92 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   summarizeStudySession(session = this.ensureStudySessionState()) {
+    const interactions = Array.isArray(session.interactions) ? session.interactions : [];
+    const durationMs = session.startTime
+      ? ((session.endTime ? new Date(session.endTime) : new Date()) - new Date(session.startTime))
+      : null;
     const summary = {
-      interactionCount: Array.isArray(session.interactions) ? session.interactions.length : 0,
-      detailViewOpenCount: 0,
-      detailViewSwitchCount: 0,
-      panelOpenCount: 0,
-      orientationChangeCount: 0,
-      createdEventCount: 0,
-      updatedEventCount: 0,
-      deletedEventCount: 0,
-      phaseChangeCount: 0,
-      settingsChangeCount: 0,
-      interactionsByPhase: {
-        explore: 0,
-        task: 0,
-        debrief: 0
-      },
-      changedSettings: {}
+      ...this.createEmptyStudySummaryMetrics(),
+      interactionCount: interactions.length,
+      interactionsByPhase: this.createEmptyStudyPhaseMap(() => 0),
+      phaseDurationsMs: this.createEmptyStudyPhaseMap(() => 0),
+      phaseDurationsText: this.createEmptyStudyPhaseMap(() => this.formatStudyDuration(0)),
+      perPhase: this.createEmptyStudyPhaseMap(() => this.createEmptyStudySummaryMetrics())
     };
 
-    for (const interaction of session.interactions || []) {
+    for (const interaction of interactions) {
       if (!interaction || typeof interaction !== 'object') continue;
       const phase = this.normalizeStudySessionPhase(interaction.phase);
       summary.interactionsByPhase[phase] = (summary.interactionsByPhase[phase] || 0) + 1;
+      summary.perPhase[phase].interactionCount += 1;
       if (interaction.type === 'detail_view_opened') {
         summary.detailViewOpenCount += 1;
+        summary.perPhase[phase].detailViewOpenCount += 1;
       } else if (interaction.type === 'detail_view_switched') {
         summary.detailViewOpenCount += 1;
         summary.detailViewSwitchCount += 1;
+        summary.perPhase[phase].detailViewOpenCount += 1;
+        summary.perPhase[phase].detailViewSwitchCount += 1;
       } else if (interaction.type === 'panel_opened') {
         summary.panelOpenCount += 1;
+        summary.perPhase[phase].panelOpenCount += 1;
       } else if (interaction.type === 'orientation_changed') {
         summary.orientationChangeCount += 1;
+        summary.perPhase[phase].orientationChangeCount += 1;
       } else if (interaction.type === 'phase_changed') {
         summary.phaseChangeCount += 1;
+        summary.perPhase[phase].phaseChangeCount += 1;
       } else if (interaction.type === 'events_changed') {
         const payload = interaction.payload || {};
-        summary.createdEventCount += Array.isArray(payload.created) ? payload.created.length : 0;
-        summary.updatedEventCount += Array.isArray(payload.updated) ? payload.updated.length : 0;
-        summary.deletedEventCount += Array.isArray(payload.deleted) ? payload.deleted.length : 0;
+        const createdCount = Array.isArray(payload.created) ? payload.created.length : 0;
+        const updatedCount = Array.isArray(payload.updated) ? payload.updated.length : 0;
+        const deletedCount = Array.isArray(payload.deleted) ? payload.deleted.length : 0;
+        summary.createdEventCount += createdCount;
+        summary.updatedEventCount += updatedCount;
+        summary.deletedEventCount += deletedCount;
+        summary.perPhase[phase].createdEventCount += createdCount;
+        summary.perPhase[phase].updatedEventCount += updatedCount;
+        summary.perPhase[phase].deletedEventCount += deletedCount;
       } else if (interaction.type === 'settings_changed') {
         const changes = interaction.payload && interaction.payload.changes ? interaction.payload.changes : {};
         const changedKeys = Object.keys(changes);
-        summary.settingsChangeCount += changedKeys.length;
+        summary.settingsInteractionCount += 1;
+        summary.perPhase[phase].settingsInteractionCount += 1;
+        summary.settingsFieldChangeCount += changedKeys.length;
+        summary.perPhase[phase].settingsFieldChangeCount += changedKeys.length;
         changedKeys.forEach((key) => {
           summary.changedSettings[key] = (summary.changedSettings[key] || 0) + 1;
+          summary.perPhase[phase].changedSettings[key] = (summary.perPhase[phase].changedSettings[key] || 0) + 1;
         });
       }
     }
+
+    if (Number.isFinite(durationMs) && durationMs >= 0) {
+      let currentPhase = this.normalizeStudySessionPhase(
+        interactions.length > 0 ? interactions[0].phase : session.sessionPhase
+      );
+      let segmentStartMs = 0;
+
+      for (const interaction of interactions) {
+        if (!interaction || interaction.type !== 'phase_changed') continue;
+        const segmentEndMs = Number.isFinite(Number(interaction.offsetMs))
+          ? Math.max(0, Number(interaction.offsetMs))
+          : segmentStartMs;
+        summary.phaseDurationsMs[currentPhase] += Math.max(0, segmentEndMs - segmentStartMs);
+        currentPhase = this.normalizeStudySessionPhase(
+          interaction.payload && interaction.payload.toPhase
+            ? interaction.payload.toPhase
+            : interaction.phase
+        );
+        segmentStartMs = segmentEndMs;
+      }
+
+      summary.phaseDurationsMs[currentPhase] += Math.max(0, durationMs - segmentStartMs);
+    }
+
+    Object.keys(summary.phaseDurationsMs).forEach((phase) => {
+      summary.phaseDurationsText[phase] = this.formatStudyDuration(summary.phaseDurationsMs[phase]);
+    });
 
     return summary;
   },
@@ -580,7 +655,7 @@ Object.assign(SpiralCalendar.prototype, {
 
     if (phaseSelect) {
       phaseSelect.value = this.normalizeStudySessionPhase(session.sessionPhase);
-      phaseSelect.disabled = !!session.isRecording;
+      phaseSelect.disabled = false;
     }
 
     if (startBtn) startBtn.style.display = session.isRecording ? 'none' : 'block';
@@ -842,14 +917,19 @@ Object.assign(SpiralCalendar.prototype, {
   getStudySegmentDescriptor(segment) {
     if (!segment) return null;
 
+    const spiralDayIndex = Number.isFinite(Number(segment.day)) ? Number(segment.day) : null;
+    const segmentIndex = Number.isFinite(Number(segment.segment)) ? Number(segment.segment) : null;
+    if (segmentIndex === null || spiralDayIndex === null) return null;
+
     const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-    const segmentId = totalVisibleSegments - (segment.day * CONFIG.SEGMENTS_PER_DAY + segment.segment) - 1;
+    const segmentId = totalVisibleSegments - (spiralDayIndex * CONFIG.SEGMENTS_PER_DAY + segmentIndex) - 1;
     const start = new Date(this.referenceTime.getTime() + segmentId * 60 * 60 * 1000);
     const end = new Date(start.getTime() + 60 * 60 * 1000);
 
     return {
-      day: segment.day,
-      segment: segment.segment,
+      spiralDayIndex,
+      segmentIndex,
+      segmentId,
       start: start.toISOString(),
       end: end.toISOString()
     };
