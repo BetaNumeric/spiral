@@ -120,7 +120,6 @@
     body.dark-mode #importEventsBtn { background: #4CAF50 !important; color: white !important; }
     body.dark-mode #randGenerate { background: #666 !important; color: white !important; }
     body.dark-mode #randDeleteRandom { background: #d32f2f !important; color: white !important; }
-    body.dark-mode #resetSettingsBtn { background: #d32f2f !important; color: white !important; }
     body.dark-mode #a2hs-install-btn { background: #4CAF50 !important; color: white !important; }
     body.dark-mode #a2hs-close-btn { background: #777 !important; color: white !important; }
     body.dark-mode #ios-close-btn { background: #007aff !important; color: white !important; }
@@ -485,10 +484,11 @@
     #settingsPanel {
       overflow-x: hidden;
     }
-    #settingsPanel label { display: flex; align-items: center; margin-bottom: .3em; margin-top: 1em; }
+    #settingsPanel label { display: flex; align-items: center; margin-bottom: 0.5em; margin-top: 1.25em; }
     #settingsPanel input[type=range] { margin: 0 0.5em; flex: 1; }
     #settingsPanel .palette-selector {
-      margin-top: 1em;
+      margin-top: 1.25em;
+      margin-bottom: 0.75em;
       padding: 0.55em;
       border: 1px solid #ccc;
       border-radius: 0.45em;
@@ -835,6 +835,53 @@
       }
     }
 
+    /* Soft Action Buttons */
+    .btn-action-soft {
+      width: 100%;
+      padding: 0.5em;
+      border-radius: 0.4em;
+      cursor: pointer;
+      font-size: 0.9em;
+      font-weight: 600;
+      transition: background 0.15s ease, border-color 0.15s ease;
+      display: block;
+      text-align: center;
+      margin-top: 0.4em;
+      border: 1px solid transparent;
+    }
+    .btn-warning-soft {
+      background: rgba(255, 152, 0, 0.1);
+      color: #e65100;
+      border-color: rgba(255, 152, 0, 0.25);
+    }
+    .btn-warning-soft:hover {
+      background: rgba(255, 152, 0, 0.2);
+    }
+    .btn-danger-soft {
+      background: rgba(211, 47, 47, 0.08);
+      color: #d32f2f;
+      border-color: rgba(211, 47, 47, 0.2);
+    }
+    .btn-danger-soft:hover {
+      background: rgba(211, 47, 47, 0.15);
+    }
+    body.dark-mode .btn-warning-soft {
+      background: rgba(255, 152, 0, 0.15);
+      color: #ffb74d;
+      border-color: rgba(255, 152, 0, 0.3);
+    }
+    body.dark-mode .btn-danger-soft {
+      background: rgba(244, 67, 54, 0.15);
+      color: #ff8a80;
+      border-color: rgba(244, 67, 54, 0.3);
+    }
+    body.dark-mode .btn-warning-soft:hover {
+      background: rgba(255, 152, 0, 0.25);
+    }
+    body.dark-mode .btn-danger-soft:hover {
+      background: rgba(244, 67, 54, 0.25);
+    }
+
   </style>
 </head>
 <body>
@@ -857,7 +904,7 @@
     </button>
 
     <!-- Event Input Panel (hidden by default) -->
-    <div id="eventInputPanel" style="display: none; position: absolute; top: 1.0em; left: 1.0em; background: rgba(222, 222, 222, 0.85); padding: .7em .9em .7em .9em; border-radius: .3em; font-size: .9em; z-index: 35; width: min(360px, calc(100vw - 2em)); min-width: 0; max-width: calc(100vw - 2em); max-height: calc(100vh - 2.0em); overflow-y: auto; overflow-x: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.10);">
+    <div id="eventInputPanel" style="display: none; position: absolute; top: 4.5em; left: 1.0em; background: rgba(222, 222, 222, 0.85); padding: .7em .9em .7em .9em; border-radius: .3em; font-size: .9em; z-index: 35; width: min(360px, calc(100vw - 2em)); min-width: 0; max-width: calc(100vw - 2em); max-height: calc(100vh - 5.5em); overflow-y: auto; overflow-x: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.10);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2em;">
         <span style="font-weight: bold; font-size: 1.1em;">Add Event</span>
         <button id="closeEventPanelBtn" title="Close" style="background: none; border: none; font-size: 1.3em; cursor: pointer; color: #888;">&times;</button>
@@ -989,7 +1036,7 @@
     </button>
 
     <!-- Settings Panel (hidden by default) -->
-    <div id="settingsPanel" style="display: none; position: absolute; top: 1.0em; right: 1.0em; background: rgba(222, 222, 222, 0.85); padding: .7em .9em .7em .9em; border-radius: .3em; font-size: .9em; z-index: 35; width: min(360px, calc(100vw - 2em)); min-width: 0; max-width: calc(100vw - 2em); max-height: calc(100vh - 2.0em); overflow-y: auto; overflow-x: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.10);">
+    <div id="settingsPanel" style="display: none; position: absolute; top: 4.5em; right: 1.0em; background: rgba(222, 222, 222, 0.85); padding: .7em .9em .7em .9em; border-radius: .3em; font-size: .9em; z-index: 35; width: min(360px, calc(100vw - 2em)); min-width: 0; max-width: calc(100vw - 2em); max-height: calc(100vh - 5.5em); overflow-y: auto; overflow-x: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.10);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2em;">
         <div style="display: flex; align-items: baseline; gap: 0.5em;">
           <span style="font-weight: bold; font-size: 1.1em;">Settings</span>
@@ -1125,16 +1172,41 @@
           </select>
         </div>
 
-        <div style="margin: 1em 0 0.5em 0; padding-bottom: 0.5em; border-bottom: 1px solid rgba(128,128,128,0.2);">
-          <label style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-            <span style="font-weight: bold;">Layout</span>
-            <select id="layoutPresetSelect" style="padding: 0.2em; border-radius: 0.2em; max-width: 50%; font-size: 0.9em;">
+        <div id="layoutPresetSection" class="palette-selector" style="margin-top: 1em; margin-bottom: 0.5em;">
+          <div class="palette-selector-header">
+            <button type="button" id="layoutPresetToggle" class="palette-selector-toggle" aria-expanded="false" aria-controls="layoutPresetContent">
+              <span>Layout</span>
+              <span>
+                <span id="layoutCurrentMode" class="palette-current-mode">Preset...</span>
+                <span class="palette-chevron">&#9662;</span>
+              </span>
+            </button>
+          </div>
+          <div id="layoutPresetContent" class="palette-selector-content">
+            <div id="layoutModeButtons" class="palette-mode-grid" role="radiogroup" aria-label="Layout preset" style="grid-template-columns: 1fr;">
+              <div class="palette-mode-card">
+                <button type="button" class="palette-mode-btn" data-layout-mode="minimal" role="radio" aria-checked="false" style="min-height: 44px; justify-content: center; font-size: 1.1em;">
+                  <span class="palette-mode-name">Minimal</span>
+                </button>
+              </div>
+              <div class="palette-mode-card">
+                <button type="button" class="palette-mode-btn" data-layout-mode="default" role="radio" aria-checked="false" style="min-height: 44px; justify-content: center; font-size: 1.1em;">
+                  <span class="palette-mode-name">Default</span>
+                </button>
+              </div>
+              <div class="palette-mode-card">
+                <button type="button" class="palette-mode-btn" data-layout-mode="complex" role="radio" aria-checked="false" style="min-height: 44px; justify-content: center; font-size: 1.1em;">
+                  <span class="palette-mode-name">Detailed</span>
+                </button>
+              </div>
+            </div>
+            <select id="layoutPresetSelect" style="display: none;">
               <option value="" disabled selected>Preset...</option>
               <option value="minimal">Minimal</option>
               <option value="default">Default</option>
               <option value="complex">Detailed</option>
             </select>
-          </label>
+          </div>
         </div>
 
         <label><input type="checkbox" id="staticMode" checked> Static Mode</label>
@@ -1353,12 +1425,16 @@
           </div>
         </div>
         
+        <!-- Bottom Separator for Danger/System Actions -->
+        <div style="margin-top: 1em; padding-top: 0.5em; border-top: 1px solid #ccc;"></div>
+
         <!-- DEV_MODE Toggle Button (only visible when DEV_MODE is true) -->
-        <div id="devModeToggleSection" style="margin-top: 1em; padding-top: 0.5em; border-top: 1px solid #ccc;">
-          <button id="devModeToggleBtn" style="width: 100%; padding: 0.4em; background: #ff9800; color: white; border: none; border-radius: 0.3em; cursor: pointer; font-size: 0.9em;">Show Dev Options</button>
+        <div id="devModeToggleSection" style="margin-bottom: 0.3em;">
+          <button id="devModeToggleBtn" class="btn-action-soft btn-warning-soft">Show Dev Options</button>
         </div>
-        <button id="resetSettingsBtn" style="width: 100%; padding: 0.4em; background: #d32f2f; color: white; border: none; border-radius: 0.3em; cursor: pointer; font-size: 0.9em; margin-top: 0.3em;">Reset to Defaults</button>
-        <button id="deleteAllDataBtn" class="dev-option" style="width: 100%; padding: 0.4em; background: #b71c1c; color: white; border: none; border-radius: 0.3em; cursor: pointer; font-size: 0.9em; margin-top: 0.3em;">Delete All Data</button>
+        <button id="resetSettingsBtn" class="btn-action-soft btn-danger-soft">Reset Settings</button>
+        <button id="deleteAllDataBtn" class="btn-action-soft btn-danger-soft" style="margin-top: 0.4em;">Delete All Data</button>
+        
       </div>
     </div>
 

@@ -436,6 +436,59 @@ Object.assign(SpiralCalendar.prototype, {
     ];
   },
 
+  inferLayoutPreset() {
+    const predefined = {
+      minimal: {
+        hourNumbersStartAtOne: true,
+        showEverySixthHour: true,
+        hourNumbersPosition: 1,
+        showArcLines: false,
+        dayLabelShowWeekday: false,
+        dayLabelWeekdayOnOutermost: true
+      },
+      complex: {
+        dayLabelShowWeekday: true,
+        dayLabelWeekdayOnOutermost: false,
+        dayLabelUseShortNames: false,
+        hourNumbersStartAtOne: true,
+        hourNumbersPosition: 0,
+        dayLabelUseShortMonth: false,
+        dayLabelMonthOnFirstOnly: false,
+        dayLabelYearOnFirstOnly: false,
+        dayLabelUseOrdinal: true,
+        showAllEventBoundaryStrokes: true,
+        showNoonLines: true,
+        showSixAmPmLines: true
+      }
+    };
+
+    const hasKey = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+    const fields = this.getLayoutPresetFields();
+    
+    let isComplex = true;
+    for (const key of fields) {
+      const expected = hasKey(predefined.complex, key) ? predefined.complex[key] : this.defaultSettings[key];
+      if (this.state[key] !== expected) isComplex = false;
+    }
+    if (isComplex) return 'complex';
+
+    let isMinimal = true;
+    for (const key of fields) {
+      const expected = hasKey(predefined.minimal, key) ? predefined.minimal[key] : this.defaultSettings[key];
+      if (this.state[key] !== expected) isMinimal = false;
+    }
+    if (isMinimal) return 'minimal';
+
+    let isDefault = true;
+    for (const key of fields) {
+      const expected = this.defaultSettings[key];
+      if (this.state[key] !== expected) isDefault = false;
+    }
+    if (isDefault) return 'default';
+    
+    return '';
+  },
+
   buildSettingsStoragePayload() {
     const persistedTimeDisplay = isMobileDevice()
       ? this.mobileOrientationState.timeDisplayWasEnabled
@@ -1032,7 +1085,11 @@ Object.assign(SpiralCalendar.prototype, {
         if (baseHueWrapper) baseHueWrapper.style.display = mode === 'monoHue' ? '' : 'none';
       }
     }
-    
+
+    if (typeof this.syncLayoutPickerUI === 'function') {
+      this.syncLayoutPickerUI();
+    }
+
     // Manually sync circleMode checkbox (not persisted, always starts false)
     const circleModeCheckbox = document.getElementById('circleMode');
     if (circleModeCheckbox) {

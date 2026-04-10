@@ -77,6 +77,68 @@ Object.assign(SpiralCalendar.prototype, {
         });
       }
 
+      const layoutPresetToggle = document.getElementById('layoutPresetToggle');
+      const layoutPresetSection = document.getElementById('layoutPresetSection');
+      const layoutPresetContent = document.getElementById('layoutPresetContent');
+      const layoutModeButtons = Array.from(document.querySelectorAll('#layoutModeButtons .palette-mode-btn'));
+      const layoutCurrentMode = document.getElementById('layoutCurrentMode');
+
+      const syncLayoutPickerUI = () => {
+        if (!layoutCurrentMode) return;
+        const preset = typeof this.inferLayoutPreset === 'function' ? this.inferLayoutPreset() : '';
+        const labels = {
+          minimal: 'Minimal',
+          default: 'Default',
+          complex: 'Detailed'
+        };
+        layoutCurrentMode.textContent = labels[preset] || 'Preset...';
+      };
+      this.syncLayoutPickerUI = syncLayoutPickerUI;
+      syncLayoutPickerUI();
+
+      if (layoutPresetToggle) {
+        const setLayoutSelectorExpanded = (expanded) => {
+          if (layoutPresetContent) {
+            layoutPresetContent.style.display = expanded ? 'block' : 'none';
+          }
+          layoutPresetToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+          if (layoutPresetSection) {
+            layoutPresetSection.classList.toggle('expanded', expanded);
+          }
+        };
+
+        layoutPresetToggle.addEventListener('click', () => {
+          const currentlyExpanded = layoutPresetToggle.getAttribute('aria-expanded') === 'true';
+          setLayoutSelectorExpanded(!currentlyExpanded);
+        });
+
+        layoutModeButtons.forEach(button => {
+          button.addEventListener('click', () => {
+            const preset = button.dataset.layoutMode;
+            if (!preset) return;
+
+            layoutModeButtons.forEach(btn => {
+              btn.classList.remove('active');
+              btn.setAttribute('aria-checked', 'false');
+            });
+            button.classList.add('active');
+            button.setAttribute('aria-checked', 'true');
+            
+            if (layoutPresetSelect) {
+              layoutPresetSelect.value = preset;
+            }
+            this.applyLayoutPreset(preset, { resetSelect: true });
+            syncLayoutPickerUI();
+
+            setTimeout(() => {
+              button.classList.remove('active');
+              button.setAttribute('aria-checked', 'false');
+              setLayoutSelectorExpanded(false);
+            }, 300);
+          });
+        });
+      }
+
       // Add show hour numbers checkbox handler
       const showHourNumbersCheckbox = document.getElementById('showHourNumbers');
       const hourNumbersControls = document.getElementById('hourNumbersControls');
