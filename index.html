@@ -152,18 +152,61 @@
     body.dark-mode #locationCurrentInfo {
       color: var(--dark-text-secondary) !important;
     }
+    #nightOverlayOpacityControls,
+    #dayOverlayOpacityControls,
+    #gradientOverlayOpacityControls {
+      margin-left: 0;
+      background: rgba(0, 0, 0, 0.04);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-bottom: none;
+      border-radius: 0.5em 0.5em 0 0;
+      padding: 0.8em 0.8em 0.6em 0.8em;
+      margin-top: 0.6em;
+      box-sizing: border-box;
+    }
+    #nightOverlayOpacityControls label,
+    #dayOverlayOpacityControls label,
+    #gradientOverlayOpacityControls label {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    body.dark-mode #nightOverlayOpacityControls,
+    body.dark-mode #dayOverlayOpacityControls,
+    body.dark-mode #gradientOverlayOpacityControls {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+    #dayOverlayOpacityControls,
+    #gradientOverlayOpacityControls {
+      border-radius: 0.5em;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+      padding-bottom: 0.8em;
+    }
+    body.dark-mode #dayOverlayOpacityControls,
+    body.dark-mode #gradientOverlayOpacityControls {
+      border-color: rgba(255, 255, 255, 0.08);
+    }
     #locationControls {
-      --location-field-gap: 0.28em;
+      --location-field-gap: 0.4em;
       --location-coord-field-width: 6.0em;
       display: none;
-      margin-left: 1em;
-      padding-left: 0.5em;
-      border-left: 2px solid #ccc;
-      width: calc(100% - 1em);
-      max-width: calc(100% - 1em);
+      background: rgba(0, 0, 0, 0.04);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-top: none;
+      border-radius: 0 0 0.5em 0.5em;
+      padding: 0.7em 0.8em 0.8em 0.8em;
+      margin-left: 0;
+      margin-top: 0;
+      margin-bottom: 0.5em;
+      width: 100%;
+      max-width: 100%;
       min-width: 0;
       box-sizing: border-box;
       overflow-x: hidden;
+    }
+    body.dark-mode #locationControls {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.08);
     }
     .location-control-row {
       display: flex;
@@ -175,22 +218,22 @@
       justify-content: flex-start;
     }
     .location-search-row {
-      margin-bottom: 0.3em;
+      margin-bottom: 0.6em;
     }
     .location-field {
       width: 100%;
       min-width: 0;
-      min-height: 2.3em;
-      padding: 0.2em 0.5em;
+      min-height: 2.8em;
+      padding: 0.4em 0.6em;
       border: 1px solid #ccc;
       border-radius: 0.3em;
       background: #fff;
       box-sizing: border-box;
     }
     .location-action-btn {
-      min-width: 2.8em;
-      min-height: 2.3em;
-      padding: 0.2em 0.8em;
+      min-width: 3.2em;
+      min-height: 2.8em;
+      padding: 0.4em 0.8em;
       font-size: 0.9em;
       border: 1px solid #ccc;
       border-radius: 0.3em;
@@ -383,7 +426,7 @@
       -webkit-appearance: none;
       appearance: none;
       height: 6px;
-      background: #ddd;
+      background: #bbb;
       border-radius: 3px;
       outline: none;
       cursor: pointer;
@@ -407,7 +450,7 @@
     /* Firefox slider styling */
     input[type="range"]::-moz-range-track {
       height: 6px;
-      background: #ddd;
+      background: #bbb;
       border-radius: 3px;
       border: none;
     }
@@ -611,25 +654,57 @@
       gap: 0.45em;
       width: 100%;
     }
-    #settingsPanel .settings-range-control {
+    #settingsPanel .settings-range-control,
+    #eventInputPanel .settings-range-control {
       display: grid;
+      grid-template-areas:
+        "caption value"
+        "track track";
       grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
       column-gap: 0.55em;
-      row-gap: 0.3em;
+      row-gap: 0.5em;
       width: 100%;
-      margin: 0.25em 0;
+      margin: 0.5em 0;
+      background: rgba(0, 0, 0, 0.04);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 0.5em;
+      padding: 0.8em;
+      box-sizing: border-box;
     }
-    #settingsPanel .settings-range-caption {
-      grid-column: 1 / -1;
+    #settingsPanel .settings-range-row,
+    #eventInputPanel .settings-range-row {
+      display: contents;
+    }
+    body.dark-mode #settingsPanel .settings-range-control,
+    body.dark-mode #eventInputPanel .settings-range-control {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+    #nightOverlayOpacityControls .settings-range-control,
+    #dayOverlayOpacityControls .settings-range-control,
+    #gradientOverlayOpacityControls .settings-range-control {
+      background: transparent !important;
+      border: none !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+    #settingsPanel .settings-range-caption,
+    #eventInputPanel .settings-range-caption {
+      grid-area: caption;
       min-width: 0;
     }
-    #settingsPanel .settings-range-track {
+    #settingsPanel .settings-range-track,
+    #eventInputPanel .settings-range-track {
+      grid-area: track;
       width: 100%;
       min-width: 0;
-      margin: 0;
+      margin: 0 !important;
+      padding: 0 !important;
     }
-    #settingsPanel .settings-range-value {
+    #settingsPanel .settings-range-value,
+    #eventInputPanel .settings-range-value {
+      grid-area: value;
       display: inline-block;
       min-width: 4.5ch;
       text-align: right;
@@ -1347,7 +1422,7 @@
         <label><input type="checkbox" id="tooltipToggle" checked> Hover tooltip</label>
         <label><input type="checkbox" id="dayOverlayToggle" checked> Weekday gradient</label>
         <!-- Weekday gradient opacity control (only visible when weekday gradient is enabled) -->
-        <div id="dayOverlayOpacityControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
+        <div id="dayOverlayOpacityControls" style="display: none;">
           <label class="settings-range-control">
             <span class="settings-range-caption">Opacity</span>
             <input type="range" id="dayOverlayOpacitySlider" class="settings-range-track" min="0" max="100" step="1" value="15">
@@ -1357,9 +1432,9 @@
         
         <label><input type="checkbox" id="gradientOverlayToggle" checked> Inward gradient</label>
         <!-- Inward gradient opacity control (only visible when inward gradient is enabled) -->
-        <div id="gradientOverlayOpacityControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
+        <div id="gradientOverlayOpacityControls" style="display: none;">
           <label class="settings-range-control">
-            <span class="settings-range-caption">Max opacity (center)</span>
+            <span class="settings-range-caption">Opacity</span>
             <input type="range" id="gradientOverlayOpacitySlider" class="settings-range-track" min="0" max="100" step="1" value="15">
             <span id="gradientOverlayOpacityVal" class="settings-range-value">15%</span>
           </label>
@@ -1367,13 +1442,13 @@
                 
         <label><input type="checkbox" id="nightOverlayToggle" checked> Nighttime Shading</label>
         <!-- Night overlay opacity control (only visible when night overlay is enabled) -->
-        <div id="nightOverlayOpacityControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
-          <label class="settings-range-control">
-            <span class="settings-range-caption">Opacity</span>
-            <input type="range" id="nightOverlayOpacitySlider" class="settings-range-track" min="0" max="100" step="1" value="5">
-            <span id="nightOverlayOpacityVal" class="settings-range-value">5%</span>
-          </label>
-        </div>
+          <div id="nightOverlayOpacityControls" style="display: none;">
+            <label class="settings-range-control">
+              <span class="settings-range-caption">Opacity</span>
+              <input type="range" id="nightOverlayOpacitySlider" class="settings-range-track" min="0" max="100" step="1" value="10">
+              <span id="nightOverlayOpacityVal" class="settings-range-value">10%</span>
+            </label>
+          </div>
         
         <!-- Location controls (only visible when night overlay is enabled) -->
         <div id="locationControls">
@@ -1388,11 +1463,11 @@
             <input type="number" id="lngInput" class="location-field" step="0.0001" placeholder="Lng" value="8.8017">
             <button id="setLocationBtn" class="location-action-btn location-icon-btn" title="Set coordinates" aria-label="Set coordinates"></button>
           </div>
-          <label style="display:flex; align-items:center; gap:0.45em; margin-top: 0.4em; font-size: 0.9em;">
+          <label style="display:flex; align-items:center; gap:0.45em; margin-top: 0.8em; font-size: 0.9em;">
             <input type="checkbox" id="useLocationTimezoneToggle">
             <span>Location timezone</span>
           </label>
-          <div id="locationTimezoneInfo" style="margin-top: 0.2em; font-size: 0.8em; color: #888; min-height: 1.2em;">Device</div>
+          <div id="locationTimezoneInfo" style="margin-top: 0.5em; font-size: 0.8em; color: #888; min-height: 1.2em;">Device</div>
           <div id="locationCurrentInfo" style="margin-top: 0.1em; font-size: 0.78em; color: #888; min-height: 1.2em;">53.0793, 8.8017</div>
         </div>
         
