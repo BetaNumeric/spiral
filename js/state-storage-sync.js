@@ -526,6 +526,7 @@ Object.assign(SpiralCalendar.prototype, {
       showAllEventBoundaryStrokes: this.state.showAllEventBoundaryStrokes,
       audioFeedbackEnabled: this.state.audioFeedbackEnabled,
       darkMode: this.state.darkMode,
+      showEventListCalendarButtons: this.state.showEventListCalendarButtons,
       calendars: this.state.calendars.slice(),
       selectedCalendar: this.state.selectedCalendar,
       visibleCalendars: this.state.visibleCalendars.slice(),
@@ -898,6 +899,7 @@ Object.assign(SpiralCalendar.prototype, {
         );
         this.state.detailViewCloseButtonEnabled = this.state.detailViewCloseButtonEnabled !== false;
         this.state.detailViewCloseButtonAlignToSegment = !!this.state.detailViewCloseButtonAlignToSegment;
+        this.state.showEventListCalendarButtons = this.state.showEventListCalendarButtons !== false;
         
         return true;
       }
@@ -1023,6 +1025,7 @@ Object.assign(SpiralCalendar.prototype, {
       { id: 'overlayStackMode', value: this.state.overlayStackMode },
       { id: 'eventBoundaryStrokesToggle', value: this.state.showEventBoundaryStrokes },
       { id: 'eventBoundaryAllEdgesToggle', value: this.state.showAllEventBoundaryStrokes },
+      { id: 'eventListCalendarButtonsToggle', value: this.state.showEventListCalendarButtons !== false },
       { id: 'longPressJoystickToggle', value: this.state.enableLongPressJoystick },
       { id: 'detailViewAutoCircleModeToggle', value: this.state.detailViewAutoCircleMode },
       { id: 'detailViewAutoZoomToggle', value: this.state.detailViewAutoZoomEnabled !== false },

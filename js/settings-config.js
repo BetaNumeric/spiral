@@ -63,6 +63,7 @@ const APP_SETTINGS_DEFAULTS = {
   // UX
   audioFeedbackEnabled: true,
   darkMode: false,
+  showEventListCalendarButtons: true,
 
   // Calendars
   calendars: ['Home', 'Work'],
@@ -110,6 +111,7 @@ const APP_DEV_OPTIONS_CONFIG = {
     'overlayStackMode',
     'eventBoundaryStrokesToggle',
     'eventBoundaryStrokeControls',
+    'eventListCalendarButtonsToggle',
     'dayOverlayToggle', 'dayOverlayOpacityControls',
     'gradientOverlayToggle', 'gradientOverlayOpacityControls',
     'tooltipToggle'

@@ -820,6 +820,17 @@ Object.assign(SpiralCalendar.prototype, {
       });
     }
 
+    const eventListCalendarButtonsToggle = document.getElementById('eventListCalendarButtonsToggle');
+    if (eventListCalendarButtonsToggle) {
+      eventListCalendarButtonsToggle.addEventListener('change', function(e) {
+        self.state.showEventListCalendarButtons = e.target.checked;
+        self.saveSettingsToStorage();
+        if (typeof window.renderEventList === 'function') {
+          window.renderEventList();
+        }
+      });
+    }
+
     // Event color mode controls
     const colorModeSelect = document.getElementById('colorModeSelect');
     const colorModeButtons = Array.from(document.querySelectorAll('#colorModeButtons .palette-mode-btn'));
