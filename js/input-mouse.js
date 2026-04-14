@@ -416,7 +416,16 @@ Object.assign(SpiralCalendar.prototype, {
     
     // Check if cursor is within the detail circle area (when detail view is open)
     let shouldCheckHover = true;
-    if (this.state.detailViewDay !== null) {
+    
+    // Disable hover tooltips during startup animation
+    if (this.startupAnimationState && this.startupAnimationState.active) {
+      shouldCheckHover = false;
+      if (this.mouseState.hoveredSegment !== null || this.mouseState.hoveredEvent !== null) {
+        this.mouseState.hoveredSegment = null;
+        this.mouseState.hoveredEvent = null;
+        this.drawSpiral(); 
+      }
+    } else if (this.state.detailViewDay !== null) {
       const detailMetrics = this.getDetailViewMetrics();
       const { centerX, centerY, outerRadius } = detailMetrics;
       

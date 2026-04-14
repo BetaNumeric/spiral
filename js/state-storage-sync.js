@@ -572,6 +572,7 @@ Object.assign(SpiralCalendar.prototype, {
 
     this.state.darkMode = !!enabled;
     try {
+      document.documentElement.classList.toggle('dark-mode', this.state.darkMode);
       document.body.classList.toggle('dark-mode', this.state.darkMode);
     } catch (_) {}
 
@@ -824,6 +825,7 @@ Object.assign(SpiralCalendar.prototype, {
 
         // Apply dark mode class after loading
         try {
+          document.documentElement.classList.toggle('dark-mode', !!this.state.darkMode);
           document.body.classList.toggle('dark-mode', !!this.state.darkMode);
         } catch (_) {}
         this.updateThemeColor();
@@ -942,7 +944,10 @@ Object.assign(SpiralCalendar.prototype, {
     // Sync all UI controls
     this.syncAllUIControls();
     // Apply dark mode class
-    try { document.body.classList.toggle('dark-mode', !!this.state.darkMode); } catch(_) {}
+    try { 
+      document.documentElement.classList.toggle('dark-mode', !!this.state.darkMode); 
+      document.body.classList.toggle('dark-mode', !!this.state.darkMode); 
+    } catch(_) {}
     this.updateThemeColor();
     
     // Update audio icon for dark mode

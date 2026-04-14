@@ -33,10 +33,10 @@ const CONFIG = {
 };
 
 // Development flag - set to false to hide advanced options
-const DEV_MODE = false;
+const DEV_MODE = true;
 
 // Study mode flag - set to true to enable study session controls
-const STUDY_MODE = false;
+const STUDY_MODE = true;
 
 // Runtime DEV_MODE override (for toggle button). Default to hidden.
 let runtimeDevModeOverride = false;
