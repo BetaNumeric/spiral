@@ -2378,6 +2378,37 @@ clampRotationToEventWindow() {
     return spans;
   },
 
+  splitCircleOverlaySpan(span, options = {}) {
+    const segmentCountPerChunk = Number.isFinite(options.segmentCountPerChunk)
+      ? Math.max(1, Math.floor(options.segmentCountPerChunk))
+      : 6;
+    const segmentAngle = (2 * Math.PI) / CONFIG.SEGMENTS_PER_DAY;
+    const maxSweep = segmentCountPerChunk * segmentAngle;
+    const totalSweep = span.startTheta - span.endTheta;
+
+    if (!(totalSweep > maxSweep)) {
+      return [{ ...span }];
+    }
+
+    const chunks = [];
+    let chunkStart = span.startTheta;
+
+    // Android canvas can mis-fill wider annular sectors in circle mode overlays.
+    // On Android, keep chunks at one hour so they match the safe geometry already
+    // used by the normal circle segments; other browsers can keep larger chunks.
+    while (chunkStart > span.endTheta) {
+      const chunkEnd = Math.max(span.endTheta, chunkStart - maxSweep);
+      chunks.push({
+        ...span,
+        startTheta: chunkStart,
+        endTheta: chunkEnd
+      });
+      chunkStart = chunkEnd;
+    }
+
+    return chunks;
+  },
+
   fillCircleModeOverlaySegment(overlay, fillStyle) {
     this.ctx.save();
     this.ctx.beginPath();
@@ -2406,7 +2437,10 @@ clampRotationToEventWindow() {
   drawMergedCircleOverlays(overlays, buildSpan) {
     const circleSpans = this.collectContiguousCircleOverlaySpans(overlays, buildSpan);
     for (const span of circleSpans) {
-      this.fillCircleModeOverlaySegment(span, span.color);
+      const spanChunks = this.splitCircleOverlaySpan(span);
+      for (const chunk of spanChunks) {
+        this.fillCircleModeOverlaySegment(chunk, chunk.color);
+      }
     }
   },
 
