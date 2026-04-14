@@ -576,12 +576,15 @@ Object.assign(SpiralCalendar.prototype, {
       
       // Right side with "All:" text and buttons (fixed width, must never shrink to stay visible)
       // For event panel, use slightly smaller buttons; for bottom list on desktop, use standard width
-      const deleteButtonSize = (isMobile || isEventPanel) ? 28 : 30;
+      const calendarButtonSize = (isMobile || isEventPanel) ? 24 : 26;
+      const calendarIconSize = (isMobile || isEventPanel) ? 18 : 20;
+      const deleteButtonSize = (isMobile || isEventPanel) ? 30 : 32;
+      const actionButtonGap = isMobile ? 7 : 8;
       const buttonWidth = showCalendarButtons
-        ? ((isMobile || isEventPanel) ? '54px' : '58px')
+        ? `${calendarButtonSize + actionButtonGap + deleteButtonSize}px`
         : `${deleteButtonSize}px`;
         const rightContent = document.createElement('div');
-      rightContent.style.cssText = `display: flex; align-items: center; justify-content: flex-end; gap: ${isMobile ? '3px' : '4px'}; width: ${buttonWidth}; flex-shrink: 0; min-width: ${buttonWidth};`;
+      rightContent.style.cssText = `display: flex; align-items: center; justify-content: flex-end; gap: ${actionButtonGap}px; width: ${buttonWidth}; flex-shrink: 0; min-width: ${buttonWidth};`;
       
       // "All:" text label removed for alignment
       // const allInfo = document.createElement('span');
@@ -591,12 +594,12 @@ Object.assign(SpiralCalendar.prototype, {
       // rightContent.appendChild(allInfo);
         
         // Add All to Calendar button
-        const addAllToCalendarBtn = document.createElement('button');
+      const addAllToCalendarBtn = document.createElement('button');
       const isDarkModeAll = document.body.classList.contains('dark-mode');
       const allIconSuffix = isDarkModeAll ? '_white.png' : '.png';
-      addAllToCalendarBtn.innerHTML = `<img src="icons/add_to_calendar${allIconSuffix}" alt="Add to Calendar" style="width: 16px; height: 16px; display: block; margin: 0; vertical-align: middle;">`;
+      addAllToCalendarBtn.innerHTML = `<img src="icons/add_to_calendar${allIconSuffix}" alt="Add to Calendar" style="width: ${calendarIconSize}px; height: ${calendarIconSize}px; display: block; margin: 0; vertical-align: middle;">`;
         addAllToCalendarBtn.title = 'Add all events to calendar';
-      addAllToCalendarBtn.style.cssText = 'background: none; border: none; cursor: pointer; opacity: 0.7; transition: opacity 0.2s; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; line-height: 0;';
+      addAllToCalendarBtn.style.cssText = `background: none; border: none; cursor: pointer; opacity: 0.7; transition: opacity 0.2s; width: ${calendarButtonSize}px; height: ${calendarButtonSize}px; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; line-height: 0;`;
         addAllToCalendarBtn.onmouseover = () => addAllToCalendarBtn.style.opacity = '1';
         addAllToCalendarBtn.onmouseout = () => addAllToCalendarBtn.style.opacity = '0.7';
         addAllToCalendarBtn.onclick = (e) => {
@@ -610,7 +613,7 @@ Object.assign(SpiralCalendar.prototype, {
         // Match event row button styling - use adaptive color if row style, otherwise default #b44
         // For header row, we don't have event brightness, so use default or check if row style is enabled
         const deleteAllBtnColor = '#b44'; // Default color for header row
-        deleteAllBtn.style.cssText = `background: none; border: none; color: ${deleteAllBtnColor}; font-size: ${isMobile ? '1.45em' : '1.55em'}; font-weight: 600; cursor: pointer; opacity: 0.8; transition: opacity 0.2s; width: ${deleteButtonSize}px; height: ${deleteButtonSize}px; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1;`;
+        deleteAllBtn.style.cssText = `background: none; border: none; color: ${deleteAllBtnColor}; font-size: ${isMobile ? '1.55em' : '1.65em'}; font-weight: 600; cursor: pointer; opacity: 0.8; transition: opacity 0.2s; width: ${deleteButtonSize}px; height: ${deleteButtonSize}px; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1;`;
         deleteAllBtn.onmouseover = () => deleteAllBtn.style.opacity = '1';
         deleteAllBtn.onmouseout = () => deleteAllBtn.style.opacity = '0.8';
         deleteAllBtn.onclick = (e) => {
@@ -947,12 +950,15 @@ Object.assign(SpiralCalendar.prototype, {
       // Right side with action buttons (fixed width, must never shrink to stay visible)
       // For event panel, use slightly smaller buttons; for bottom list on desktop, use standard width
       const showCalendarButtons = this.state.showEventListCalendarButtons !== false;
-      const deleteButtonSize = (isMobile || isEventPanel) ? 28 : 30;
+      const calendarButtonSize = (isMobile || isEventPanel) ? 24 : 26;
+      const calendarIconSize = (isMobile || isEventPanel) ? 18 : 20;
+      const deleteButtonSize = (isMobile || isEventPanel) ? 30 : 32;
+      const actionButtonGap = isMobile ? 7 : 8;
       const buttonWidth = showCalendarButtons
-        ? ((isMobile || isEventPanel) ? '54px' : '58px')
+        ? `${calendarButtonSize + actionButtonGap + deleteButtonSize}px`
         : `${deleteButtonSize}px`;
         const rightContent = document.createElement('div');
-      rightContent.style.cssText = `display: flex; align-items: center; justify-content: flex-end; gap: ${isMobile ? '3px' : '4px'}; width: ${buttonWidth}; flex-shrink: 0; min-width: ${buttonWidth};`;
+      rightContent.style.cssText = `display: flex; align-items: center; justify-content: flex-end; gap: ${actionButtonGap}px; width: ${buttonWidth}; flex-shrink: 0; min-width: ${buttonWidth};`;
 
       // Add to Calendar button
       const addToCalendarBtn = document.createElement('button');
@@ -979,9 +985,9 @@ Object.assign(SpiralCalendar.prototype, {
         titleText = 'Add event to calendar';
       }
       
-      addToCalendarBtn.innerHTML = `<img src="${iconSrc}" alt="${iconAlt}" style="width: 16px; height: 16px; display: block; margin: 0; vertical-align: middle;">`;
+      addToCalendarBtn.innerHTML = `<img src="${iconSrc}" alt="${iconAlt}" style="width: ${calendarIconSize}px; height: ${calendarIconSize}px; display: block; margin: 0; vertical-align: middle;">`;
       addToCalendarBtn.title = titleText;
-      addToCalendarBtn.style.cssText = 'background: none; border: none; cursor: pointer; opacity: 0.7; transition: opacity 0.2s; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; line-height: 0;';
+      addToCalendarBtn.style.cssText = `background: none; border: none; cursor: pointer; opacity: 0.7; transition: opacity 0.2s; width: ${calendarButtonSize}px; height: ${calendarButtonSize}px; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; line-height: 0;`;
         addToCalendarBtn.onmouseover = () => addToCalendarBtn.style.opacity = '1';
         addToCalendarBtn.onmouseout = () => addToCalendarBtn.style.opacity = '0.7';
       
@@ -1170,7 +1176,7 @@ Object.assign(SpiralCalendar.prototype, {
         removeBtn.textContent = '×';
         removeBtn.title = 'Remove event';
         const removeBtnColor = isDarkMode ? '#ff8080' : '#b44';
-        removeBtn.style.cssText = `background: none; border: none; color: ${removeBtnColor}; font-size: ${isMobile ? '1.45em' : '1.55em'}; font-weight: 600; cursor: pointer; opacity: 0.8; transition: opacity 0.2s; width: ${deleteButtonSize}px; height: ${deleteButtonSize}px; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1;`;
+        removeBtn.style.cssText = `background: none; border: none; color: ${removeBtnColor}; font-size: ${isMobile ? '1.55em' : '1.65em'}; font-weight: 600; cursor: pointer; opacity: 0.8; transition: opacity 0.2s; width: ${deleteButtonSize}px; height: ${deleteButtonSize}px; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1;`;
         removeBtn.onmouseover = () => removeBtn.style.opacity = '1';
         removeBtn.onmouseout = () => removeBtn.style.opacity = '0.8';
         removeBtn.onclick = (e) => {
