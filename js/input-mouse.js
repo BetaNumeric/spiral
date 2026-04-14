@@ -27,11 +27,22 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     syncViewportHostSize() {
-      const { height } = this.getViewportDimensions();
-      if (!height) return;
-
       const rootStyle = document.documentElement && document.documentElement.style;
       if (!rootStyle) return;
+
+      const viewport = window.visualViewport;
+      const { height } = this.getViewportDimensions();
+      const offsetTop = viewport && Number.isFinite(viewport.offsetTop)
+        ? viewport.offsetTop
+        : 0;
+      const offsetLeft = viewport && Number.isFinite(viewport.offsetLeft)
+        ? viewport.offsetLeft
+        : 0;
+
+      rootStyle.setProperty('--app-viewport-offset-top', `${Math.round(offsetTop)}px`);
+      rootStyle.setProperty('--app-viewport-offset-left', `${Math.round(offsetLeft)}px`);
+
+      if (!height) return;
 
       rootStyle.setProperty('--app-viewport-height', `${height}px`);
     },

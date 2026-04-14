@@ -21,13 +21,15 @@
       height: 100%;
       overflow: hidden;
       position: fixed;
-      top: 0;
-      left: 0;
+      top: var(--app-viewport-offset-top, 0px);
+      left: var(--app-viewport-offset-left, 0px);
     }
     /* Use viewport units for consistent full-screen behavior */
     /* 100dvh is dynamic viewport height (accounts for mobile browser UI) */
     :root {
       --app-viewport-height: 100dvh;
+      --app-viewport-offset-top: 0px;
+      --app-viewport-offset-left: 0px;
     }
     html {
       height: var(--app-viewport-height);
@@ -532,6 +534,13 @@
       font-size: 16px !important;
     }
 
+    /* Top panels need contained scrolling to avoid viewport chain scrolling on mobile */
+    #eventInputPanel,
+    #settingsPanel {
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+
     /* Settings panel styling */
     #settingsPanel {
       overflow-x: hidden;
@@ -862,12 +871,13 @@
     @media (max-width: 768px) {
       #eventInputPanel, #settingsPanel {
         left: 50% !important;
-        top: 50% !important;
-        transform: translate(-50%, -50%) !important;
-        max-width: 90vw !important;
-        min-width: 320px !important;
-        max-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 10em) !important;
-        width: 360px !important; /* Allow the panel to hit max-width */
+        right: auto !important;
+        top: calc(env(safe-area-inset-top) + 1em) !important;
+        transform: translateX(-50%) !important;
+        max-width: calc(100vw - 2em) !important;
+        min-width: 0 !important;
+        max-height: calc(var(--app-viewport-height) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 2em) !important;
+        width: min(360px, calc(100vw - 2em)) !important;
       }
 
       #eventInputPanel .event-panel-action-btn {
@@ -914,7 +924,7 @@
       /* Fix for iOS Safari viewport height issues */
       @media (max-width: 768px) {
         #eventInputPanel, #settingsPanel {
-          max-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 10em) !important;
+          max-height: calc(var(--app-viewport-height) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 2em) !important;
         }
       }
     }
@@ -988,7 +998,7 @@
     </button>
 
     <!-- Event Input Panel (hidden by default) -->
-    <div id="eventInputPanel" style="display: none; position: absolute; top: 4.5em; left: 1.0em; background: rgba(222, 222, 222, 0.85); padding: .7em .9em .7em .9em; border-radius: .3em; font-size: .9em; z-index: 35; width: min(360px, calc(100vw - 2em)); min-width: 0; max-width: calc(100vw - 2em); max-height: calc(100vh - 5.5em); overflow-y: auto; overflow-x: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.10);">
+    <div id="eventInputPanel" style="display: none; position: absolute; top: 4.5em; left: 1.0em; background: rgba(222, 222, 222, 0.85); padding: .7em .9em .7em .9em; border-radius: .3em; font-size: .9em; z-index: 35; width: min(360px, calc(100vw - 2em)); min-width: 0; max-width: calc(100vw - 2em); max-height: calc(var(--app-viewport-height) - 5.5em); overflow-y: auto; overflow-x: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.10);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2em;">
         <span style="font-weight: bold; font-size: 1.1em;">Add Event</span>
         <button id="closeEventPanelBtn" title="Close" style="background: none; border: none; font-size: 1.3em; cursor: pointer; color: #888;">&times;</button>
@@ -1120,7 +1130,7 @@
     </button>
 
     <!-- Settings Panel (hidden by default) -->
-    <div id="settingsPanel" style="display: none; position: absolute; top: 4.5em; right: 1.0em; background: rgba(222, 222, 222, 0.85); padding: .7em .9em .7em .9em; border-radius: .3em; font-size: .9em; z-index: 35; width: min(360px, calc(100vw - 2em)); min-width: 0; max-width: calc(100vw - 2em); max-height: calc(100vh - 5.5em); overflow-y: auto; overflow-x: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.10);">
+    <div id="settingsPanel" style="display: none; position: absolute; top: 4.5em; right: 1.0em; background: rgba(222, 222, 222, 0.85); padding: .7em .9em .7em .9em; border-radius: .3em; font-size: .9em; z-index: 35; width: min(360px, calc(100vw - 2em)); min-width: 0; max-width: calc(100vw - 2em); max-height: calc(var(--app-viewport-height) - 5.5em); overflow-y: auto; overflow-x: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.10);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2em;">
         <div style="display: flex; align-items: baseline; gap: 0.5em;">
           <span style="font-weight: bold; font-size: 1.1em;">Settings</span>
