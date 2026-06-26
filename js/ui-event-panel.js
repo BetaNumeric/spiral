@@ -250,9 +250,7 @@ Object.assign(SpiralCalendar.prototype, {
         }
         updateClearButton();
         searchInput.focus();
-        if (typeof window.renderEventList === 'function') {
-          window.renderEventList();
-        }
+        this.requestEventListRender();
       });
       
       // Hover effect for clear button
@@ -287,9 +285,7 @@ Object.assign(SpiralCalendar.prototype, {
           }
         }
         // renderEventList will preserve the input element if it's focused, so no need to restore focus here
-        if (typeof window.renderEventList === 'function') {
-          window.renderEventList();
-        }
+        this.requestEventListRender();
       });
       
       // Clear search on Escape - sync both inputs
@@ -310,9 +306,7 @@ Object.assign(SpiralCalendar.prototype, {
               otherClearButton.style.pointerEvents = 'none';
             }
           }
-          if (typeof window.renderEventList === 'function') {
-            window.renderEventList();
-          }
+          this.requestEventListRender();
         }
       });
       
@@ -390,7 +384,7 @@ Object.assign(SpiralCalendar.prototype, {
                 cb.checked = true;
               }
             }
-            this.saveSettingsToStorage();
+            this.requestSettingsSave();
             this.drawSpiral();
             renderEventList();
           };
@@ -432,7 +426,7 @@ Object.assign(SpiralCalendar.prototype, {
                 this._eventsVersion++;
                 this.state.calendars = this.state.calendars.filter(n => n !== name);
                 this.state.visibleCalendars = this.state.visibleCalendars.filter(n => n !== name);
-                this.saveSettingsToStorage();
+                this.requestSettingsSave();
                 this.saveEventsToStorage();
                 buildBottomCalendarMenu();
                 // The main dropdown will rebuild itself when next opened
@@ -894,16 +888,14 @@ Object.assign(SpiralCalendar.prototype, {
                 this.state.visibleCalendars = [ev.calendar];
               }
               
-              this.saveSettingsToStorage();
+              this.requestSettingsSave();
               // Rebuild calendar dropdown menu to update checkboxes
               if (typeof this.buildCalendarMenu === 'function') {
                 this.buildCalendarMenu();
               }
               // Re-render event list
-              if (typeof window.renderEventList === 'function') {
-                window.renderEventList();
-              }
-              this.drawSpiral();
+              this.requestEventListRender();
+              this.requestRender();
             }
           }, longPressDuration);
         };
@@ -1211,95 +1203,7 @@ Object.assign(SpiralCalendar.prototype, {
         li.onclick = (e) => {
         if (e.target === removeBtn || e.target.closest('button') === removeBtn) return;
           
-          // Find the segment corresponding to the event's start time
-          const eventStart = new Date(ev.start);
-          const diffHours = (eventStart - this.referenceTime) / (1000 * 60 * 60);
-          // Use floor for future and ceil for past to avoid off-by-one day rounding
-          const segmentId = diffHours >= 0 ? Math.floor(diffHours) : Math.ceil(diffHours);
-          const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-          const absPos = totalVisibleSegments - segmentId - 1;
-          let newDay = Math.floor(absPos / CONFIG.SEGMENTS_PER_DAY);
-          // Map event UTC hour to spiral segment index (segment 0 = outermost/most recent, 23 = innermost/oldest)
-          // The spiral counts from outside in, so segment 0 is hour 0 (00:00-01:00) when looking outward
-          // But getAllEventsForSegment expects: segment 0 = 23:00-00:00, segment 23 = 00:00-01:00 (inverted)
-          const eventUtcHour = eventStart.getUTCHours();
-          // Convert UTC hour to spiral segment: hour 0 -> segment 23, hour 1 -> segment 22, ..., hour 23 -> segment 0
-          const targetSegment = (CONFIG.SEGMENTS_PER_DAY - 1) - eventUtcHour;
-          
-
-          // Simple sanity adjustment: if computed day is off by exactly one day
-          // compared to the event's actual UTC date, nudge the day index.
-          try {
-            const calcSegmentDate = (dayIdx, segIdx) => {
-              const segId = totalVisibleSegments - (dayIdx * CONFIG.SEGMENTS_PER_DAY + segIdx) - 1;
-              return new Date(this.referenceTime.getTime() + segId * 60 * 60 * 1000);
-            };
-            const candidateDate = calcSegmentDate(newDay, targetSegment);
-            const eventStartUtc = new Date(ev.start);
-            const dayMs = 24 * 60 * 60 * 1000;
-            const deltaDays = Math.round((candidateDate - eventStartUtc) / dayMs);
-            if (deltaDays === 1 && newDay > 0) {
-              newDay -= 1;
-            } else if (deltaDays === -1 && newDay < this.state.days - 1) {
-              newDay += 1;
-            }
-          } catch (_) {
-            // Fail-safe: ignore adjustment on any unexpected error
-          }
-          // After computing the rotation target, prefer to set rotation first
-          const thetaMax = (this.state.days) * 2 * Math.PI;
-          const eventRotation = (diffHours / CONFIG.SEGMENTS_PER_DAY) * 2 * Math.PI;
-          this.state.rotation = eventRotation;
-
-          // Robustly locate the exact day containing this event for the computed hour segment
-          // Check a few days around the computed day to handle edge cases
-          let foundDay = -1;
-          const searchRange = 2; // Check ±2 days around computed day
-          const startDay = Math.max(0, newDay - searchRange);
-          const endDay = Math.min(this.state.days - 1, newDay + searchRange);
-          
-          for (let d = startDay; d <= endDay; d++) {
-            const list = this.getAllEventsForSegment(d, targetSegment);
-            const idx = list.findIndex(ei => ei.event === ev);
-            if (idx !== -1) { 
-              foundDay = d;
-              break;
-            }
-          }
-          
-          // If not found in nearby days, search all days as fallback
-          if (foundDay === -1) {
-            for (let d = 0; d < this.state.days; d++) {
-              const list = this.getAllEventsForSegment(d, targetSegment);
-              const idx = list.findIndex(ei => ei.event === ev);
-              if (idx !== -1) { 
-                foundDay = d;
-                break;
-              }
-            }
-          }
-          
-          if (foundDay !== -1) {
-            newDay = foundDay;
-          }
-
-          this.openDetailViewForSegment({ day: newDay, segment: targetSegment });
-          // Find the event index for this segment
-          const allEvents = this.getAllEventsForSegment(newDay, targetSegment);
-          const eventIdx = allEvents.findIndex(ei => ei.event === ev);
-          this.mouseState.selectedEventIndex = eventIdx >= 0 ? eventIdx : 0;
-          
-          // --- rotation already updated above ---
-          
-          // Turn off Auto Time Align when jumping to an event
-          if (this.autoTimeAlignState.enabled) {
-            this.stopAutoTimeAlign();
-          }
-          
-
-          
-          // Force a redraw to ensure the time display shows the correct time
-          this.drawSpiral();
+          this.openEventAtStart(ev);
         };
       
       return li;
@@ -2395,7 +2299,7 @@ Object.assign(SpiralCalendar.prototype, {
               });
               
               if (missingCalendars.size > 0) {
-                this.saveSettingsToStorage();
+                this.requestSettingsSave();
                 if (typeof this.buildCalendarMenu === 'function') {
                   this.buildCalendarMenu();
                 }
@@ -2451,7 +2355,7 @@ Object.assign(SpiralCalendar.prototype, {
               
               if (missingCalendars.size > 0) {
                 this.runWithStudyEventSource('import', () => {
-                  this.saveSettingsToStorage();
+                  this.requestSettingsSave();
                 });
                 if (typeof this.buildCalendarMenu === 'function') {
                   this.buildCalendarMenu();
@@ -2667,7 +2571,7 @@ Object.assign(SpiralCalendar.prototype, {
               cb.checked = true;
             }
           }
-          this.saveSettingsToStorage();
+          this.requestSettingsSave();
           this.drawSpiral();
           renderEventList();
         };
@@ -2710,7 +2614,7 @@ Object.assign(SpiralCalendar.prototype, {
               // Remove calendar from lists
               this.state.calendars = this.state.calendars.filter(n => n !== name);
               this.state.visibleCalendars = this.state.visibleCalendars.filter(n => n !== name);
-              this.saveSettingsToStorage();
+              this.requestSettingsSave();
               this.saveEventsToStorage();
               this.buildCalendarMenu();
               populateEventCalendarSelect(); // Refresh the event calendar select dropdown
@@ -2875,7 +2779,7 @@ Object.assign(SpiralCalendar.prototype, {
             if (randomVisibleIndex !== -1) {
               this.state.visibleCalendars.splice(randomVisibleIndex, 1);
             }
-            this.saveSettingsToStorage();
+            this.requestSettingsSave();
           }
         }
 
@@ -2886,7 +2790,7 @@ Object.assign(SpiralCalendar.prototype, {
           if (!this.state.visibleCalendars.includes('Random')) {
             this.state.visibleCalendars.push('Random');
           }
-          this.saveSettingsToStorage();
+          this.requestSettingsSave();
         }
 
         const rangeMs = endRange.getTime() - startRange.getTime();
@@ -3165,7 +3069,7 @@ Object.assign(SpiralCalendar.prototype, {
               this.state.visibleCalendars.splice(randomVisibleIndex, 1);
             }
             this.runWithStudyEventSource('random_generator', () => {
-              this.saveSettingsToStorage();
+              this.requestSettingsSave();
             });
           }
           
@@ -3200,14 +3104,12 @@ Object.assign(SpiralCalendar.prototype, {
 
       this.state.visibleCalendars = [...this._previousVisibleCalendars];
       this._previousVisibleCalendars = null;
-      this.saveSettingsToStorage();
+      this.requestSettingsSave();
       if (typeof this.buildCalendarMenu === 'function') {
         this.buildCalendarMenu();
       }
-      if (typeof window.renderEventList === 'function') {
-        window.renderEventList();
-      }
-      this.drawSpiral();
+      this.requestEventListRender();
+      this.requestRender();
     };
 
     const closeEventPanel = () => {

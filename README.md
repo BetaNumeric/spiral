@@ -63,7 +63,7 @@ At the bottom, there is the option to reset the settings to the default.
 
 ## **Developer Mode and Experimental Features**
 
-More experimental settings are hidden, but can be accessed in the developer mode. 
+More experimental settings are hidden, but can be accessed in the developer mode. Local builds keep developer and study controls hidden by default; append `?dev=1` to the URL to show the developer-mode toggle, append `?study=1` to show study-session controls, or combine them as `?dev=1&study=1`. These flags are remembered in local storage, so installing the PWA after opening one of those URLs keeps the same mode when the installed app later launches from its normal PWA start URL. Use `?dev=0` or `?study=0` to turn a remembered flag off. For build-level defaults, change `DEFAULT_DEV_MODE` or `DEFAULT_STUDY_MODE` in `js/config-utils.js`.
 
 For fine-grained control of the calendar's looks, the dev setting includes a group of advanced visual options. Here you can toggle additional guide lines (such as noon or 6 am / 6 pm markers), show or hide segment borders, and adjust how text is rendered inside the spiral (for example, showing year and month names only on the first segment of each period). You can also fine-tune how hours, days, months, and years are labeled, choosing between different formats and levels of detail.
 

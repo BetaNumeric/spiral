@@ -306,53 +306,7 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   _jumpToEventStart(ev) {
-    try {
-      const eventStart = new Date(ev.start);
-      const diffHours = (eventStart - this.referenceTime) / (1000 * 60 * 60);
-      const segmentId = diffHours >= 0 ? Math.floor(diffHours) : Math.ceil(diffHours);
-      const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-      const absPos = totalVisibleSegments - segmentId - 1;
-      let newDay = Math.floor(absPos / CONFIG.SEGMENTS_PER_DAY);
-      const eventUtcHour = eventStart.getUTCHours();
-      const targetSegment = (CONFIG.SEGMENTS_PER_DAY - 1) - eventUtcHour;
-
-      // Update rotation first
-      const eventRotation = (diffHours / CONFIG.SEGMENTS_PER_DAY) * 2 * Math.PI;
-      this.state.rotation = eventRotation;
-
-      // Search nearby days first
-      let foundDay = -1;
-      const searchRange = 2;
-      const startDay = Math.max(0, newDay - searchRange);
-      const endDay = Math.min(this.state.days - 1, newDay + searchRange);
-      for (let d = startDay; d <= endDay; d++) {
-        const list = this.getAllEventsForSegment(d, targetSegment);
-        if (list.find(ei => ei.event === ev)) { foundDay = d; break; }
-      }
-      if (foundDay === -1) {
-        for (let d = 0; d < this.state.days; d++) {
-          const list = this.getAllEventsForSegment(d, targetSegment);
-          if (list.find(ei => ei.event === ev)) { foundDay = d; break; }
-        }
-      }
-      if (foundDay !== -1) newDay = foundDay;
-
-      // Apply selection
-      this.openDetailViewForSegment({ day: newDay, segment: targetSegment });
-      const allEvents = this.getAllEventsForSegment(newDay, targetSegment);
-      const eventIdx = allEvents.findIndex(ei => ei.event === ev);
-      this.mouseState.selectedEventIndex = eventIdx >= 0 ? eventIdx : 0;
-
-      // Disable auto align and sync UI
-      if (this.autoTimeAlignState && this.autoTimeAlignState.enabled) {
-        this.stopAutoTimeAlign();
-      }
-
-      this.drawSpiral();
-    } catch (_) {
-      // As a fallback, just redraw
-      try { this.drawSpiral(); } catch (_) {}
-    }
+    this.openEventAtStart(ev);
   },
 
   openDateTimePickerForInput(inputEl) {
@@ -670,7 +624,7 @@ Object.assign(SpiralCalendar.prototype, {
           }
           this.state.calendarColors[trimmed] = colorInput.value;
           this.refreshAutoEventColors({ includeDraft: true });
-          this.saveSettingsToStorage();
+          this.requestSettingsSave();
           
           // Call success callback first
           if (onSuccess) {
@@ -913,7 +867,7 @@ Object.assign(SpiralCalendar.prototype, {
       }
       this.state.calendarColors[newName] = colorInput.value;
       this.refreshAutoEventColors({ includeDraft: true });
-      this.saveSettingsToStorage();
+      this.requestSettingsSave();
 
       if (onSuccess) {
         try {

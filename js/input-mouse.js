@@ -296,12 +296,8 @@ Object.assign(SpiralCalendar.prototype, {
           if (minute >= 60) minute = 55;
           if (minute < 0) minute = 0;
           // Compute the UTC hour start datetime for this segment
-          const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-          const segmentId = totalVisibleSegments - (seg.day * CONFIG.SEGMENTS_PER_DAY + seg.segment) - 1;
-          const hoursFromReference = segmentId;
-          const hourStart = new Date(this.referenceTime.getTime() + hoursFromReference * 60 * 60 * 1000);
-          hourStart.setUTCMinutes(0, 0, 0);
-          const newTime = new Date(hourStart.getTime() + minute * 60 * 1000);
+          const hourStartMs = this.getSegmentHourRange(seg.day, seg.segment).startMs;
+          const newTime = new Date(hourStartMs + minute * 60 * 1000);
           // Apply constraints and update event
           const ev = this.handleDragState.event;
           if (this.mouseState.draggingHandle === 'start') {
@@ -891,9 +887,7 @@ Object.assign(SpiralCalendar.prototype, {
                     this.saveEventsToStorage();
                   });
                   this._detailViewHasChanges = true;
-                  if (typeof window.renderEventList === 'function') {
-                    window.renderEventList();
-                  }
+                  this.requestEventListRender();
                   this.draftEvent = null; // Clear draft event
                   
                 // Reset auto-activated settings
@@ -930,9 +924,7 @@ Object.assign(SpiralCalendar.prototype, {
                     this.saveEventsToStorage();
                   });
                   this._detailViewHasChanges = true;
-                  if (typeof window.renderEventList === 'function') {
-                    window.renderEventList();
-                  }
+                  this.requestEventListRender();
                   this.deleteButtonInfo = null;
                   this.addButtonInfo = null;
                   this.titleClickArea = null;
@@ -1288,9 +1280,7 @@ Object.assign(SpiralCalendar.prototype, {
         if (typeof this.saveEventsToStorage === 'function') {
           this.saveEventsToStorage();
         }
-        if (typeof window.renderEventList === 'function') {
-          window.renderEventList();
-        }
+        this.requestEventListRender();
         this.refreshCanvasCursor();
         this.drawSpiral();
         return;

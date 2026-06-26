@@ -8,9 +8,10 @@ Object.assign(SpiralCalendar.prototype, {
         if (!this.state.visibleCalendars.includes(eventCalendar)) continue;
         const range = {
           event,
-          startMs: new Date(event.start).getTime(),
-          endMs: new Date(event.end).getTime()
+          startMs: this.getEventStartMs(event),
+          endMs: this.getEventEndMs(event)
         };
+        if (!Number.isFinite(range.startMs) || !Number.isFinite(range.endMs)) continue;
         visibleEventRanges.push(range);
         eventRangeByEvent.set(event, range);
       }
@@ -2027,10 +2028,9 @@ Object.assign(SpiralCalendar.prototype, {
           // Get base color for this segment.
           let color;
           
-          const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-          const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
+          const segmentId = this.getSegmentId(day, segment);
           const colorIndex = ((segmentId % this.cache.colors.length) + this.cache.colors.length) % this.cache.colors.length;
-          const segmentHourStartMs = this.referenceTime.getTime() + segmentId * 60 * 60 * 1000;
+          const segmentHourStartMs = this.getSegmentStartMs(segmentId);
           const segmentHourEndMs = segmentHourStartMs + 60 * 60 * 1000;
           color = this.cache.colors[colorIndex];
 
@@ -2184,9 +2184,8 @@ Object.assign(SpiralCalendar.prototype, {
             let includeYear = false;
             let segmentDateMs = null;
             try {
-              const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-              const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
-              const segmentDate = new Date(this.referenceTime.getTime() + segmentId * 60 * 60 * 1000);
+              const segmentId = this.getSegmentId(day, segment);
+              const segmentDate = this.getSegmentDate(segmentId);
               segmentDateMs = segmentDate.getTime();
               const weekdayFull = WEEKDAYS_UTC[segmentDate.getUTCDay()];
               const weekdayShort = weekdayFull.slice(0, 3);

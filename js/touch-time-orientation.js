@@ -76,12 +76,8 @@ Object.assign(SpiralCalendar.prototype, {
     if (minute >= 60) minute = 55;
     if (minute < 0) minute = 0;
 
-    const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-    const segmentId = totalVisibleSegments - (seg.day * CONFIG.SEGMENTS_PER_DAY + seg.segment) - 1;
-    const hoursFromReference = segmentId;
-    const hourStart = new Date(this.referenceTime.getTime() + hoursFromReference * 60 * 60 * 1000);
-    hourStart.setUTCMinutes(0, 0, 0);
-    const newTime = new Date(hourStart.getTime() + minute * 60 * 1000);
+    const hourStartMs = this.getSegmentHourRange(seg.day, seg.segment).startMs;
+    const newTime = new Date(hourStartMs + minute * 60 * 1000);
 
     const ev = this.handleDragState.event;
     if (this.mouseState.draggingHandle === 'start') {
@@ -106,21 +102,6 @@ Object.assign(SpiralCalendar.prototype, {
     this.ensureLayoutCache();
     this.drawSpiral();
     return true;
-  },
-
-  syncSelectedSegmentToCurrentDays() {
-    if (this.mouseState.selectedSegmentId === null) return;
-
-    const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-    if (this.mouseState.selectedSegmentId < totalVisibleSegments) {
-      const absPos = totalVisibleSegments - this.mouseState.selectedSegmentId - 1;
-      const newDay = Math.floor(absPos / CONFIG.SEGMENTS_PER_DAY);
-      const newSegment = absPos % CONFIG.SEGMENTS_PER_DAY;
-      this.mouseState.selectedSegment = { day: newDay, segment: newSegment };
-    } else {
-      this.mouseState.selectedSegment = null;
-      this.mouseState.selectedSegmentId = null;
-    }
   },
 
   setTemporaryTouchDays(value) {
@@ -1124,10 +1105,8 @@ Object.assign(SpiralCalendar.prototype, {
       // Check if we're in detail view and hit the outer limit
       if (this.state.detailViewDay !== null && this.mouseState.selectedSegment) {
         // Calculate what the rotation would be without clamping
-        const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
         const segment = this.mouseState.selectedSegment;
-        const segmentId = totalVisibleSegments - (segment.day * CONFIG.SEGMENTS_PER_DAY);
-        const eventHour = segmentId;
+        const eventHour = this.getDayBoundarySegmentId(segment.day);
         const maxRotation = ((eventHour - 23.999) / CONFIG.SEGMENTS_PER_DAY) * 2 * Math.PI;
         
         // Check if the user tried to zoom past the limit
@@ -1384,9 +1363,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (typeof this.saveEventsToStorage === 'function') {
         this.saveEventsToStorage();
       }
-      if (typeof window.renderEventList === 'function') {
-        window.renderEventList();
-      }
+      this.requestEventListRender();
 
       if (typeof this.refreshCanvasCursor === 'function') {
         this.refreshCanvasCursor();
@@ -1755,7 +1732,7 @@ setNightOverlayEnabled(enabled) {
     nightOverlayOpacityControls.style.display = enabled ? 'block' : 'none';
   }
   this.drawSpiral();
-  this.saveSettingsToStorage();
+  this.requestSettingsSave();
 },
 
 getTimeZoneOffsetHoursForZone(date = new Date(), timeZone = null) {
@@ -1810,7 +1787,7 @@ setUseLocationTimezone(enabled) {
   } else {
     this.drawSpiral();
   }
-  this.saveSettingsToStorage();
+  this.requestSettingsSave();
 },
 
 setLocationTimeZoneId(timeZoneId) {
@@ -1824,7 +1801,7 @@ setLocationTimeZoneId(timeZoneId) {
   } else {
     this.drawSpiral();
   }
-  this.saveSettingsToStorage();
+  this.requestSettingsSave();
 },
 
 setNightOverlayLocation(lat, lng) {
@@ -1837,7 +1814,7 @@ setNightOverlayLocation(lat, lng) {
   this.state.nightOverlayLng = lngNum;
   this._sunTimesCache = null;
   this.drawSpiral();
-  this.saveSettingsToStorage();
+  this.requestSettingsSave();
 },
 
 setDayOverlayEnabled(enabled) {
@@ -1848,7 +1825,7 @@ setDayOverlayEnabled(enabled) {
     dayOverlayOpacityControls.style.display = enabled ? 'block' : 'none';
   }
   this.drawSpiral();
-  this.saveSettingsToStorage();
+  this.requestSettingsSave();
 },
 
 setGradientOverlayEnabled(enabled) {
@@ -1859,7 +1836,7 @@ setGradientOverlayEnabled(enabled) {
     gradientOverlayOpacityControls.style.display = enabled ? 'block' : 'none';
   }
   this.drawSpiral();
-  this.saveSettingsToStorage();
+  this.requestSettingsSave();
 },
 
 setTimeDisplayEnabled(enabled) {
@@ -1889,19 +1866,19 @@ setTimeDisplayEnabled(enabled) {
   }
   
   this.drawSpiral();
-  this.saveSettingsToStorage();
+  this.requestSettingsSave();
 },
 
 setSegmentEdgesEnabled(enabled) {
   this.state.showSegmentEdges = enabled;
   this.drawSpiral();
-  this.saveSettingsToStorage();
+  this.requestSettingsSave();
 },
 
 setArcLinesEnabled(enabled) {
   this.state.showArcLines = enabled;
   this.drawSpiral();
-  this.saveSettingsToStorage();
+  this.requestSettingsSave();
 },
 
 getTimeDisplayRenderRect(canvasWidth = this.canvas.clientWidth, canvasHeight = this.canvas.clientHeight) {
@@ -1922,17 +1899,11 @@ drawTimeDisplay(canvasWidth, canvasHeight) {
   // Helper function to get time span for a segment
   const getSegmentTimeSpan = (segment) => {
     if (!segment) return null;
-    
-    // Calculate the segment's time based on its position
-    // The spiral counts up from outside in, so we need to account for this
-    const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-    const segmentId = totalVisibleSegments - (segment.day * CONFIG.SEGMENTS_PER_DAY + segment.segment) - 1;
-    const hoursFromReference = segmentId;
-    
-    // Calculate start time for this segment
-    const startTime = new Date(this.referenceTime.getTime() + hoursFromReference * 60 * 60 * 1000);
-    const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // +1 hour
-    
+
+    const { startMs, endMs } = this.getSegmentHourRange(segment.day, segment.segment);
+    const startTime = new Date(startMs);
+    const endTime = new Date(endMs);
+
     return { startTime, endTime };
   };
   
@@ -2267,20 +2238,18 @@ drawTimeDisplay(canvasWidth, canvasHeight) {
     if (!this._lastEventListUpdateTime) this._lastEventListUpdateTime = 0;
     if (now - this._lastEventListUpdateTime > 100) { // Update at most every 100ms
       this._lastEventListUpdateTime = now;
-      
-      if (typeof window.renderEventList === 'function') {
-        // Check if bottom event list is visible
-        const bottomEventList = document.getElementById('bottomEventList');
-        const isBottomListVisible = bottomEventList && bottomEventList.style.maxHeight && bottomEventList.style.maxHeight !== '0px';
-        
-        // Check if event panel is open
-        const eventInputPanel = document.getElementById('eventInputPanel');
-        const isEventPanelVisible = eventInputPanel && eventInputPanel.style.display !== 'none';
-        
-        // Update event list if either is visible
-        if (isBottomListVisible || isEventPanelVisible) {
-          window.renderEventList();
-        }
+
+      // Check if bottom event list is visible
+      const bottomEventList = document.getElementById('bottomEventList');
+      const isBottomListVisible = bottomEventList && bottomEventList.style.maxHeight && bottomEventList.style.maxHeight !== '0px';
+
+      // Check if event panel is open
+      const eventInputPanel = document.getElementById('eventInputPanel');
+      const isEventPanelVisible = eventInputPanel && eventInputPanel.style.display !== 'none';
+
+      // Update event list if either is visible
+      if (isBottomListVisible || isEventPanelVisible) {
+        this.requestEventListRender();
       }
     }
   }
@@ -2288,11 +2257,8 @@ drawTimeDisplay(canvasWidth, canvasHeight) {
 
 clampRotationToEventWindow() {
   if (this.state.detailViewDay !== null && this.mouseState.selectedSegment) {
-    // Use the same totalVisibleSegments as everywhere else
-    const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
     const segment = this.mouseState.selectedSegment;
-    const segmentId = totalVisibleSegments - (segment.day * CONFIG.SEGMENTS_PER_DAY);
-    const eventHour = segmentId;
+    const eventHour = this.getDayBoundarySegmentId(segment.day);
     const maxRotation = ((eventHour - 23.999) / CONFIG.SEGMENTS_PER_DAY) * 2 * Math.PI;
     const minRotation = -1;
     if (this.state.rotation < minRotation) this.state.rotation = minRotation;

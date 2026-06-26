@@ -1,5 +1,257 @@
 // Core Helpers and Layout Methods
 Object.assign(SpiralCalendar.prototype, {
+    getSchedulerState() {
+      return this.renderSchedulerState || (this.renderSchedulerState = {
+        renderFrameId: null,
+        eventListFrameId: null,
+        eventListOptions: null,
+        settingsSaveTimerId: null
+      });
+    },
+
+    requestRender(options = {}) {
+      const immediate = options.immediate === true;
+      const scheduler = this.getSchedulerState();
+
+      if (immediate || typeof requestAnimationFrame !== 'function') {
+        if (scheduler.renderFrameId && typeof cancelAnimationFrame === 'function') {
+          cancelAnimationFrame(scheduler.renderFrameId);
+        }
+        scheduler.renderFrameId = null;
+        this.drawSpiral();
+        return;
+      }
+
+      if (scheduler.renderFrameId) return;
+      scheduler.renderFrameId = requestAnimationFrame(() => {
+        scheduler.renderFrameId = null;
+        this.drawSpiral();
+      });
+    },
+
+    requestEventListRender(options = {}) {
+      const scheduler = this.getSchedulerState();
+      const { immediate, ...renderOptions } = options;
+      const previousOptions = scheduler.eventListOptions || {};
+      scheduler.eventListOptions = {
+        ...previousOptions,
+        ...renderOptions,
+        reset: !!(previousOptions.reset || renderOptions.reset),
+        loadTop: !!(previousOptions.loadTop || renderOptions.loadTop),
+        loadBottom: !!(previousOptions.loadBottom || renderOptions.loadBottom)
+      };
+
+      const render = () => {
+        scheduler.eventListFrameId = null;
+        const mergedOptions = scheduler.eventListOptions || {};
+        scheduler.eventListOptions = null;
+        if (typeof window !== 'undefined' && typeof window.renderEventList === 'function') {
+          window.renderEventList(mergedOptions);
+        }
+      };
+
+      if (immediate === true || typeof requestAnimationFrame !== 'function') {
+        if (scheduler.eventListFrameId && typeof cancelAnimationFrame === 'function') {
+          cancelAnimationFrame(scheduler.eventListFrameId);
+        }
+        render();
+        return;
+      }
+
+      if (scheduler.eventListFrameId) return;
+      scheduler.eventListFrameId = requestAnimationFrame(render);
+    },
+
+    requestSettingsSave(options = {}) {
+      const scheduler = this.getSchedulerState();
+      const delayMs = Number.isFinite(Number(options.delayMs)) ? Number(options.delayMs) : 250;
+
+      if (options.immediate === true || typeof window === 'undefined' || typeof window.setTimeout !== 'function') {
+        this.flushSettingsSave();
+        return;
+      }
+
+      if (scheduler.settingsSaveTimerId !== null) return;
+      scheduler.settingsSaveTimerId = window.setTimeout(() => {
+        scheduler.settingsSaveTimerId = null;
+        this.saveSettingsToStorage();
+      }, delayMs);
+    },
+
+    flushSettingsSave() {
+      const scheduler = this.getSchedulerState();
+      if (scheduler.settingsSaveTimerId !== null) {
+        if (typeof window !== 'undefined' && typeof window.clearTimeout === 'function') {
+          window.clearTimeout(scheduler.settingsSaveTimerId);
+        }
+        scheduler.settingsSaveTimerId = null;
+      }
+      this.saveSettingsToStorage();
+    },
+
+    getTotalVisibleSegments(days = this.state.days) {
+      const safeDays = Number.isFinite(Number(days)) ? Number(days) : 0;
+      return (safeDays - 1) * CONFIG.SEGMENTS_PER_DAY;
+    },
+
+    getSegmentId(day, segment, days = this.state.days) {
+      return this.getTotalVisibleSegments(days) - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
+    },
+
+    getDayBoundarySegmentId(day, days = this.state.days) {
+      return this.getTotalVisibleSegments(days) - day * CONFIG.SEGMENTS_PER_DAY;
+    },
+
+    getSegmentPositionFromId(segmentId, days = this.state.days) {
+      const id = Number(segmentId);
+      if (!Number.isFinite(id)) return null;
+      const totalVisibleSegments = this.getTotalVisibleSegments(days);
+      if (id < 0 || id >= totalVisibleSegments) return null;
+      const absolutePosition = totalVisibleSegments - id - 1;
+      return {
+        day: Math.floor(absolutePosition / CONFIG.SEGMENTS_PER_DAY),
+        segment: absolutePosition % CONFIG.SEGMENTS_PER_DAY
+      };
+    },
+
+    getSegmentStartMs(segmentId) {
+      return this.referenceTime.getTime() + segmentId * 60 * 60 * 1000;
+    },
+
+    getSegmentDate(segmentId) {
+      return new Date(this.getSegmentStartMs(segmentId));
+    },
+
+    getSegmentHourRange(day, segment) {
+      const segmentId = this.getSegmentId(day, segment);
+      const startMs = this.getSegmentStartMs(segmentId);
+      return {
+        segmentId,
+        startMs,
+        endMs: startMs + 60 * 60 * 1000
+      };
+    },
+
+    getSegmentIdForDate(value) {
+      const timeMs = this.getEventDateMs(value);
+      if (!Number.isFinite(timeMs)) return null;
+      const diffHours = (timeMs - this.referenceTime.getTime()) / (60 * 60 * 1000);
+      if (!Number.isFinite(diffHours)) return null;
+      return diffHours >= 0 ? Math.floor(diffHours) : Math.ceil(diffHours);
+    },
+
+    syncSelectedSegmentToCurrentDays() {
+      if (!this.mouseState || this.mouseState.selectedSegmentId === null) return;
+      const position = this.getSegmentPositionFromId(this.mouseState.selectedSegmentId);
+      if (position) {
+        this.mouseState.selectedSegment = position;
+      } else {
+        this.mouseState.selectedSegment = null;
+        this.mouseState.selectedSegmentId = null;
+      }
+    },
+
+    getEventDateMs(value) {
+      if (value instanceof Date) return value.getTime();
+      return new Date(value).getTime();
+    },
+
+    ensureEventTimestampCache(event) {
+      if (!event || typeof event !== 'object') return null;
+      const cache = this.eventTimestampCache || (this.eventTimestampCache = new WeakMap());
+      const cached = cache.get(event);
+      if (cached &&
+          cached.startSource === event.start &&
+          cached.endSource === event.end &&
+          (!(event.start instanceof Date) || event.start.getTime() === cached.startMs) &&
+          (!(event.end instanceof Date) || event.end.getTime() === cached.endMs)) {
+        return cached;
+      }
+
+      const startMs = this.getEventDateMs(event.start);
+      const endMs = this.getEventDateMs(event.end);
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return null;
+      const timestamps = {
+        startMs,
+        endMs,
+        startSource: event.start,
+        endSource: event.end
+      };
+      cache.set(event, timestamps);
+      return timestamps;
+    },
+
+    getEventStartMs(event) {
+      const timestamps = this.ensureEventTimestampCache(event);
+      return timestamps ? timestamps.startMs : NaN;
+    },
+
+    getEventEndMs(event) {
+      const timestamps = this.ensureEventTimestampCache(event);
+      return timestamps ? timestamps.endMs : NaN;
+    },
+
+    getEventStartNavigationTarget(event) {
+      const startMs = this.getEventStartMs(event);
+      if (!Number.isFinite(startMs)) return null;
+      const eventStart = new Date(startMs);
+      const segmentId = this.getSegmentIdForDate(eventStart);
+      if (segmentId === null) return null;
+
+      const absolutePosition = this.getTotalVisibleSegments() - segmentId - 1;
+      const day = Math.floor(absolutePosition / CONFIG.SEGMENTS_PER_DAY);
+      const segment = (CONFIG.SEGMENTS_PER_DAY - 1) - eventStart.getUTCHours();
+      const diffHours = (startMs - this.referenceTime.getTime()) / (60 * 60 * 1000);
+
+      return { eventStart, segmentId, day, segment, diffHours };
+    },
+
+    findEventDayForSegment(event, preferredDay, segment) {
+      const searchNear = (startDay, endDay) => {
+        for (let day = startDay; day <= endDay; day++) {
+          const list = this.getAllEventsForSegment(day, segment);
+          if (list.find(eventInfo => eventInfo.event === event)) return day;
+        }
+        return -1;
+      };
+
+      const searchRange = 2;
+      const startDay = Math.max(0, preferredDay - searchRange);
+      const endDay = Math.min(this.state.days - 1, preferredDay + searchRange);
+      const nearbyDay = searchNear(startDay, endDay);
+      if (nearbyDay !== -1) return nearbyDay;
+      return searchNear(0, this.state.days - 1);
+    },
+
+    openEventAtStart(event) {
+      try {
+        const target = this.getEventStartNavigationTarget(event);
+        if (!target) return false;
+
+        let day = target.day;
+        const segment = target.segment;
+        this.state.rotation = (target.diffHours / CONFIG.SEGMENTS_PER_DAY) * 2 * Math.PI;
+
+        const foundDay = this.findEventDayForSegment(event, day, segment);
+        if (foundDay !== -1) day = foundDay;
+
+        this.openDetailViewForSegment({ day, segment });
+        const allEvents = this.getAllEventsForSegment(day, segment);
+        const eventIndex = allEvents.findIndex(eventInfo => eventInfo.event === event);
+        this.mouseState.selectedEventIndex = eventIndex >= 0 ? eventIndex : 0;
+
+        if (this.autoTimeAlignState && this.autoTimeAlignState.enabled) {
+          this.stopAutoTimeAlign();
+        }
+
+        this.requestRender();
+        return true;
+      } catch (_) {
+        try { this.requestRender(); } catch (_) {}
+        return false;
+      }
+    },
+
     startStartupAnimation() {
       if (!this.startupAnimationState || this.startupAnimationState.started) return;
 
@@ -196,33 +448,21 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     isFirstDayOfMonth(day, segment) {
-      // Calculate the date this segment represents
-      const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-      const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
-      const hoursFromReference = segmentId;
-      const segmentDate = new Date(this.referenceTime.getTime() + hoursFromReference * 60 * 60 * 1000);
+      const segmentDate = this.getSegmentDate(this.getSegmentId(day, segment));
       
     // Check if this date is the 1st day of the month (using UTC)
     return segmentDate.getUTCDate() === 1;
     },
 
     isFirstHourOfDay(day, segment) {
-      // Calculate the date this segment represents
-      const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-      const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
-      const hoursFromReference = segmentId;
-      const segmentDate = new Date(this.referenceTime.getTime() + hoursFromReference * 60 * 60 * 1000);
+      const segmentDate = this.getSegmentDate(this.getSegmentId(day, segment));
       
       // Check if the hour is 0 (first hour of the day) (using UTC)
       return segmentDate.getUTCHours() === 0;
     },
 
     getDayNumber(day, segment) {
-      // Calculate the date this segment represents
-      const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-      const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
-      const hoursFromReference = segmentId;
-      const segmentDate = new Date(this.referenceTime.getTime() + hoursFromReference * 60 * 60 * 1000);
+      const segmentDate = this.getSegmentDate(this.getSegmentId(day, segment));
       
       // Return day number (1-31) (using UTC)
       return segmentDate.getUTCDate();
@@ -239,13 +479,7 @@ Object.assign(SpiralCalendar.prototype, {
           const cal = ev.calendar || 'Home';
           return visibleCalendarsSet.has(cal);
         }).map(ev => {
-          // Pre-calculate timestamps if missing to avoid Date creations
-          if (ev._startMs === undefined || ev._startMs !== new Date(ev.start).getTime()) {
-             ev._startMs = new Date(ev.start).getTime();
-          }
-          if (ev._endMs === undefined || ev._endMs !== new Date(ev.end).getTime()) {
-             ev._endMs = new Date(ev.end).getTime();
-          }
+          this.ensureEventTimestampCache(ev);
           return ev;
         });
         
@@ -256,39 +490,22 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     getAllEventsForSegment(day, segment) {
-      // Calculate the date/time this segment represents
-      const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-      const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
-      const hoursFromReference = segmentId;
-      
-      const segmentDate = new Date(this.referenceTime.getTime() + hoursFromReference * 60 * 60 * 1000);
-      
-      const segmentHourStart = new Date(segmentDate);
-    segmentHourStart.setUTCMinutes(0, 0, 0);
-      const segmentHourEnd = new Date(segmentHourStart);
-    segmentHourEnd.setUTCHours(segmentHourStart.getUTCHours() + 1);
-      
-      const segmentStartMs = segmentHourStart.getTime();
-      const segmentEndMs = segmentHourEnd.getTime();
+      const { startMs: segmentStartMs, endMs: segmentEndMs } = this.getSegmentHourRange(day, segment);
       
       const overlappingEvents = [];
       let visibleEvents = this.getVisibleEvents();
       
       if (this.draftEvent && this.mouseState && this.draftEvent.segmentId === this.mouseState.selectedSegmentId) {
         const draft = this.draftEvent;
-        if (draft._startMs === undefined || draft._startMs !== draft.start.getTime()) {
-           draft._startMs = draft.start.getTime();
-        }
-        if (draft._endMs === undefined || draft._endMs !== draft.end.getTime()) {
-           draft._endMs = draft.end.getTime();
-        }
         visibleEvents = [...visibleEvents, draft];
       }
       
       // Check each event to see if this segment falls within it and passes calendar filter
       for (const event of visibleEvents) {
-        const eventStartMs = event._startMs;
-        const eventEndMs = event._endMs;
+        const timestamps = this.ensureEventTimestampCache(event);
+        if (!timestamps) continue;
+        const eventStartMs = timestamps.startMs;
+        const eventEndMs = timestamps.endMs;
         
         // Check if there's any overlap between the segment hour and the event
         if (eventStartMs < segmentEndMs && eventEndMs > segmentStartMs) {
@@ -338,16 +555,16 @@ Object.assign(SpiralCalendar.prototype, {
     getMaxOverlapForEventAcrossHours(targetEvent) {
       const visibleEvents = this.getVisibleEvents();
       if (!visibleEvents || visibleEvents.length === 0) return 1;
-      const targetStartMs = targetEvent._startMs !== undefined ? targetEvent._startMs : new Date(targetEvent.start).getTime();
-      const targetEndMs = targetEvent._endMs !== undefined ? targetEvent._endMs : new Date(targetEvent.end).getTime();
+      const targetStartMs = this.getEventStartMs(targetEvent);
+      const targetEndMs = this.getEventEndMs(targetEvent);
       if (!Number.isFinite(targetStartMs) || !Number.isFinite(targetEndMs) || targetStartMs >= targetEndMs) {
         return 1;
       }
 
       const points = [];
       for (const ev of visibleEvents) {
-        const evStartMs = ev._startMs !== undefined ? ev._startMs : new Date(ev.start).getTime();
-        const evEndMs = ev._endMs !== undefined ? ev._endMs : new Date(ev.end).getTime();
+        const evStartMs = this.getEventStartMs(ev);
+        const evEndMs = this.getEventEndMs(ev);
         if (!Number.isFinite(evStartMs) || !Number.isFinite(evEndMs)) continue;
 
         const overlapStartMs = Math.max(targetStartMs, evStartMs);
@@ -443,8 +660,8 @@ Object.assign(SpiralCalendar.prototype, {
       const intervals = [];
       const visibleEvents = this.getVisibleEvents();
       for (const ev of visibleEvents) {
-        const evStartMs = ev._startMs !== undefined ? ev._startMs : new Date(ev.start).getTime();
-        const evEndMs = ev._endMs !== undefined ? ev._endMs : new Date(ev.end).getTime();
+        const evStartMs = this.getEventStartMs(ev);
+        const evEndMs = this.getEventEndMs(ev);
         if (!(evStartMs < windowEndMs && evEndMs > windowStartMs)) continue; // no overlap with window
         const startMs = evStartMs > windowStartMs ? evStartMs : windowStartMs;
         const endMs = evEndMs < windowEndMs ? evEndMs : windowEndMs;
@@ -510,8 +727,8 @@ Object.assign(SpiralCalendar.prototype, {
       const eventBounds = new Map();
       const visibleEvents = this.getVisibleEvents();
       for (const ev of visibleEvents) {
-        const sMs = ev._startMs !== undefined ? ev._startMs : new Date(ev.start).getTime();
-        const eMs = ev._endMs !== undefined ? ev._endMs : new Date(ev.end).getTime();
+        const sMs = this.getEventStartMs(ev);
+        const eMs = this.getEventEndMs(ev);
         if (sMs < windowEndMs && eMs > windowStartMs) {
           eventIndex.set(ev, nodes.length);
           nodes.push(ev);
@@ -836,16 +1053,14 @@ Object.assign(SpiralCalendar.prototype, {
       if (this._previousVisibleCalendars !== null) {
         this.state.visibleCalendars = [...this._previousVisibleCalendars];
         this._previousVisibleCalendars = null;
-        this.saveSettingsToStorage();
+        this.requestSettingsSave();
         // Rebuild calendar dropdown menu to update checkboxes
         if (typeof this.buildCalendarMenu === 'function') {
           this.buildCalendarMenu();
         }
         // Re-render event list and spiral
-        if (typeof window.renderEventList === 'function') {
-          window.renderEventList();
-        }
-        this.drawSpiral();
+        this.requestEventListRender();
+        this.requestRender();
       }
     }
   },

@@ -4,11 +4,17 @@ const spiralCalendar = new SpiralCalendar('spiral');
 try { spiralCalendar.initializeZoomFailSafe(); } catch (_) {}
 
 
-// Save events and settings before page unload
-window.addEventListener('beforeunload', () => {
+// Save events and flush any deferred settings before the page is suspended.
+const flushPersistedCalendarState = () => {
   spiralCalendar.saveEventsToStorage();
-  spiralCalendar.saveSettingsToStorage();
-});
+  if (typeof spiralCalendar.flushSettingsSave === 'function') {
+    spiralCalendar.flushSettingsSave();
+  } else {
+    spiralCalendar.saveSettingsToStorage();
+  }
+};
+window.addEventListener('beforeunload', flushPersistedCalendarState);
+window.addEventListener('pagehide', flushPersistedCalendarState);
 
 const isEditableTarget = (target) => {
   if (!(target instanceof Element)) return false;
@@ -393,7 +399,7 @@ if (useLocationTimezoneToggle) {
       spiralCalendar.setUseLocationTimezone(e.target.checked);
     } else {
       spiralCalendar.state.useLocationTimezone = !!e.target.checked;
-      spiralCalendar.saveSettingsToStorage();
+      spiralCalendar.requestSettingsSave();
       spiralCalendar.drawSpiral();
     }
     updateLocationTimezoneInfo();

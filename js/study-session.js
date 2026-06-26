@@ -921,9 +921,8 @@ Object.assign(SpiralCalendar.prototype, {
     const segmentIndex = Number.isFinite(Number(segment.segment)) ? Number(segment.segment) : null;
     if (segmentIndex === null || spiralDayIndex === null) return null;
 
-    const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-    const segmentId = totalVisibleSegments - (spiralDayIndex * CONFIG.SEGMENTS_PER_DAY + segmentIndex) - 1;
-    const start = new Date(this.referenceTime.getTime() + segmentId * 60 * 60 * 1000);
+    const segmentId = this.getSegmentId(spiralDayIndex, segmentIndex);
+    const start = this.getSegmentDate(segmentId);
     const end = new Date(start.getTime() + 60 * 60 * 1000);
 
     return {

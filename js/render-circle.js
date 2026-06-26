@@ -412,8 +412,7 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   calculateSelectedSegmentColor(day, segment) {
-    const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-    const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
+    const segmentId = this.getSegmentId(day, segment);
     const colorIndex = ((segmentId % this.cache.colors.length) + this.cache.colors.length) % this.cache.colors.length;
     const segmentColor = this.cache.colors[colorIndex];
     
@@ -1020,8 +1019,7 @@ Object.assign(SpiralCalendar.prototype, {
 
     collectHourNumberInSegment(startTheta, endTheta, radiusFunction, segment, day, rawStartAngle, rawEndAngle, innerRadius = null, outerRadius = null) {
       // Compute properties as in drawing function, but store for later draw above events
-      const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-      const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
+      const segmentId = this.getSegmentId(day, segment);
       const actualHour = ((segmentId % CONFIG.SEGMENTS_PER_DAY) + CONFIG.SEGMENTS_PER_DAY) % CONFIG.SEGMENTS_PER_DAY;
 
       if (!this.shouldShowHourNumber(actualHour)) return;
@@ -1075,8 +1073,7 @@ Object.assign(SpiralCalendar.prototype, {
     _renderHourNumberAtComputedPosition(startTheta, endTheta, radiusFunction, segment, day, rawStartAngle, rawEndAngle, innerRadius = null, outerRadius = null) {
       // Calculate the actual hour this segment represents in the spiral
       // The spiral counts up from outside in, so we need to calculate the hour based on position
-      const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-      const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
+      const segmentId = this.getSegmentId(day, segment);
       const actualHour = ((segmentId % CONFIG.SEGMENTS_PER_DAY) + CONFIG.SEGMENTS_PER_DAY) % CONFIG.SEGMENTS_PER_DAY;
       
       const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
@@ -1482,10 +1479,8 @@ Object.assign(SpiralCalendar.prototype, {
       const { x, y } = this.mouseState.tooltipPosition;
       
       // Calculate segment time
-      const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-      const segmentId = totalVisibleSegments - (segment.day * CONFIG.SEGMENTS_PER_DAY + segment.segment) - 1;
-      const hoursFromReference = segmentId;
-      const segmentDate = new Date(this.referenceTime.getTime() + hoursFromReference * 60 * 60 * 1000);
+      const segmentId = this.getSegmentId(segment.day, segment.segment);
+      const segmentDate = this.getSegmentDate(segmentId);
       
       // Format time
       const timeStr = this.formatUTCHHMM(segmentDate);
@@ -1735,9 +1730,8 @@ Object.assign(SpiralCalendar.prototype, {
             const circleSegmentEnd = circleSegmentStartAngle + visibleEndOffset;
           
           // Get base color for this segment.
-          const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-          const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
-          const segmentHourStartMs = this.referenceTime.getTime() + segmentId * 60 * 60 * 1000;
+          const segmentId = this.getSegmentId(day, segment);
+          const segmentHourStartMs = this.getSegmentStartMs(segmentId);
           const segmentHourEndMs = segmentHourStartMs + 60 * 60 * 1000;
           const colorIndex = ((segmentId % this.cache.colors.length) + this.cache.colors.length) % this.cache.colors.length;
           const color = this.cache.colors[colorIndex];
@@ -1789,9 +1783,8 @@ Object.assign(SpiralCalendar.prototype, {
             let includeYear = false;
             let segmentDateMs = null;
             try {
-              const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-              const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
-              const segmentDate = new Date(this.referenceTime.getTime() + segmentId * 60 * 60 * 1000);
+              const segmentId = this.getSegmentId(day, segment);
+              const segmentDate = this.getSegmentDate(segmentId);
               segmentDateMs = segmentDate.getTime();
               const weekdayFull = WEEKDAYS_UTC[segmentDate.getUTCDay()];
               const weekdayShort = weekdayFull.slice(0, 3);
@@ -2124,8 +2117,7 @@ Object.assign(SpiralCalendar.prototype, {
         }
 
         {
-          const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-          const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
+          const segmentId = this.getSegmentId(day, segment);
           const dailyData = getDailyData(segmentId);
           
           let segStart = ((segmentId % 24) + 24) % 24;
@@ -2179,7 +2171,7 @@ Object.assign(SpiralCalendar.prototype, {
 
         // --- WEEKDAY GRADIENT OVERLAY LOGIC FOR CIRCLE MODE ---
         if (this.state.showDayOverlay) {
-          const segmentId = totalVisibleSegments - (day * CONFIG.SEGMENTS_PER_DAY + segment) - 1;
+          const segmentId = this.getSegmentId(day, segment);
           const dailyData = getDailyData(segmentId);
           const dayOverlayColor = dailyData.dayOverlayColor;
           

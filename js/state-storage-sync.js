@@ -489,81 +489,108 @@ Object.assign(SpiralCalendar.prototype, {
     return '';
   },
 
-  buildSettingsStoragePayload() {
-    const persistedTimeDisplay = isMobileDevice()
-      ? this.mobileOrientationState.timeDisplayWasEnabled
-      : (this.state.originalTimeDisplay !== null ? this.state.originalTimeDisplay : this.state.showTimeDisplay);
+  getSettingsStorageKeys() {
+    if (this._settingsStorageKeys) return this._settingsStorageKeys;
+    this._settingsStorageKeys = [
+      'days',
+      'radiusExponent',
+      'rotation',
+      'staticMode',
+      'showHourNumbers',
+      'showDayNumbers',
+      'showTooltip',
+      'hourNumbersOutward',
+      'hourNumbersInsideSegment',
+      'hourNumbersUpright',
+      'dayNumbersUpright',
+      'showEverySixthHour',
+      'hourNumbersStartAtOne',
+      'hourNumbersPosition',
+      'showNightOverlay',
+      'useLocationTimezone',
+      'locationTimezoneId',
+      'nightOverlayLat',
+      'nightOverlayLng',
+      'showDayOverlay',
+      'showGradientOverlay',
+      'showTimeDisplay',
+      'showSegmentEdges',
+      'showArcLines',
+      'overlayStackMode',
+      'showEventBoundaryStrokes',
+      'showAllEventBoundaryStrokes',
+      'audioFeedbackEnabled',
+      'darkMode',
+      'showEventListCalendarButtons',
+      'calendars',
+      'selectedCalendar',
+      'visibleCalendars',
+      'calendarColors',
+      'colorMode',
+      'paletteAffectsCustomColors',
+      'saturationLevel',
+      'baseHue',
+      'singleColor',
+      'dayLabelShowWeekday',
+      'dayLabelShowMonth',
+      'dayLabelShowYear',
+      'dayLabelWeekdayOnOutermost',
+      'dayLabelMonthOnOutermost',
+      'dayLabelYearOnOutermost',
+      'dayLabelUseShortNames',
+      'dayLabelUseShortMonth',
+      'dayLabelUseShortYear',
+      'dayLabelMonthOnFirstOnly',
+      'dayLabelYearOnFirstOnly',
+      'dayLabelUseOrdinal',
+      'showMonthLines',
+      'showMidnightLines',
+      'showNoonLines',
+      'showSixAmPmLines',
+      'enableLongPressJoystick',
+      'detailViewAutoCircleMode',
+      'detailViewAutoZoomEnabled',
+      'detailViewAutoZoomCoils',
+      'detailViewCloseButtonEnabled',
+      'detailViewCloseButtonAlignToSegment',
+      'nightOverlayOpacity',
+      'dayOverlayOpacity',
+      'gradientOverlayOpacity'
+    ];
+    return this._settingsStorageKeys;
+  },
 
-    return {
-      days: this.state.days,
-      // Only save original values if auto-activation is active, otherwise save current values
-      radiusExponent: this.state.originalRadiusExponent !== null ? this.state.originalRadiusExponent : this.state.radiusExponent,
-      rotation: this.state.rotation,
-      staticMode: this.state.staticMode,
-      showHourNumbers: this.state.showHourNumbers,
-      showDayNumbers: this.state.showDayNumbers,
-      showTooltip: this.state.showTooltip,
-      hourNumbersOutward: this.state.hourNumbersOutward,
-      // Only save original value if auto-activation is active, otherwise save current value
-      hourNumbersInsideSegment: this.state.autoInsideSegmentNumbers ? false : this.state.hourNumbersInsideSegment,
-      hourNumbersUpright: this.state.hourNumbersUpright,
-      dayNumbersUpright: this.state.dayNumbersUpright,
-      showEverySixthHour: this.state.showEverySixthHour,
-      hourNumbersStartAtOne: this.state.hourNumbersStartAtOne,
-      hourNumbersPosition: this.state.hourNumbersPosition,
-      showNightOverlay: this.state.showNightOverlay,
-      useLocationTimezone: this.state.useLocationTimezone,
-      locationTimezoneId: this.state.locationTimezoneId,
-      nightOverlayLat: this.state.nightOverlayLat,
-      nightOverlayLng: this.state.nightOverlayLng,
-      showDayOverlay: this.state.showDayOverlay,
-      showGradientOverlay: this.state.showGradientOverlay,
-      showTimeDisplay: persistedTimeDisplay,
-      showSegmentEdges: this.state.showSegmentEdges,
-      showArcLines: this.state.showArcLines,
-      overlayStackMode: this.state.overlayStackMode,
-      showEventBoundaryStrokes: this.state.showEventBoundaryStrokes,
-      showAllEventBoundaryStrokes: this.state.showAllEventBoundaryStrokes,
-      audioFeedbackEnabled: this.state.audioFeedbackEnabled,
-      darkMode: this.state.darkMode,
-      showEventListCalendarButtons: this.state.showEventListCalendarButtons,
-      calendars: this.state.calendars.slice(),
-      selectedCalendar: this.state.selectedCalendar,
-      visibleCalendars: this.state.visibleCalendars.slice(),
-      calendarColors: JSON.parse(JSON.stringify(this.state.calendarColors)),
-      colorMode: this.state.colorMode,
-      paletteAffectsCustomColors: this.state.paletteAffectsCustomColors,
-      saturationLevel: this.state.saturationLevel,
-      baseHue: this.state.baseHue,
-      singleColor: this.state.singleColor,
-      dayLabelShowWeekday: this.state.dayLabelShowWeekday,
-      dayLabelShowMonth: this.state.dayLabelShowMonth,
-      dayLabelShowYear: this.state.dayLabelShowYear,
-      dayLabelWeekdayOnOutermost: this.state.dayLabelWeekdayOnOutermost,
-      dayLabelMonthOnOutermost: this.state.dayLabelMonthOnOutermost,
-      dayLabelYearOnOutermost: this.state.dayLabelYearOnOutermost,
-      dayLabelUseShortNames: this.state.dayLabelUseShortNames,
-      dayLabelUseShortMonth: this.state.dayLabelUseShortMonth,
-      dayLabelUseShortYear: this.state.dayLabelUseShortYear,
-      dayLabelMonthOnFirstOnly: this.state.dayLabelMonthOnFirstOnly,
-      dayLabelYearOnFirstOnly: this.state.dayLabelYearOnFirstOnly,
-      dayLabelUseOrdinal: this.state.dayLabelUseOrdinal,
-      // Dev mode line toggles
-      showMonthLines: this.state.showMonthLines,
-      showMidnightLines: this.state.showMidnightLines,
-      showNoonLines: this.state.showNoonLines,
-      showSixAmPmLines: this.state.showSixAmPmLines,
-      enableLongPressJoystick: this.state.enableLongPressJoystick,
-      detailViewAutoCircleMode: this.state.detailViewAutoCircleMode,
-      detailViewAutoZoomEnabled: this.state.detailViewAutoZoomEnabled,
-      detailViewAutoZoomCoils: this.state.detailViewAutoZoomCoils,
-      detailViewCloseButtonEnabled: this.state.detailViewCloseButtonEnabled,
-      detailViewCloseButtonAlignToSegment: this.state.detailViewCloseButtonAlignToSegment,
-      // Overlay opacity values
-      nightOverlayOpacity: this.state.nightOverlayOpacity,
-      dayOverlayOpacity: this.state.dayOverlayOpacity,
-      gradientOverlayOpacity: this.state.gradientOverlayOpacity,
-    };
+  cloneSettingValueForStorage(value) {
+    if (Array.isArray(value)) return value.slice();
+    if (value && typeof value === 'object') {
+      return JSON.parse(JSON.stringify(value));
+    }
+    return value;
+  },
+
+  getSettingValueForStorage(key) {
+    if (key === 'radiusExponent') {
+      return this.state.originalRadiusExponent !== null ? this.state.originalRadiusExponent : this.state.radiusExponent;
+    }
+    if (key === 'hourNumbersInsideSegment') {
+      return this.state.autoInsideSegmentNumbers ? false : this.state.hourNumbersInsideSegment;
+    }
+    if (key === 'showTimeDisplay') {
+      return isMobileDevice()
+        ? this.mobileOrientationState.timeDisplayWasEnabled
+        : (this.state.originalTimeDisplay !== null ? this.state.originalTimeDisplay : this.state.showTimeDisplay);
+    }
+    return this.cloneSettingValueForStorage(this.state[key]);
+  },
+
+  buildSettingsStoragePayload() {
+    const payload = {};
+    for (const key of this.getSettingsStorageKeys()) {
+      if (Object.prototype.hasOwnProperty.call(this.state, key)) {
+        payload[key] = this.getSettingValueForStorage(key);
+      }
+    }
+    return payload;
   },
 
   setDarkModeEnabled(enabled, options = {}) {
@@ -594,8 +621,8 @@ Object.assign(SpiralCalendar.prototype, {
     }
 
     const refreshAuxiliaryUi = () => {
-      if (typeof window.renderEventList === 'function') {
-        window.renderEventList();
+      if (typeof this.requestEventListRender === 'function') {
+        this.requestEventListRender();
       }
 
       try {
@@ -1539,8 +1566,7 @@ Object.assign(SpiralCalendar.prototype, {
 
   getDetailViewMaxRotation(segment = this.mouseState.selectedSegment) {
     if (!segment) return null;
-    const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-    const eventHour = totalVisibleSegments - (segment.day * CONFIG.SEGMENTS_PER_DAY);
+    const eventHour = this.getDayBoundarySegmentId(segment.day);
     return ((eventHour - 23.999) / CONFIG.SEGMENTS_PER_DAY) * 2 * Math.PI;
   },
 
@@ -1568,8 +1594,7 @@ Object.assign(SpiralCalendar.prototype, {
     }
 
     const targetVisibleDayIndex = segment.day + coils;
-    const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-    const targetEventHour = totalVisibleSegments - (targetVisibleDayIndex * CONFIG.SEGMENTS_PER_DAY);
+    const targetEventHour = this.getDayBoundarySegmentId(targetVisibleDayIndex);
     let targetRotation = ((targetEventHour - 23.999) / CONFIG.SEGMENTS_PER_DAY) * 2 * Math.PI;
     const maxRotation = this.getDetailViewMaxRotation(segment);
     if (Number.isFinite(maxRotation)) {
@@ -2839,13 +2864,12 @@ Object.assign(SpiralCalendar.prototype, {
 
   getSelectedSegmentId(segment = this.mouseState.selectedSegment) {
     if (!segment) return null;
-    const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-    return totalVisibleSegments - (segment.day * CONFIG.SEGMENTS_PER_DAY + segment.segment) - 1;
+    return this.getSegmentId(segment.day, segment.segment);
   },
 
   createDraftEventForSegmentId(segmentId) {
     if (segmentId === null || segmentId === undefined) return null;
-    const segmentDate = new Date(this.referenceTime.getTime() + segmentId * 60 * 60 * 1000);
+    const segmentDate = this.getSegmentDate(segmentId);
     const segmentStart = new Date(segmentDate);
     segmentStart.setUTCMinutes(0, 0, 0);
     const segmentEnd = new Date(segmentStart);

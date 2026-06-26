@@ -9,20 +9,7 @@ Object.assign(SpiralCalendar.prototype, {
           property: 'days',
           formatter: (val) => val,
           onChange: () => {
-            // If a segment is selected, preserve its segmentId from the outside
-            if (this.mouseState.selectedSegmentId !== null) {
-              const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-              if (this.mouseState.selectedSegmentId < totalVisibleSegments) {
-                const absPos = totalVisibleSegments - this.mouseState.selectedSegmentId - 1;
-                const newDay = Math.floor(absPos / CONFIG.SEGMENTS_PER_DAY);
-                const newSegment = absPos % CONFIG.SEGMENTS_PER_DAY;
-                this.mouseState.selectedSegment = { day: newDay, segment: newSegment };
-              } else {
-                // If the segmentId is now out of range, deselect
-                this.mouseState.selectedSegment = null;
-                this.mouseState.selectedSegmentId = null;
-              }
-            }
+            this.syncSelectedSegmentToCurrentDays();
           }
         },
         { 
@@ -51,8 +38,8 @@ Object.assign(SpiralCalendar.prototype, {
             if (display) display.textContent = config.formatter(value);
           
           if (config.onChange) config.onChange();
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
         }
       });
@@ -62,8 +49,8 @@ Object.assign(SpiralCalendar.prototype, {
       if (staticModeCheckbox) {
         staticModeCheckbox.addEventListener('change', (e) => {
         this.state.staticMode = e.target.checked;
-        this.drawSpiral();
-        this.saveSettingsToStorage();
+        this.requestRender();
+        this.requestSettingsSave();
       });
       }
 
@@ -154,8 +141,8 @@ Object.assign(SpiralCalendar.prototype, {
           if (hourNumbersControls) {
             hourNumbersControls.style.display = e.target.checked ? 'block' : 'none';
           }
-        this.drawSpiral();
-          this.saveSettingsToStorage();
+        this.requestRender();
+          this.requestSettingsSave();
         });
       }
       
@@ -170,8 +157,8 @@ Object.assign(SpiralCalendar.prototype, {
           if (dayNumbersControls) {
             dayNumbersControls.style.display = e.target.checked ? 'block' : 'none';
           }
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
       
@@ -179,16 +166,16 @@ Object.assign(SpiralCalendar.prototype, {
       if (showEverySixthHourCheckbox) {
         showEverySixthHourCheckbox.addEventListener('change', (e) => {
           this.state.showEverySixthHour = e.target.checked;
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
       
       if (hourNumbersStartAtOneCheckbox) {
         hourNumbersStartAtOneCheckbox.addEventListener('change', (e) => {
           this.state.hourNumbersStartAtOne = e.target.checked;
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
       
@@ -202,8 +189,8 @@ Object.assign(SpiralCalendar.prototype, {
           hourNumbersPositionSlider.addEventListener('input', (e) => {
             this.state.hourNumbersPosition = parseInt(e.target.value);
             updatePositionDisplay();
-            this.drawSpiral();
-            this.saveSettingsToStorage();
+            this.requestRender();
+            this.requestSettingsSave();
           });
           
           // Initialize display
@@ -215,8 +202,8 @@ Object.assign(SpiralCalendar.prototype, {
       if (hourNumbersOutwardCheckbox) {
         hourNumbersOutwardCheckbox.addEventListener('change', (e) => {
           this.state.hourNumbersOutward = e.target.checked;
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
 
@@ -225,8 +212,8 @@ Object.assign(SpiralCalendar.prototype, {
       if (hourNumbersInsideSegmentCheckbox) {
         hourNumbersInsideSegmentCheckbox.addEventListener('change', (e) => {
           this.state.hourNumbersInsideSegment = e.target.checked;
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
 
@@ -235,8 +222,8 @@ Object.assign(SpiralCalendar.prototype, {
       if (hourNumbersUprightCheckbox) {
         hourNumbersUprightCheckbox.addEventListener('change', (e) => {
           this.state.hourNumbersUpright = e.target.checked;
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
 
@@ -245,8 +232,8 @@ Object.assign(SpiralCalendar.prototype, {
       if (dayNumbersUprightCheckbox) {
         dayNumbersUprightCheckbox.addEventListener('change', (e) => {
           this.state.dayNumbersUpright = e.target.checked;
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
 
@@ -282,8 +269,8 @@ Object.assign(SpiralCalendar.prototype, {
         dayLabelShowWeekday.addEventListener('change', (e) => {
           this.state.dayLabelShowWeekday = e.target.checked;
           updateDayLabelSubOptionVisibility();
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
       if (dayLabelWeekdayOnOutermost) {
@@ -291,8 +278,8 @@ Object.assign(SpiralCalendar.prototype, {
         dayLabelWeekdayOnOutermost.addEventListener('change', (e) => {
           this.state.dayLabelWeekdayOnOutermost = e.target.checked;
           updateDayLabelSubOptionVisibility();
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
       if (dayLabelShowMonth) {
@@ -300,8 +287,8 @@ Object.assign(SpiralCalendar.prototype, {
         dayLabelShowMonth.addEventListener('change', (e) => {
           this.state.dayLabelShowMonth = e.target.checked;
           updateDayLabelSubOptionVisibility();
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
       if (dayLabelMonthOnOutermost) {
@@ -309,24 +296,24 @@ Object.assign(SpiralCalendar.prototype, {
         dayLabelMonthOnOutermost.addEventListener('change', (e) => {
           this.state.dayLabelMonthOnOutermost = e.target.checked;
           updateDayLabelSubOptionVisibility();
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
       if (dayLabelMonthOnFirstOnly) {
         dayLabelMonthOnFirstOnly.checked = !!this.state.dayLabelMonthOnFirstOnly;
         dayLabelMonthOnFirstOnly.addEventListener('change', (e) => {
           this.state.dayLabelMonthOnFirstOnly = e.target.checked;
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
       if (dayLabelUseShortMonth) {
         dayLabelUseShortMonth.checked = !!this.state.dayLabelUseShortMonth;
         dayLabelUseShortMonth.addEventListener('change', (e) => {
           this.state.dayLabelUseShortMonth = e.target.checked;
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
       if (dayLabelShowYear) {
@@ -334,8 +321,8 @@ Object.assign(SpiralCalendar.prototype, {
         dayLabelShowYear.addEventListener('change', (e) => {
           this.state.dayLabelShowYear = e.target.checked;
           updateDayLabelSubOptionVisibility();
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
       if (dayLabelYearOnOutermost) {
@@ -343,40 +330,40 @@ Object.assign(SpiralCalendar.prototype, {
         dayLabelYearOnOutermost.addEventListener('change', (e) => {
           this.state.dayLabelYearOnOutermost = e.target.checked;
           updateDayLabelSubOptionVisibility();
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
       if (dayLabelYearOnFirstOnly) {
         dayLabelYearOnFirstOnly.checked = !!this.state.dayLabelYearOnFirstOnly;
         dayLabelYearOnFirstOnly.addEventListener('change', (e) => {
           this.state.dayLabelYearOnFirstOnly = e.target.checked;
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
       if (dayLabelUseShortYear) {
         dayLabelUseShortYear.checked = !!this.state.dayLabelUseShortYear;
         dayLabelUseShortYear.addEventListener('change', (e) => {
           this.state.dayLabelUseShortYear = e.target.checked;
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
       if (dayLabelUseShortNames) {
         dayLabelUseShortNames.checked = !!this.state.dayLabelUseShortNames;
         dayLabelUseShortNames.addEventListener('change', (e) => {
           this.state.dayLabelUseShortNames = e.target.checked;
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
       if (dayLabelUseOrdinal) {
         dayLabelUseOrdinal.checked = !!this.state.dayLabelUseOrdinal;
         dayLabelUseOrdinal.addEventListener('change', (e) => {
           this.state.dayLabelUseOrdinal = e.target.checked;
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
       updateDayLabelSubOptionVisibility();
@@ -405,7 +392,7 @@ Object.assign(SpiralCalendar.prototype, {
           this.drawSpiral();
         }
 
-        this.saveSettingsToStorage();
+        this.requestSettingsSave();
       });
       }
 
@@ -441,7 +428,7 @@ Object.assign(SpiralCalendar.prototype, {
         self.state.nightOverlayOpacity = opacity;
         nightOverlayOpacityVal.textContent = e.target.value + '%';
         self.drawSpiral();
-        self.saveSettingsToStorage();
+        self.requestSettingsSave();
       });
     }
 
@@ -453,7 +440,7 @@ Object.assign(SpiralCalendar.prototype, {
         self.state.dayOverlayOpacity = opacity;
         dayOverlayOpacityVal.textContent = e.target.value + '%';
         self.drawSpiral();
-        self.saveSettingsToStorage();
+        self.requestSettingsSave();
       });
     }
 
@@ -477,9 +464,7 @@ Object.assign(SpiralCalendar.prototype, {
                 this.saveEventsToStorage();
               });
               this._detailViewHasChanges = true;
-              if (typeof window.renderEventList === 'function') {
-                window.renderEventList();
-              }
+              this.requestEventListRender();
               this.deleteButtonInfo = null;
               this.addButtonInfo = null;
               this.titleClickArea = null;
@@ -635,7 +620,7 @@ Object.assign(SpiralCalendar.prototype, {
         self.state.gradientOverlayOpacity = opacity;
         gradientOverlayOpacityVal.textContent = e.target.value + '%';
         self.drawSpiral();
-        self.saveSettingsToStorage();
+        self.requestSettingsSave();
       });
     }
 
@@ -645,7 +630,7 @@ Object.assign(SpiralCalendar.prototype, {
       showMonthLinesToggle.addEventListener('change', function(e) {
         self.state.showMonthLines = e.target.checked;
         self.drawSpiral();
-        self.saveSettingsToStorage();
+        self.requestSettingsSave();
       });
     }
 
@@ -654,7 +639,7 @@ Object.assign(SpiralCalendar.prototype, {
       showMidnightLinesToggle.addEventListener('change', function(e) {
         self.state.showMidnightLines = e.target.checked;
         self.drawSpiral();
-        self.saveSettingsToStorage();
+        self.requestSettingsSave();
       });
     }
 
@@ -663,7 +648,7 @@ Object.assign(SpiralCalendar.prototype, {
       showNoonLinesToggle.addEventListener('change', function(e) {
         self.state.showNoonLines = e.target.checked;
         self.drawSpiral();
-        self.saveSettingsToStorage();
+        self.requestSettingsSave();
       });
     }
 
@@ -672,7 +657,7 @@ Object.assign(SpiralCalendar.prototype, {
       showSixAmPmLinesToggle.addEventListener('change', function(e) {
         self.state.showSixAmPmLines = e.target.checked;
         self.drawSpiral();
-        self.saveSettingsToStorage();
+        self.requestSettingsSave();
       });
     }
 
@@ -686,7 +671,7 @@ Object.assign(SpiralCalendar.prototype, {
           self.mouseState.hasMovedDuringDrag = false;
         }
         self.drawSpiral();
-        self.saveSettingsToStorage();
+        self.requestSettingsSave();
       });
     }
 
@@ -698,7 +683,7 @@ Object.assign(SpiralCalendar.prototype, {
           self._detailViewAutoCircleActive = e.target.checked;
         }
         self.drawSpiral();
-        self.saveSettingsToStorage();
+        self.requestSettingsSave();
       });
     }
 
@@ -739,7 +724,7 @@ Object.assign(SpiralCalendar.prototype, {
         }
         syncDetailViewAutoZoomControls();
         self.drawSpiral();
-        self.saveSettingsToStorage();
+        self.requestSettingsSave();
       });
     }
 
@@ -762,14 +747,14 @@ Object.assign(SpiralCalendar.prototype, {
         }
         syncDetailViewCloseButtonControls();
         self.drawSpiral();
-        self.saveSettingsToStorage();
+        self.requestSettingsSave();
       });
     }
     if (detailViewCloseButtonAlignToggle) {
       detailViewCloseButtonAlignToggle.addEventListener('change', function(e) {
         self.state.detailViewCloseButtonAlignToSegment = !e.target.checked;
         self.drawSpiral();
-        self.saveSettingsToStorage();
+        self.requestSettingsSave();
       });
     }
     syncDetailViewCloseButtonControls();
@@ -791,7 +776,7 @@ Object.assign(SpiralCalendar.prototype, {
         }
 
         self.drawSpiral();
-        self.saveSettingsToStorage();
+        self.requestSettingsSave();
       });
     }
     syncDetailViewAutoZoomControls();
@@ -805,7 +790,7 @@ Object.assign(SpiralCalendar.prototype, {
           eventBoundaryStrokeControls.style.display = self.state.showEventBoundaryStrokes ? 'block' : 'none';
         }
         self.drawSpiral();
-        self.saveSettingsToStorage();
+        self.requestSettingsSave();
       });
     }
     if (eventBoundaryStrokeControls) {
@@ -816,7 +801,7 @@ Object.assign(SpiralCalendar.prototype, {
       eventBoundaryAllEdgesToggle.addEventListener('change', function(e) {
         self.state.showAllEventBoundaryStrokes = e.target.checked;
         self.drawSpiral();
-        self.saveSettingsToStorage();
+        self.requestSettingsSave();
       });
     }
 
@@ -824,10 +809,8 @@ Object.assign(SpiralCalendar.prototype, {
     if (eventListCalendarButtonsToggle) {
       eventListCalendarButtonsToggle.addEventListener('change', function(e) {
         self.state.showEventListCalendarButtons = e.target.checked;
-        self.saveSettingsToStorage();
-        if (typeof window.renderEventList === 'function') {
-          window.renderEventList();
-        }
+        self.requestSettingsSave();
+        self.requestEventListRender();
       });
     }
 
@@ -993,10 +976,8 @@ Object.assign(SpiralCalendar.prototype, {
       this.refreshAutoEventColors({ includeDraft: true });
       syncColorModePickerUI();
       this.drawSpiral();
-      this.saveSettingsToStorage();
-      if (typeof window.renderEventList === 'function') {
-        window.renderEventList();
-      }
+      this.requestSettingsSave();
+      this.requestEventListRender();
       updateAddEventColorPreview();
     };
     if (colorModeSelect) {
@@ -1022,10 +1003,8 @@ Object.assign(SpiralCalendar.prototype, {
       paletteAffectsCustomColorsToggle.addEventListener('change', (e) => {
         this.state.paletteAffectsCustomColors = e.target.checked;
         this.drawSpiral();
-        this.saveSettingsToStorage();
-        if (typeof window.renderEventList === 'function') {
-          window.renderEventList();
-        }
+        this.requestSettingsSave();
+        this.requestEventListRender();
       });
     }
     if (singleColorInput) {
@@ -1036,7 +1015,7 @@ Object.assign(SpiralCalendar.prototype, {
         renderColorModePreviews();
         updateAddEventColorPreview();
         this.drawSpiral();
-        this.saveSettingsToStorage();
+        this.requestSettingsSave();
       });
     }
     if (saturationSlider && saturationVal) {
@@ -1051,7 +1030,7 @@ Object.assign(SpiralCalendar.prototype, {
         renderColorModePreviews();
         updateAddEventColorPreview();
         this.drawSpiral();
-        this.saveSettingsToStorage();
+        this.requestSettingsSave();
       });
     }
     if (baseHueSlider && baseHueVal) {
@@ -1065,7 +1044,7 @@ Object.assign(SpiralCalendar.prototype, {
         renderColorModePreviews();
         updateAddEventColorPreview();
         this.drawSpiral();
-        this.saveSettingsToStorage();
+        this.requestSettingsSave();
       });
     }
     this.syncColorModePickerUI = syncColorModePickerUI;
@@ -1097,8 +1076,8 @@ Object.assign(SpiralCalendar.prototype, {
       if (overlayStackModeCheckbox) {
         overlayStackModeCheckbox.addEventListener('change', (e) => {
           this.state.overlayStackMode = e.target.checked;
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
 
@@ -1109,7 +1088,7 @@ Object.assign(SpiralCalendar.prototype, {
         audioFeedbackToggle.addEventListener('click', (e) => {
           // Toggle state
           this.state.audioFeedbackEnabled = !this.state.audioFeedbackEnabled;
-          this.saveSettingsToStorage();
+          this.requestSettingsSave();
           
           // Update icon based on state
           if (audioFeedbackIcon) {
@@ -1123,8 +1102,8 @@ Object.assign(SpiralCalendar.prototype, {
       if (tooltipToggle) {
         tooltipToggle.addEventListener('change', (e) => {
           this.state.showTooltip = e.target.checked;
-          this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestRender();
+          this.requestSettingsSave();
         });
       }
 
@@ -1216,27 +1195,14 @@ Object.assign(SpiralCalendar.prototype, {
             property: 'days',
             formatter: (val) => val,
             onChange: () => {
-              // If a segment is selected, preserve its segmentId from the outside
-              if (this.mouseState.selectedSegmentId !== null) {
-                const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
-                if (this.mouseState.selectedSegmentId < totalVisibleSegments) {
-                  const absPos = totalVisibleSegments - this.mouseState.selectedSegmentId - 1;
-                  const newDay = Math.floor(absPos / CONFIG.SEGMENTS_PER_DAY);
-                  const newSegment = absPos % CONFIG.SEGMENTS_PER_DAY;
-                  this.mouseState.selectedSegment = { day: newDay, segment: newSegment };
-                } else {
-                  // If the segmentId is now out of range, deselect
-                  this.mouseState.selectedSegment = null;
-                  this.mouseState.selectedSegmentId = null;
-                }
-              }
+              this.syncSelectedSegmentToCurrentDays();
             }
           };
           
           if (sliderConfig.onChange) sliderConfig.onChange();
           
           this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestSettingsSave();
         }
         
         return;
@@ -1282,7 +1248,7 @@ Object.assign(SpiralCalendar.prototype, {
           radiusVal.textContent = newValue % 1 === 0 ? newValue.toString() : newValue.toFixed(2);
           
           this.drawSpiral();
-          this.saveSettingsToStorage();
+          this.requestSettingsSave();
         }
         
         return;
@@ -1326,10 +1292,8 @@ Object.assign(SpiralCalendar.prototype, {
         // Check if we're in the detail view and hit the outer limit
         if (this.state.detailViewDay !== null && this.mouseState.selectedSegment) {
           // Calculate what the rotation would be without clamping
-          const totalVisibleSegments = (this.state.days - 1) * CONFIG.SEGMENTS_PER_DAY;
           const segment = this.mouseState.selectedSegment;
-          const segmentId = totalVisibleSegments - (segment.day * CONFIG.SEGMENTS_PER_DAY);
-          const eventHour = segmentId;
+          const eventHour = this.getDayBoundarySegmentId(segment.day);
           const maxRotation = ((eventHour - 23.999) / CONFIG.SEGMENTS_PER_DAY) * 2 * Math.PI;
           
           // Check if the user tried to zoom past the limit
@@ -1594,9 +1558,7 @@ Object.assign(SpiralCalendar.prototype, {
           } else {
             this._eventsVersion = 1;
           }
-          if (typeof window.renderEventList === 'function') {
-            window.renderEventList();
-          }
+          this.requestEventListRender();
           if (typeof this.drawSpiral === 'function') {
             this.drawSpiral();
           }

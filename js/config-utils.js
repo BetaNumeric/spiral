@@ -32,11 +32,83 @@ const CONFIG = {
   TIME_DISPLAY_HEIGHT: 80,  // Height of the time display bar at the bottom
 };
 
-// Development flag - set to false to hide advanced options
-const DEV_MODE = true;
+const RUNTIME_FEATURE_FLAGS_STORAGE_KEY = 'spiralRuntimeFeatureFlags';
+const DEFAULT_DEV_MODE = true;
+const DEFAULT_STUDY_MODE = true;
 
-// Study mode flag - set to true to enable study session controls
-const STUDY_MODE = true;
+function parseRuntimeFeatureFlagValue(value) {
+  if (value === null || value === undefined) return null;
+  const normalized = String(value).trim().toLowerCase();
+  if (!normalized) return true;
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return null;
+}
+
+function getRuntimeFeatureFlagParam(paramName) {
+  if (typeof window === 'undefined' || !window.location) {
+    return null;
+  }
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    if (!params.has(paramName)) return null;
+    return parseRuntimeFeatureFlagValue(params.get(paramName));
+  } catch (_) {}
+  return null;
+}
+
+function getRuntimeFeatureFlagStorage() {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function getStoredRuntimeFeatureFlags() {
+  const storage = getRuntimeFeatureFlagStorage();
+  if (!storage) return {};
+  try {
+    const stored = storage.getItem(RUNTIME_FEATURE_FLAGS_STORAGE_KEY);
+    if (!stored) return {};
+    const parsed = JSON.parse(stored);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function getStoredRuntimeFeatureFlag(paramName) {
+  const flags = getStoredRuntimeFeatureFlags();
+  return typeof flags[paramName] === 'boolean' ? flags[paramName] : null;
+}
+
+function persistRuntimeFeatureFlag(paramName, value) {
+  const storage = getRuntimeFeatureFlagStorage();
+  if (!storage || typeof value !== 'boolean') return;
+  try {
+    const flags = getStoredRuntimeFeatureFlags();
+    flags[paramName] = value;
+    storage.setItem(RUNTIME_FEATURE_FLAGS_STORAGE_KEY, JSON.stringify(flags));
+  } catch (_) {}
+}
+
+function resolveRuntimeFeatureFlag(paramName, fallback = false) {
+  const urlValue = getRuntimeFeatureFlagParam(paramName);
+  if (urlValue !== null) {
+    persistRuntimeFeatureFlag(paramName, urlValue);
+    return urlValue;
+  }
+
+  const storedValue = getStoredRuntimeFeatureFlag(paramName);
+  if (storedValue !== null) return storedValue;
+  return fallback;
+}
+
+// Advanced/research UI is opt-in for normal builds. URL flags are persisted for installed PWAs.
+const DEV_MODE = resolveRuntimeFeatureFlag('dev', DEFAULT_DEV_MODE);
+const STUDY_MODE = resolveRuntimeFeatureFlag('study', DEFAULT_STUDY_MODE);
 
 // Runtime DEV_MODE override (for toggle button). Default to hidden.
 let runtimeDevModeOverride = false;

@@ -294,6 +294,14 @@ class SpiralCalendar {
         animationFrameId: null,
         timeoutIds: []
       };
+
+      this.renderSchedulerState = {
+        renderFrameId: null,
+        eventListFrameId: null,
+        eventListOptions: null,
+        settingsSaveTimerId: null
+      };
+      this.eventTimestampCache = new WeakMap();
       
       // Overlay data to draw after events
       this.nightOverlays = [];
