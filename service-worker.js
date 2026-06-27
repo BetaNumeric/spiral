@@ -9,6 +9,7 @@ const toURL = (p) => new URL(p, self.location).toString();
 const ASSETS = [
   './',
   './index.html',
+  './study-analysis.html',
   './a2hs.js',
   './js/app-version.js',
   './js/config-utils.js',
@@ -24,6 +25,9 @@ const ASSETS = [
   './js/state-storage-sync.js',
   './js/pickers-calendars.js',
   './js/touch-time-orientation.js',
+  './js/study-session.js',
+  './js/study-analysis-page.js',
+  './tools/study-analysis-core.mjs',
   './js/bootstrap.js',
   './manifest.json',
   './icons/icon_32.gif',

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spiral Study Analysis</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: #f5f7fa;
+      color: #1f2937;
+    }
+    .analysis-page {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 24px 0 42px;
+    }
+    .analysis-toolbar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: center;
+      padding: 16px;
+      margin-bottom: 16px;
+      background: #ffffff;
+      border: 1px solid #d8dee8;
+      border-radius: 8px;
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+    }
+    .analysis-toolbar h1 {
+      margin: 0 0 6px;
+      font-size: 24px;
+    }
+    .analysis-toolbar p {
+      margin: 0;
+      color: #667085;
+      font-size: 14px;
+    }
+    .toolbar-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .analysis-button,
+    .analysis-link,
+    .file-label {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      padding: 8px 12px;
+      border: 1px solid #d8dee8;
+      border-radius: 6px;
+      background: #fff;
+      color: #1f2937;
+      font: inherit;
+      font-size: 13px;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .analysis-link.primary {
+      background: #1565c0;
+      color: #fff;
+      border-color: #1565c0;
+    }
+    .file-label input {
+      display: none;
+    }
+    #analysisStatus {
+      grid-column: 1 / -1;
+      color: #667085;
+      font-size: 13px;
+    }
+    @media (max-width: 900px) {
+      .analysis-toolbar {
+        grid-template-columns: 1fr;
+      }
+      .toolbar-actions {
+        justify-content: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="analysis-page" id="analysisApp">
+    <section class="analysis-toolbar">
+      <div>
+        <h1>Study Analysis</h1>
+        <p>Review locally saved study data, import downloaded sessions, and export summary reports.</p>
+      </div>
+      <div class="toolbar-actions">
+        <a class="analysis-link primary" href="./?study=1">Open Spiral</a>
+        <button class="analysis-button" id="refreshStudyDataBtn" type="button">Refresh</button>
+        <label class="file-label">
+          Import JSON
+          <input id="importStudyFiles" type="file" accept="application/json,.json" multiple>
+        </label>
+        <button class="analysis-button" id="clearImportedStudyDataBtn" type="button">Clear Imports</button>
+        <button class="analysis-button" id="downloadLocalStudyJsonBtn" type="button">Download Local JSON</button>
+        <button class="analysis-button" id="downloadSummaryCsvBtn" type="button">Summary CSV</button>
+        <button class="analysis-button" id="downloadInteractionsCsvBtn" type="button">Interactions CSV</button>
+        <button class="analysis-button" id="downloadReportHtmlBtn" type="button">Report HTML</button>
+      </div>
+      <div id="analysisStatus">Loading study data...</div>
+    </section>
+    <div id="analysisReport"></div>
+  </main>
+  <script src="js/app-version.js"></script>
+  <script type="module" src="js/study-analysis-page.js"></script>
+</body>
+</html>

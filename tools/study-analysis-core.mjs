@@ -1,160 +1,14 @@
-#!/usr/bin/env node
-// Analyze Spiral study session exports and generate summary CSV files plus an HTML report.
-//
-// Examples:
-//   node tools/analyze-study-sessions.mjs
-//   node tools/analyze-study-sessions.mjs study-session-a.json study-session-b.json
-//   node tools/analyze-study-sessions.mjs ./study-exports --out ./study-analysis
+export const STUDY_SESSION_STORAGE_KEY = 'spiralCalendarStudySessionDraft';
+export const STUDY_ANALYSIS_IMPORTS_STORAGE_KEY = 'spiralCalendarStudyAnalysisImports';
+export const PHASES = ['explore', 'task', 'debrief'];
 
-import fs from 'node:fs';
-import path from 'node:path';
-import {
-  INTERACTION_COLUMNS,
-  SUMMARY_COLUMNS,
-  analyzeSessions,
-  buildCsv,
-  buildInteractionRows,
-  buildReportHtml,
-  buildSummaryRows
-} from './study-analysis-core.mjs';
-
-const ROOT_DIR = process.cwd();
-const DEFAULT_OUTPUT_DIR = path.join(ROOT_DIR, 'study-analysis');
-const STUDY_EXPORT_PATTERN = /^study-session-.*\.json$/i;
-
-function printHelp() {
-  console.log(`Usage: node tools/analyze-study-sessions.mjs [input-file-or-dir ...] [--out output-dir]
-
-Inputs default to the current working directory. Directories are scanned for study-session-*.json.
-Outputs:
-  summary.csv
-  interactions.csv
-  report.html`);
-}
-
-function parseArgs(argv) {
-  const inputs = [];
-  let outputDir = DEFAULT_OUTPUT_DIR;
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === '--help' || arg === '-h') {
-      return { help: true, inputs, outputDir };
-    }
-    if (arg === '--out' || arg === '-o') {
-      const next = argv[index + 1];
-      if (!next) throw new Error('--out requires a directory path');
-      outputDir = path.resolve(ROOT_DIR, next);
-      index += 1;
-      continue;
-    }
-    inputs.push(path.resolve(ROOT_DIR, arg));
-  }
-
-  return {
-    help: false,
-    inputs: inputs.length > 0 ? inputs : [ROOT_DIR],
-    outputDir
-  };
-}
-
-function listStudyFiles(inputPath) {
-  const stats = fs.statSync(inputPath);
-  if (stats.isFile()) return [inputPath];
-  if (!stats.isDirectory()) return [];
-
-  return fs.readdirSync(inputPath)
-    .filter((fileName) => STUDY_EXPORT_PATTERN.test(fileName))
-    .sort((a, b) => a.localeCompare(b))
-    .map((fileName) => path.join(inputPath, fileName));
-}
-
-function expandParsedStudyData(parsed) {
-  if (Array.isArray(parsed)) return parsed;
-  if (parsed && Array.isArray(parsed.sessions)) return parsed.sessions;
-  if (parsed && parsed.raw && typeof parsed.raw === 'object') return [parsed.raw];
-  return [parsed];
-}
-
-function loadStudyEntries(inputPaths) {
-  const files = inputPaths.flatMap((inputPath) => listStudyFiles(inputPath));
-  const entries = [];
-
-  files.forEach((filePath) => {
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    const sessions = expandParsedStudyData(parsed);
-    sessions.forEach((raw, index) => {
-      entries.push({
-        fileName: sessions.length > 1
-          ? `${path.basename(filePath)}#${index + 1}`
-          : path.basename(filePath),
-        source: path.relative(ROOT_DIR, filePath) || filePath,
-        raw
-      });
-    });
-  });
-
-  return entries;
-}
-
-function writeFile(filePath, contents) {
-  fs.writeFileSync(filePath, contents, 'utf8');
-}
-
-function runCli() {
-  const options = parseArgs(process.argv.slice(2));
-  if (options.help) {
-    printHelp();
-    return;
-  }
-
-  const sessions = analyzeSessions(loadStudyEntries(options.inputs));
-  if (sessions.length === 0) {
-    console.error('No study sessions found. Expected study-session-*.json files or explicit JSON files.');
-    process.exit(1);
-  }
-
-  fs.mkdirSync(options.outputDir, { recursive: true });
-  writeFile(path.join(options.outputDir, 'summary.csv'), buildCsv(SUMMARY_COLUMNS, buildSummaryRows(sessions)));
-  writeFile(path.join(options.outputDir, 'interactions.csv'), buildCsv(INTERACTION_COLUMNS, buildInteractionRows(sessions)));
-  writeFile(
-    path.join(options.outputDir, 'report.html'),
-    buildReportHtml(sessions, {
-      title: 'Study Session Report',
-      sourceText: `Generated from ${sessions.length} study session${sessions.length === 1 ? '' : 's'} loaded by the CLI analyzer.`
-    })
-  );
-
-  console.log(`Wrote ${sessions.length} session(s) to ${options.outputDir}`);
-  console.log(`- ${path.join(options.outputDir, 'summary.csv')}`);
-  console.log(`- ${path.join(options.outputDir, 'interactions.csv')}`);
-  console.log(`- ${path.join(options.outputDir, 'report.html')}`);
-}
-
-try {
-  runCli();
-} catch (error) {
-  console.error(error && error.message ? error.message : error);
-  process.exit(1);
-}
-
-/*
-Legacy standalone implementation retained below for reference. The executable path now uses
-tools/study-analysis-core.mjs so the browser page and CLI share the same analysis logic.
-
-import fs from 'node:fs';
-import path from 'node:path';
-
-const ROOT_DIR = process.cwd();
-const OUTPUT_DIR = path.join(ROOT_DIR, 'study-analysis');
-const FILE_PATTERN = /^study-session-.*\.json$/i;
-const PHASES = ['explore', 'task', 'debrief'];
-const PHASE_COLORS = {
+export const PHASE_COLORS = {
   explore: '#8ecae6',
   task: '#ffb703',
   debrief: '#90be6d'
 };
-const TYPE_COLORS = {
+
+export const TYPE_COLORS = {
   session_started: '#2e7d32',
   session_stopped: '#455a64',
   session_recovered: '#ad1457',
@@ -169,21 +23,21 @@ const TYPE_COLORS = {
   orientation_changed: '#546e7a'
 };
 
-function toNumber(value, fallback = 0) {
+export function toNumber(value, fallback = 0) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
-function normalizePhase(value) {
+export function normalizePhase(value) {
   const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
   return PHASES.includes(normalized) ? normalized : 'explore';
 }
 
-function safeArray(value) {
+export function safeArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
-function createPhaseMap(factory = () => 0) {
+export function createPhaseMap(factory = () => 0) {
   const map = {};
   PHASES.forEach((phase) => {
     map[phase] = factory(phase);
@@ -191,7 +45,7 @@ function createPhaseMap(factory = () => 0) {
   return map;
 }
 
-function createMetricsSeed() {
+export function createMetricsSeed() {
   return {
     interactionCount: 0,
     detailViewOpenCount: 0,
@@ -208,7 +62,7 @@ function createMetricsSeed() {
   };
 }
 
-function formatDuration(durationMs) {
+export function formatDuration(durationMs) {
   if (!Number.isFinite(durationMs) || durationMs <= 0) return '0s';
   const totalSeconds = Math.round(durationMs / 1000);
   const hours = Math.floor(totalSeconds / 3600);
@@ -221,12 +75,12 @@ function formatDuration(durationMs) {
   return parts.join(' ');
 }
 
-function escapeCsv(value) {
+export function escapeCsv(value) {
   const text = value === null || value === undefined ? '' : String(value);
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-function escapeHtml(value) {
+export function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -235,7 +89,7 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function normalizeSegment(segment) {
+export function normalizeSegment(segment) {
   if (!segment || typeof segment !== 'object') return null;
 
   const spiralDayIndex = Number.isFinite(Number(segment.spiralDayIndex))
@@ -255,22 +109,25 @@ function normalizeSegment(segment) {
   };
 }
 
-function getDurationMs(session) {
+export function getDurationMs(session, nowMs = Date.now()) {
   const directDuration = toNumber(session.sessionDurationMs, NaN);
-  if (Number.isFinite(directDuration) && directDuration >= 0) return directDuration;
+  if (Number.isFinite(directDuration) && directDuration >= 0 && !session.isRecording) {
+    return directDuration;
+  }
 
   const start = Date.parse(session.startTime);
-  const end = Date.parse(session.endTime);
+  const end = session.endTime ? Date.parse(session.endTime) : (session.isRecording ? nowMs : NaN);
   if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
     return end - start;
   }
 
+  if (Number.isFinite(directDuration) && directDuration >= 0) return directDuration;
   return 0;
 }
 
-function deriveMetrics(session) {
+export function deriveMetrics(session, options = {}) {
   const interactions = safeArray(session.interactions);
-  const durationMs = getDurationMs(session);
+  const durationMs = getDurationMs(session, options.nowMs || Date.now());
   const metrics = {
     durationMs,
     durationText: formatDuration(durationMs),
@@ -338,7 +195,7 @@ function deriveMetrics(session) {
     for (const interaction of interactions) {
       if (!interaction || interaction.type !== 'phase_changed') continue;
 
-      const segmentEndMs = Math.max(0, toNumber(interaction.offsetMs, segmentStartMs));
+      const segmentEndMs = Math.max(0, Math.min(durationMs, toNumber(interaction.offsetMs, segmentStartMs)));
       metrics.phaseDurationsMs[currentPhase] += Math.max(0, segmentEndMs - segmentStartMs);
       currentPhase = normalizePhase(
         interaction.payload && interaction.payload.toPhase ? interaction.payload.toPhase : interaction.phase
@@ -356,7 +213,7 @@ function deriveMetrics(session) {
   return metrics;
 }
 
-function derivePhaseWindows(session, metrics) {
+export function derivePhaseWindows(session, metrics) {
   const interactions = safeArray(session.interactions);
   const windows = [];
   const durationMs = metrics.durationMs;
@@ -379,7 +236,7 @@ function derivePhaseWindows(session, metrics) {
   return windows;
 }
 
-function deriveEventSourceCounts(interactions) {
+export function deriveEventSourceCounts(interactions) {
   const counts = {};
   safeArray(interactions).forEach((interaction) => {
     if (!interaction || interaction.type !== 'events_changed') return;
@@ -389,46 +246,62 @@ function deriveEventSourceCounts(interactions) {
   return counts;
 }
 
-function listSessionFiles(rootDir) {
-  return fs.readdirSync(rootDir)
-    .filter((fileName) => FILE_PATTERN.test(fileName))
-    .sort((a, b) => a.localeCompare(b));
+export function normalizeRawSession(raw, options = {}) {
+  if (!raw || typeof raw !== 'object') return null;
+  const session = {
+    ...raw,
+    sessionPhase: normalizePhase(raw.sessionPhase),
+    interactions: safeArray(raw.interactions)
+  };
+
+  if (!session.participantId && options.participantId) {
+    session.participantId = options.participantId;
+  }
+  if (!session.sessionId && options.sessionId) {
+    session.sessionId = options.sessionId;
+  }
+  if (!session.appVersion && options.appVersion) {
+    session.appVersion = options.appVersion;
+  }
+
+  return session;
 }
 
-function loadSessions(rootDir) {
-  const fileNames = listSessionFiles(rootDir);
-  return fileNames.map((fileName) => {
-    const absolutePath = path.join(rootDir, fileName);
-    const raw = JSON.parse(fs.readFileSync(absolutePath, 'utf8'));
-    const metrics = deriveMetrics(raw);
-    return {
-      fileName,
-      absolutePath,
-      raw,
-      metrics,
-      phaseWindows: derivePhaseWindows(raw, metrics),
-      eventSourceCounts: deriveEventSourceCounts(raw.interactions)
-    };
-  });
+export function prepareSession(entry, options = {}) {
+  const raw = normalizeRawSession(entry && entry.raw ? entry.raw : entry, options);
+  if (!raw || !raw.startTime) return null;
+
+  const fileName = entry && entry.fileName ? entry.fileName : `${raw.participantId || raw.sessionId || 'session'}.json`;
+  const source = entry && entry.source ? entry.source : fileName;
+  const metrics = deriveMetrics(raw, options);
+
+  return {
+    fileName,
+    source,
+    raw,
+    metrics,
+    phaseWindows: derivePhaseWindows(raw, metrics),
+    eventSourceCounts: deriveEventSourceCounts(raw.interactions)
+  };
 }
 
-function writeCsv(filePath, columns, rows) {
-  const lines = [
-    columns.join(','),
-    ...rows.map((row) => columns.map((column) => escapeCsv(row[column])).join(','))
-  ];
-  fs.writeFileSync(filePath, `${lines.join('\n')}\n`, 'utf8');
+export function analyzeSessions(entries, options = {}) {
+  return safeArray(entries)
+    .map((entry) => prepareSession(entry, options))
+    .filter(Boolean);
 }
 
-function buildSummaryRows(sessions) {
+export function buildSummaryRows(sessions) {
   return sessions.map((session) => {
     const { raw, metrics } = session;
     return {
+      source: session.source || '',
       fileName: session.fileName,
       participantId: raw.participantId || '',
       sessionId: raw.sessionId || '',
       appVersion: raw.appVersion || '',
       finalPhase: normalizePhase(raw.sessionPhase),
+      isRecording: raw.isRecording ? 'yes' : 'no',
       durationMs: metrics.durationMs,
       durationText: metrics.durationText,
       exploreMs: metrics.phaseDurationsMs.explore,
@@ -457,18 +330,18 @@ function buildSummaryRows(sessions) {
   });
 }
 
-function buildInteractionRows(sessions) {
+export function buildInteractionRows(sessions) {
   const rows = [];
 
   sessions.forEach((session) => {
-    const interactions = safeArray(session.raw.interactions);
-    interactions.forEach((interaction) => {
+    safeArray(session.raw.interactions).forEach((interaction) => {
       const payload = interaction && interaction.payload ? interaction.payload : {};
       const segment = normalizeSegment(payload.segment);
       const fromSegment = normalizeSegment(payload.fromSegment);
       const toSegment = normalizeSegment(payload.toSegment);
       const changes = payload && payload.changes ? payload.changes : {};
       rows.push({
+        source: session.source || '',
         fileName: session.fileName,
         participantId: session.raw.participantId || '',
         sessionId: session.raw.sessionId || '',
@@ -478,7 +351,7 @@ function buildInteractionRows(sessions) {
         phase: normalizePhase(interaction.phase || session.raw.sessionPhase),
         timestamp: interaction.timestamp || '',
         offsetMs: toNumber(interaction.offsetMs, 0),
-        source: payload.source || '',
+        sourceContext: payload.source || '',
         createdCount: safeArray(payload.created).length,
         updatedCount: safeArray(payload.updated).length,
         deletedCount: safeArray(payload.deleted).length,
@@ -501,40 +374,47 @@ function buildInteractionRows(sessions) {
   return rows;
 }
 
-function renderOverviewCards(sessions) {
-  const totalDurationMs = sessions.reduce((sum, session) => sum + session.metrics.durationMs, 0);
-  const totalInteractions = sessions.reduce((sum, session) => sum + session.metrics.interactionCount, 0);
-  const totalCreates = sessions.reduce((sum, session) => sum + session.metrics.createdEventCount, 0);
-  const totalUpdates = sessions.reduce((sum, session) => sum + session.metrics.updatedEventCount, 0);
-  const totalDeletes = sessions.reduce((sum, session) => sum + session.metrics.deletedEventCount, 0);
+export const SUMMARY_COLUMNS = [
+  'source', 'fileName', 'participantId', 'sessionId', 'appVersion', 'finalPhase', 'isRecording',
+  'durationMs', 'durationText',
+  'exploreMs', 'taskMs', 'debriefMs',
+  'exploreText', 'taskText', 'debriefText',
+  'interactionCount', 'exploreInteractions', 'taskInteractions', 'debriefInteractions',
+  'createdEventCount', 'updatedEventCount', 'deletedEventCount',
+  'settingsInteractionCount', 'settingsFieldChangeCount',
+  'panelOpenCount', 'detailViewOpenCount', 'phaseChangeCount',
+  'changedSettingsJson', 'eventSourcesJson',
+  'startTime', 'endTime'
+];
 
-  const cards = [
-    { label: 'Sessions', value: sessions.length, subtext: 'Study exports found in repo root' },
-    { label: 'Total Duration', value: formatDuration(totalDurationMs), subtext: 'Across all loaded sessions' },
-    { label: 'Interactions', value: totalInteractions, subtext: 'All recorded interactions' },
-    { label: 'Event Changes', value: `${totalCreates}/${totalUpdates}/${totalDeletes}`, subtext: 'Created / updated / deleted' }
-  ];
+export const INTERACTION_COLUMNS = [
+  'source', 'fileName', 'participantId', 'sessionId', 'appVersion',
+  'index', 'type', 'phase', 'timestamp', 'offsetMs', 'sourceContext',
+  'createdCount', 'updatedCount', 'deletedCount',
+  'changedSettingKeys', 'fromPhase', 'toPhase',
+  'segmentStart', 'segmentEnd', 'segmentSpiralDayIndex', 'segmentIndex',
+  'fromSegmentStart', 'fromSegmentEnd', 'toSegmentStart', 'toSegmentEnd',
+  'payloadJson'
+];
 
-  return cards.map((card) => `
-    <div class="card">
-      <div class="card-label">${escapeHtml(card.label)}</div>
-      <div class="card-value">${escapeHtml(card.value)}</div>
-      <div class="card-subtext">${escapeHtml(card.subtext)}</div>
-    </div>
-  `).join('');
+export function buildCsv(columns, rows) {
+  return `${[
+    columns.join(','),
+    ...rows.map((row) => columns.map((column) => escapeCsv(row[column])).join(','))
+  ].join('\n')}\n`;
 }
 
-function getSessionLabel(session) {
-  return session.raw.participantId || session.fileName;
+export function getSessionLabel(session) {
+  return session.raw.participantId || session.raw.sessionId || session.fileName;
 }
 
-function formatTitleCase(value) {
+export function formatTitleCase(value) {
   const text = String(value || '').trim();
   if (!text) return '';
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-function getSortedInteractionTypes(sessions) {
+export function getSortedInteractionTypes(sessions) {
   const typeCounts = {};
   sessions.forEach((session) => {
     safeArray(session.raw.interactions).forEach((interaction) => {
@@ -551,7 +431,7 @@ function getSortedInteractionTypes(sessions) {
     .map(([type]) => type);
 }
 
-function buildTopFindings(sessions) {
+export function buildTopFindings(sessions) {
   const findings = [];
   const interactionsByPhase = createPhaseMap(() => 0);
   const settingTotals = {};
@@ -601,7 +481,7 @@ function buildTopFindings(sessions) {
   if (longestExploreSession && longestExploreSession.durationMs > 0) {
     findings.push({
       label: 'Longest Explore',
-      text: `${longestExploreSession.label} spent ${formatDuration(longestExploreSession.durationMs)} in explore before moving on.`
+      text: `${longestExploreSession.label} spent ${formatDuration(longestExploreSession.durationMs)} in explore.`
     });
   }
 
@@ -624,14 +504,38 @@ function buildTopFindings(sessions) {
   return findings.slice(0, 5);
 }
 
-function renderTopFindings(sessions) {
+export function renderOverviewCards(sessions) {
+  const totalDurationMs = sessions.reduce((sum, session) => sum + session.metrics.durationMs, 0);
+  const totalInteractions = sessions.reduce((sum, session) => sum + session.metrics.interactionCount, 0);
+  const totalCreates = sessions.reduce((sum, session) => sum + session.metrics.createdEventCount, 0);
+  const totalUpdates = sessions.reduce((sum, session) => sum + session.metrics.updatedEventCount, 0);
+  const totalDeletes = sessions.reduce((sum, session) => sum + session.metrics.deletedEventCount, 0);
+  const recordingCount = sessions.filter((session) => session.raw.isRecording).length;
+
+  const cards = [
+    { label: 'Sessions', value: sessions.length, subtext: recordingCount ? `${recordingCount} currently recording` : 'Loaded study sessions' },
+    { label: 'Total Duration', value: formatDuration(totalDurationMs), subtext: 'Across loaded sessions' },
+    { label: 'Interactions', value: totalInteractions, subtext: 'All recorded interactions' },
+    { label: 'Event Changes', value: `${totalCreates}/${totalUpdates}/${totalDeletes}`, subtext: 'Created / updated / deleted' }
+  ];
+
+  return cards.map((card) => `
+    <div class="analysis-card">
+      <div class="card-label">${escapeHtml(card.label)}</div>
+      <div class="card-value">${escapeHtml(card.value)}</div>
+      <div class="card-subtext">${escapeHtml(card.subtext)}</div>
+    </div>
+  `).join('');
+}
+
+export function renderTopFindings(sessions) {
   const findings = buildTopFindings(sessions);
   if (findings.length === 0) {
-    return '<p class="note">No findings available yet.</p>';
+    return '<p class="note">No findings available yet. Record or import a session with interactions to populate this view.</p>';
   }
 
   return `
-    <div class="findings">
+    <div class="findings-grid">
       ${findings.map((finding) => `
         <div class="finding-card">
           <div class="finding-label">${escapeHtml(finding.label)}</div>
@@ -642,12 +546,13 @@ function renderTopFindings(sessions) {
   `;
 }
 
-function renderSessionTable(sessions) {
+export function renderSessionTable(sessions) {
   const rows = sessions.map((session) => {
     const { raw, metrics } = session;
     return `
       <tr>
-        <td>${escapeHtml(raw.participantId || session.fileName)}</td>
+        <td>${escapeHtml(getSessionLabel(session))}<div class="table-subtext">${escapeHtml(session.source || '')}</div></td>
+        <td>${escapeHtml(raw.isRecording ? 'Recording' : 'Stopped')}</td>
         <td>${escapeHtml(metrics.durationText)}</td>
         <td>${escapeHtml(metrics.phaseDurationsText.explore)}</td>
         <td>${escapeHtml(metrics.phaseDurationsText.task)}</td>
@@ -655,32 +560,33 @@ function renderSessionTable(sessions) {
         <td>${escapeHtml(metrics.interactionCount)}</td>
         <td>${escapeHtml(`${metrics.createdEventCount} / ${metrics.updatedEventCount} / ${metrics.deletedEventCount}`)}</td>
         <td>${escapeHtml(`${metrics.settingsInteractionCount} / ${metrics.settingsFieldChangeCount}`)}</td>
-        <td>${escapeHtml(Object.keys(metrics.changedSettings).join(', ') || 'None')}</td>
       </tr>
     `;
   }).join('');
 
   return `
-    <table>
-      <thead>
-        <tr>
-          <th>Participant</th>
-          <th>Duration</th>
-          <th>Explore</th>
-          <th>Task</th>
-          <th>Debrief</th>
-          <th>Interactions</th>
-          <th>Events + / ~ / -</th>
-          <th>Settings Int / Fields</th>
-          <th>Changed Settings</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Session</th>
+            <th>Status</th>
+            <th>Duration</th>
+            <th>Explore</th>
+            <th>Task</th>
+            <th>Debrief</th>
+            <th>Interactions</th>
+            <th>Events + / ~ / -</th>
+            <th>Settings Int / Fields</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
   `;
 }
 
-function renderPhaseBars(sessions) {
+export function renderPhaseBars(sessions) {
   return sessions.map((session) => {
     const total = Math.max(1, session.metrics.durationMs);
     const segments = PHASES.map((phase) => {
@@ -690,7 +596,7 @@ function renderPhaseBars(sessions) {
 
     return `
       <div class="phase-row">
-        <div class="phase-row-label">${escapeHtml(session.raw.participantId || session.fileName)}</div>
+        <div class="phase-row-label">${escapeHtml(getSessionLabel(session))}</div>
         <div class="phase-row-bar">${segments}</div>
         <div class="phase-row-text">${escapeHtml(`${session.metrics.phaseDurationsText.explore} / ${session.metrics.phaseDurationsText.task} / ${session.metrics.phaseDurationsText.debrief}`)}</div>
       </div>
@@ -698,7 +604,31 @@ function renderPhaseBars(sessions) {
   }).join('');
 }
 
-function renderTimelines(sessions) {
+export function renderTimelineFilters(sessions) {
+  const interactionTypes = getSortedInteractionTypes(sessions);
+
+  return `
+    <div class="filters">
+      <label class="filter-control">
+        <span>Phase</span>
+        <select id="phaseFilter">
+          <option value="all">All phases</option>
+          ${PHASES.map((phase) => `<option value="${escapeHtml(phase)}">${escapeHtml(formatTitleCase(phase))}</option>`).join('')}
+        </select>
+      </label>
+      <label class="filter-control">
+        <span>Interaction</span>
+        <select id="typeFilter">
+          <option value="all">All interaction types</option>
+          ${interactionTypes.map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`).join('')}
+        </select>
+      </label>
+      <div class="filter-summary" id="filterSummary">Showing all interactions in the timeline view.</div>
+    </div>
+  `;
+}
+
+export function renderTimelines(sessions) {
   return sessions.map((session) => {
     const total = Math.max(1, session.metrics.durationMs);
     const sessionLabel = getSessionLabel(session);
@@ -725,7 +655,7 @@ function renderTimelines(sessions) {
         <div class="timeline-header">
           <div class="timeline-title">${escapeHtml(sessionLabel)}</div>
           <div class="timeline-meta">
-            <span>${escapeHtml(`${session.metrics.durationText} • ${session.metrics.interactionCount} interactions`)}</span>
+            <span>${escapeHtml(`${session.metrics.durationText} - ${session.metrics.interactionCount} interactions`)}</span>
             <span class="timeline-filter-count" data-total="${escapeHtml(totalMarkers)}">${escapeHtml(`${totalMarkers}/${totalMarkers} visible`)}</span>
           </div>
         </div>
@@ -738,7 +668,7 @@ function renderTimelines(sessions) {
   }).join('');
 }
 
-function renderEventSourceTable(sessions) {
+export function renderEventSourceTable(sessions) {
   const rows = sessions.map((session) => {
     const sources = Object.entries(session.eventSourceCounts)
       .sort((a, b) => b[1] - a[1])
@@ -747,26 +677,30 @@ function renderEventSourceTable(sessions) {
 
     return `
       <tr>
-        <td>${escapeHtml(session.raw.participantId || session.fileName)}</td>
+        <td>${escapeHtml(getSessionLabel(session))}</td>
         <td>${escapeHtml(sources || 'None')}</td>
+        <td>${escapeHtml(Object.keys(session.metrics.changedSettings).join(', ') || 'None')}</td>
       </tr>
     `;
   }).join('');
 
   return `
-    <table>
-      <thead>
-        <tr>
-          <th>Participant</th>
-          <th>Event Change Sources</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Session</th>
+            <th>Event Change Sources</th>
+            <th>Changed Settings</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
   `;
 }
 
-function renderTypeLegend(sessions) {
+export function renderTypeLegend(sessions) {
   const typeCounts = {};
   sessions.forEach((session) => {
     safeArray(session.raw.interactions).forEach((interaction) => {
@@ -785,310 +719,361 @@ function renderTypeLegend(sessions) {
     `).join('');
 }
 
-function renderTimelineFilters(sessions) {
-  const interactionTypes = getSortedInteractionTypes(sessions);
+export function renderAnalysisSections(sessions, options = {}) {
+  const generatedAt = options.generatedAt || new Date().toISOString();
+  const sourceText = options.sourceText || 'Loaded study sessions';
+
+  if (!sessions.length) {
+    return `
+      <section class="report-section">
+        <h2>No Study Data Found</h2>
+        <p class="note">Start or stop a study session in Spiral, then return here and refresh. You can also import downloaded study-session JSON files.</p>
+      </section>
+    `;
+  }
 
   return `
-    <div class="filters">
-      <label class="filter-control">
-        <span>Phase</span>
-        <select id="phaseFilter">
-          <option value="all">All phases</option>
-          ${PHASES.map((phase) => `<option value="${escapeHtml(phase)}">${escapeHtml(formatTitleCase(phase))}</option>`).join('')}
-        </select>
-      </label>
-      <label class="filter-control">
-        <span>Interaction</span>
-        <select id="typeFilter">
-          <option value="all">All interaction types</option>
-          ${interactionTypes.map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`).join('')}
-        </select>
-      </label>
-      <div class="filter-summary" id="filterSummary">Showing all interactions in the timeline view.</div>
-    </div>
+    <section class="report-section hero-report">
+      <div>
+        <h1>${escapeHtml(options.title || 'Study Data Analysis')}</h1>
+        <p>${escapeHtml(sourceText)}</p>
+      </div>
+      <div class="generated-at">Generated ${escapeHtml(generatedAt)}</div>
+    </section>
+
+    <section class="report-section">
+      <h2>Overview</h2>
+      <div class="cards-grid">${renderOverviewCards(sessions)}</div>
+    </section>
+
+    <section class="report-section">
+      <h2>Top Findings</h2>
+      ${renderTopFindings(sessions)}
+    </section>
+
+    <section class="report-section">
+      <h2>Session Summary</h2>
+      ${renderSessionTable(sessions)}
+    </section>
+
+    <section class="report-section">
+      <h2>Phase Durations</h2>
+      ${renderPhaseBars(sessions)}
+      <div class="note">Bars are stacked left-to-right as explore, task, then debrief.</div>
+    </section>
+
+    <section class="report-section">
+      <h2>Interaction Timelines</h2>
+      ${renderTimelineFilters(sessions)}
+      ${renderTimelines(sessions)}
+      <div class="legend">${renderTypeLegend(sessions)}</div>
+    </section>
+
+    <section class="report-section">
+      <h2>Event Sources and Settings</h2>
+      ${renderEventSourceTable(sessions)}
+    </section>
   `;
 }
 
-function buildReportHtml(sessions) {
-  const generatedAt = new Date().toISOString();
+export const STUDY_ANALYSIS_CSS = `
+:root {
+  color-scheme: light;
+  --analysis-bg: #f5f7fa;
+  --analysis-panel: #ffffff;
+  --analysis-panel-soft: #fbfcfe;
+  --analysis-text: #1f2937;
+  --analysis-muted: #667085;
+  --analysis-border: #d8dee8;
+  --analysis-accent: #1565c0;
+  --analysis-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: var(--analysis-bg);
+  color: var(--analysis-text);
+}
+.analysis-page {
+  width: min(1180px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 24px 0 42px;
+}
+.analysis-toolbar,
+.report-section {
+  background: var(--analysis-panel);
+  border: 1px solid var(--analysis-border);
+  border-radius: 8px;
+  box-shadow: var(--analysis-shadow);
+}
+.analysis-toolbar {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  align-items: center;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.analysis-toolbar h1,
+.report-section h1,
+.report-section h2 {
+  margin: 0;
+}
+.analysis-toolbar p,
+.report-section p,
+.note,
+.generated-at,
+.table-subtext {
+  color: var(--analysis-muted);
+}
+.toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.analysis-button,
+.analysis-link,
+.file-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 8px 12px;
+  border: 1px solid var(--analysis-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--analysis-text);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.analysis-button.primary,
+.analysis-link.primary {
+  background: var(--analysis-accent);
+  color: #fff;
+  border-color: var(--analysis-accent);
+}
+.analysis-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.file-label input {
+  display: none;
+}
+.report-section {
+  padding: 20px;
+  margin-top: 16px;
+}
+.hero-report {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+.cards-grid,
+.findings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.analysis-card,
+.finding-card {
+  border: 1px solid var(--analysis-border);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--analysis-panel-soft);
+}
+.card-label,
+.finding-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--analysis-muted);
+  margin-bottom: 8px;
+}
+.card-value {
+  font-size: 28px;
+  font-weight: 700;
+}
+.card-subtext,
+.finding-text,
+.note,
+.table-subtext {
+  font-size: 13px;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+th,
+td {
+  padding: 10px 8px;
+  border-top: 1px solid var(--analysis-border);
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  border-top: none;
+  color: var(--analysis-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.phase-row {
+  display: grid;
+  grid-template-columns: 170px 1fr 190px;
+  gap: 14px;
+  align-items: center;
+  margin-top: 12px;
+}
+.phase-row:first-child {
+  margin-top: 0;
+}
+.phase-row-label,
+.phase-row-text,
+.timeline-title {
+  font-weight: 600;
+}
+.phase-row-bar {
+  display: flex;
+  overflow: hidden;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid var(--analysis-border);
+  background: #edf1f5;
+}
+.phase-segment {
+  display: block;
+  height: 100%;
+}
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, auto));
+  gap: 12px 16px;
+  align-items: end;
+  margin-bottom: 16px;
+}
+.filter-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--analysis-muted);
+}
+.filter-control select {
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--analysis-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--analysis-text);
+  font: inherit;
+}
+.filter-summary {
+  font-size: 13px;
+  color: var(--analysis-muted);
+  align-self: center;
+}
+.timeline-session {
+  margin-top: 16px;
+}
+.timeline-session.is-empty {
+  opacity: 0.45;
+}
+.timeline-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.timeline-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 13px;
+  color: var(--analysis-muted);
+}
+.timeline-track {
+  position: relative;
+  height: 46px;
+  border-radius: 8px;
+  border: 1px solid var(--analysis-border);
+  background: #eef2f7;
+  overflow: hidden;
+}
+.timeline-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  opacity: 0.4;
+}
+.timeline-marker {
+  position: absolute;
+  top: 7px;
+  width: 4px;
+  height: 32px;
+  margin-left: -2px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.6);
+}
+.timeline-marker.is-hidden {
+  display: none;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin-top: 14px;
+}
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+}
+@media (max-width: 900px) {
+  .analysis-toolbar,
+  .hero-report,
+  .phase-row {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+  .toolbar-actions {
+    justify-content: flex-start;
+  }
+}
+`;
+
+export function buildReportHtml(sessions, options = {}) {
+  const generatedAt = options.generatedAt || new Date().toISOString();
+  const title = options.title || 'Study Session Report';
+  const sourceText = options.sourceText || `Generated from ${sessions.length} study session${sessions.length === 1 ? '' : 's'}.`;
 
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Study Session Report</title>
-  <style>
-    :root {
-      color-scheme: light;
-      --bg: #f6f7fb;
-      --panel: #ffffff;
-      --text: #1f2937;
-      --muted: #667085;
-      --border: #d7dce5;
-      --shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(180deg, #eef4f8 0%, var(--bg) 100%);
-      color: var(--text);
-    }
-    main {
-      width: min(1180px, calc(100vw - 32px));
-      margin: 0 auto;
-      padding: 28px 0 40px;
-    }
-    h1, h2 { margin: 0 0 14px; }
-    p { margin: 0; color: var(--muted); }
-    section {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      padding: 20px;
-      margin-top: 18px;
-      box-shadow: var(--shadow);
-    }
-    .cards {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 14px;
-    }
-    .findings {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 14px;
-    }
-    .card {
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 14px;
-      background: #fbfcfe;
-    }
-    .finding-card {
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 14px;
-      background: linear-gradient(180deg, #fcfefe 0%, #f7fafc 100%);
-    }
-    .card-label {
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--muted);
-      margin-bottom: 8px;
-    }
-    .finding-label {
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--muted);
-      margin-bottom: 10px;
-    }
-    .card-value {
-      font-size: 28px;
-      font-weight: 700;
-      margin-bottom: 4px;
-    }
-    .finding-text {
-      font-size: 14px;
-      line-height: 1.45;
-    }
-    .card-subtext {
-      font-size: 13px;
-      color: var(--muted);
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 14px;
-    }
-    th, td {
-      padding: 10px 8px;
-      border-top: 1px solid var(--border);
-      text-align: left;
-      vertical-align: top;
-    }
-    th {
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--muted);
-      border-top: none;
-      padding-top: 0;
-    }
-    .phase-row {
-      display: grid;
-      grid-template-columns: 170px 1fr 190px;
-      gap: 14px;
-      align-items: center;
-      margin-top: 12px;
-    }
-    .phase-row:first-child { margin-top: 0; }
-    .phase-row-label, .phase-row-text, .timeline-title {
-      font-weight: 600;
-    }
-    .phase-row-bar {
-      display: flex;
-      overflow: hidden;
-      height: 18px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: #edf1f5;
-    }
-    .phase-segment { display: block; height: 100%; }
-    .filters {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, auto));
-      gap: 12px 16px;
-      align-items: end;
-      margin-bottom: 16px;
-    }
-    .filter-control {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      font-size: 13px;
-      color: var(--muted);
-    }
-    .filter-control select {
-      min-width: 0;
-      padding: 9px 12px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: #fff;
-      color: var(--text);
-      font: inherit;
-    }
-    .filter-summary {
-      font-size: 13px;
-      color: var(--muted);
-      align-self: center;
-    }
-    .timeline-session { margin-top: 16px; }
-    .timeline-session:first-child { margin-top: 0; }
-    .timeline-session.is-empty {
-      opacity: 0.45;
-    }
-    .timeline-header {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      align-items: baseline;
-      margin-bottom: 6px;
-      flex-wrap: wrap;
-    }
-    .timeline-meta {
-      font-size: 13px;
-      color: var(--muted);
-      display: inline-flex;
-      flex-wrap: wrap;
-      gap: 8px 12px;
-    }
-    .timeline-filter-count {
-      font-variant-numeric: tabular-nums;
-    }
-    .timeline-track {
-      position: relative;
-      height: 46px;
-      border-radius: 14px;
-      border: 1px solid var(--border);
-      background: #eef2f7;
-      overflow: hidden;
-    }
-    .timeline-window {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      opacity: 0.4;
-    }
-    .timeline-marker {
-      position: absolute;
-      top: 7px;
-      width: 4px;
-      height: 32px;
-      margin-left: -2px;
-      border-radius: 999px;
-      box-shadow: 0 0 0 1px rgba(255,255,255,0.6);
-    }
-    .timeline-marker.is-hidden {
-      display: none;
-    }
-    .legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px 18px;
-      margin-top: 14px;
-    }
-    .legend-item {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 13px;
-    }
-    .legend-swatch {
-      width: 12px;
-      height: 12px;
-      border-radius: 999px;
-    }
-    .note {
-      margin-top: 10px;
-      font-size: 13px;
-      color: var(--muted);
-    }
-    .mono {
-      font-family: Consolas, "Courier New", monospace;
-      font-size: 12px;
-    }
-    @media (max-width: 900px) {
-      .phase-row {
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
+  <title>${escapeHtml(title)}</title>
+  <style>${STUDY_ANALYSIS_CSS}</style>
 </head>
 <body>
-  <main>
-    <section>
-      <h1>Study Session Report</h1>
-      <p>Generated ${escapeHtml(generatedAt)} from ${escapeHtml(sessions.length)} study export file(s) in ${escapeHtml(ROOT_DIR)}.</p>
-    </section>
-
-    <section>
-      <h2>Overview</h2>
-      <div class="cards">${renderOverviewCards(sessions)}</div>
-    </section>
-
-    <section>
-      <h2>Top Findings</h2>
-      ${renderTopFindings(sessions)}
-    </section>
-
-    <section>
-      <h2>Session Summary</h2>
-      ${renderSessionTable(sessions)}
-    </section>
-
-    <section>
-      <h2>Phase Durations</h2>
-      ${renderPhaseBars(sessions)}
-      <div class="note">Bars are stacked left-to-right as explore, task, then debrief.</div>
-    </section>
-
-    <section>
-      <h2>Interaction Timelines</h2>
-      ${renderTimelineFilters(sessions)}
-      ${renderTimelines(sessions)}
-      <div class="note">Filters affect the timeline markers below without changing the exported CSV files.</div>
-      <div class="legend">${renderTypeLegend(sessions)}</div>
-    </section>
-
-    <section>
-      <h2>Event Sources</h2>
-      ${renderEventSourceTable(sessions)}
-      <div class="note">These counts help distinguish direct detail-view work from add-panel or list-based edits.</div>
-    </section>
+  <main class="analysis-page">
+    ${renderAnalysisSections(sessions, { title, generatedAt, sourceText })}
   </main>
   <script>
     (() => {
@@ -1096,54 +1081,32 @@ function buildReportHtml(sessions) {
       const typeFilter = document.getElementById('typeFilter');
       const filterSummary = document.getElementById('filterSummary');
       const timelineSessions = Array.from(document.querySelectorAll('.timeline-session'));
-
-      if (!phaseFilter || !typeFilter || !filterSummary || timelineSessions.length === 0) {
-        return;
-      }
-
+      if (!phaseFilter || !typeFilter || !filterSummary || timelineSessions.length === 0) return;
       const updateTimelineFilters = () => {
         const selectedPhase = phaseFilter.value;
         const selectedType = typeFilter.value;
         let visibleSessions = 0;
         let visibleMarkers = 0;
         let totalMarkers = 0;
-
         timelineSessions.forEach((session) => {
           const markers = Array.from(session.querySelectorAll('.timeline-marker'));
           totalMarkers += markers.length;
           let sessionVisibleMarkers = 0;
-
           markers.forEach((marker) => {
             const matchesPhase = selectedPhase === 'all' || marker.dataset.phase === selectedPhase;
             const matchesType = selectedType === 'all' || marker.dataset.type === selectedType;
             const isVisible = matchesPhase && matchesType;
             marker.classList.toggle('is-hidden', !isVisible);
-            if (isVisible) {
-              sessionVisibleMarkers += 1;
-            }
+            if (isVisible) sessionVisibleMarkers += 1;
           });
-
           visibleMarkers += sessionVisibleMarkers;
-          if (sessionVisibleMarkers > 0) {
-            visibleSessions += 1;
-          }
-
+          if (sessionVisibleMarkers > 0) visibleSessions += 1;
           session.classList.toggle('is-empty', sessionVisibleMarkers === 0);
           const countLabel = session.querySelector('.timeline-filter-count');
-          if (countLabel) {
-            countLabel.textContent = sessionVisibleMarkers === markers.length
-              ? selectedPhase === 'all' && selectedType === 'all'
-                ? 'all visible'
-                : sessionVisibleMarkers + '/' + markers.length + ' visible'
-              : sessionVisibleMarkers + '/' + markers.length + ' visible';
-          }
+          if (countLabel) countLabel.textContent = sessionVisibleMarkers + '/' + markers.length + ' visible';
         });
-
-        const phaseLabel = selectedPhase === 'all' ? 'all phases' : selectedPhase;
-        const typeLabel = selectedType === 'all' ? 'all interaction types' : selectedType;
-        filterSummary.textContent = 'Showing ' + visibleMarkers + ' of ' + totalMarkers + ' markers across ' + visibleSessions + ' session(s) for ' + phaseLabel + ' and ' + typeLabel + '.';
+        filterSummary.textContent = 'Showing ' + visibleMarkers + ' of ' + totalMarkers + ' markers across ' + visibleSessions + ' session(s).';
       };
-
       phaseFilter.addEventListener('change', updateTimelineFilters);
       typeFilter.addEventListener('change', updateTimelineFilters);
       updateTimelineFilters();
@@ -1152,47 +1115,3 @@ function buildReportHtml(sessions) {
 </body>
 </html>`;
 }
-
-function main() {
-  const sessions = loadSessions(ROOT_DIR);
-  if (sessions.length === 0) {
-    console.error('No study-session-*.json files found in the repo root.');
-    process.exit(1);
-  }
-
-  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-
-  const summaryColumns = [
-    'fileName', 'participantId', 'sessionId', 'appVersion', 'finalPhase',
-    'durationMs', 'durationText',
-    'exploreMs', 'taskMs', 'debriefMs',
-    'exploreText', 'taskText', 'debriefText',
-    'interactionCount', 'exploreInteractions', 'taskInteractions', 'debriefInteractions',
-    'createdEventCount', 'updatedEventCount', 'deletedEventCount',
-    'settingsInteractionCount', 'settingsFieldChangeCount',
-    'panelOpenCount', 'detailViewOpenCount', 'phaseChangeCount',
-    'changedSettingsJson', 'eventSourcesJson',
-    'startTime', 'endTime'
-  ];
-  const interactionColumns = [
-    'fileName', 'participantId', 'sessionId', 'appVersion',
-    'index', 'type', 'phase', 'timestamp', 'offsetMs', 'source',
-    'createdCount', 'updatedCount', 'deletedCount',
-    'changedSettingKeys', 'fromPhase', 'toPhase',
-    'segmentStart', 'segmentEnd', 'segmentSpiralDayIndex', 'segmentIndex',
-    'fromSegmentStart', 'fromSegmentEnd', 'toSegmentStart', 'toSegmentEnd',
-    'payloadJson'
-  ];
-
-  writeCsv(path.join(OUTPUT_DIR, 'summary.csv'), summaryColumns, buildSummaryRows(sessions));
-  writeCsv(path.join(OUTPUT_DIR, 'interactions.csv'), interactionColumns, buildInteractionRows(sessions));
-  fs.writeFileSync(path.join(OUTPUT_DIR, 'report.html'), buildReportHtml(sessions), 'utf8');
-
-  console.log(`Wrote ${sessions.length} session(s) to ${OUTPUT_DIR}`);
-  console.log(`- ${path.join(OUTPUT_DIR, 'summary.csv')}`);
-  console.log(`- ${path.join(OUTPUT_DIR, 'interactions.csv')}`);
-  console.log(`- ${path.join(OUTPUT_DIR, 'report.html')}`);
-}
-
-main();
-*/

@@ -69,6 +69,8 @@ For fine-grained control of the calendar's looks, the dev setting includes a gro
 
 Developer Mode also includes a random events generator used for testing. It is located at the bottom of the “Add Events” panel. With it, you can quickly populate the spiral with synthetic events spread across multiple days, using varying durations, start times, and calendars. This makes it easy to see how overlapping events stack, how different color palettes behave, and how the event list and interactions perform under heavier loads.
 
+Study mode includes a local analysis page at `study-analysis.html?study=1`, linked from the Study Session controls. It reads the current study-session draft from the same browser storage, can import downloaded `study-session-*.json` exports, visualizes timelines and phase durations, and can download summary CSV, interaction CSV, and a standalone HTML report. The Node analyzer uses the same shared analysis module: run `node tools/analyze-study-sessions.mjs`, or pass JSON files/directories plus `--out <dir>`.
+
 ## **Installation and Standalone App Support**
 
 Spiral is built as a Progressive Web App (PWA) with full standalone support. Once loaded, it caches the necessary files and works completely offline without requiring a backend server. 
