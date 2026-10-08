@@ -1456,6 +1456,7 @@ Object.assign(SpiralCalendar.prototype, {
         event.lastModified = Date.now();
         this._eventsVersion++;
         this.ensureLayoutCache();
+        this.saveEventsToStorage();
         }
         startInput.remove();
         endInput.remove();
@@ -1634,6 +1635,7 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     drawSpiral() {
+      this.refreshStoredEventsIfIdle();
       const canvasWidth = this.canvas.clientWidth;
       const canvasHeight = this.canvas.clientHeight;
       const startup = this.startupAnimationState;

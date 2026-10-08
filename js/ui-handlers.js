@@ -1504,24 +1504,17 @@ Object.assign(SpiralCalendar.prototype, {
 
     const deleteAllDataBtn = document.getElementById('deleteAllDataBtn');
     if (deleteAllDataBtn) {
-      deleteAllDataBtn.addEventListener('click', () => {
+      deleteAllDataBtn.addEventListener('click', async () => {
         // Play feedback for button click
         this.playFeedback(0.1, 8);
 
         // Confirm before deleting
         if (confirm('Delete ALL events and data? This cannot be undone.')) {
-          // Clear events memory
-          if (this.events) {
-            this.events = [];
-          }
-          if (typeof this.saveEventsToStorage === 'function') {
-            this.saveEventsToStorage();
-          }
+          if (!(await this.clearAllStoredEvents())) return;
 
           // Force delete from local storage to be absolute sure
           try {
             if (typeof Storage !== 'undefined') {
-              localStorage.removeItem('spiralCalendarEvents');
               localStorage.removeItem('spiralCalendarSettings');
             }
           } catch(e) { }

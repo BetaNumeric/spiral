@@ -42,6 +42,18 @@ Another feature is the manipulation of an event’s length in the spiral directl
 
 All your events and configuration settings remain completely private, as the application stores its data entirely locally on your device within your browser's local storage.
 
+Event saves are coordinated across open windows. Idle windows refresh when another
+window saves events. If two windows edit an older copy, Spiral blocks the stale
+save and offers a download of the unsaved events before reloading the saved copy.
+Failed saves show a notice with retry and download actions; unreadable stored data
+is preserved rather than replaced with an empty calendar. The existing JSON event
+format and timestamps are unchanged. Reload older open windows after an app update
+so they also use these protections.
+
+Storage regression checks use Node's built-in test runner:
+`node --test tests/event-storage.test.mjs`. In environments that prohibit spawning
+test processes, use `node --test --test-isolation=none tests/event-storage.test.mjs`.
+
 ## **Event List Timeline**
 
 The time display at the bottom of the screen can be pulled up to reveal an event list. Each event is listed chronologically here, grouped by day, with the event that is closest in the spiral being scrolled to the top and highlighted when it is selected. At the top, there is a search bar to find events by name (you can quickly pull up this list and jump straight to the search bar by simply pressing `f` or `/`). One can select which calendars are shown by toggling the active calendars in a list, or by long-pressing the calendar tag of an element to show only events from that calendar. Behind each event in the list, there is a delete “x” button that lets you remove the event, and an “add” button that lets you add the event to your local calendar app. At the top, there is also the option to delete all events or add all events to your local calendar.

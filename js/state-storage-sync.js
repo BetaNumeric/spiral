@@ -360,61 +360,6 @@ Object.assign(SpiralCalendar.prototype, {
     };
   },
 
-  saveEventsToStorage() {
-    try {
-      const eventsData = this.events.map(event => {
-        this.ensureEventColorMetadata(event);
-        return {
-          ...event,
-          start: event.start.toISOString(),
-          end: event.end.toISOString()
-        };
-      });
-      localStorage.setItem('spiralCalendarEvents', JSON.stringify(eventsData));
-      if (typeof this.recordStudyEventSnapshotDiff === 'function') {
-        this.recordStudyEventSnapshotDiff();
-      }
-    } catch (error) {
-      console.warn('Failed to save events to localStorage:', error);
-    }
-  },
-
-  loadEventsFromStorage() {
-    try {
-      const stored = localStorage.getItem('spiralCalendarEvents');
-      if (stored) {
-        const eventsData = JSON.parse(stored);
-        this.events = eventsData.map(event => ({
-          ...event,
-          start: new Date(event.start),
-          end: new Date(event.end)
-        }));
-        // Ensure each event has a calendar tag and persistent UID
-        this.events.forEach(ev => { 
-          if (!ev.calendar) ev.calendar = 'Home';
-          if (!ev.persistentUID) {
-            ev.persistentUID = generateEventUID(ev);
-          }
-          // Keep existing addedToCalendar state; don't reset on load
-          if (!ev.lastModified) {
-            ev.lastModified = Date.now();
-          }
-          if (!ev.lastAddedToCalendar) {
-            ev.lastAddedToCalendar = null;
-          }
-          this.ensureEventColorMetadata(ev);
-        });
-        this._eventsVersion++; // Trigger layout cache rebuild
-        // Draw the spiral immediately with loaded events
-        this.drawSpiral();
-        return true;
-      }
-    } catch (error) {
-      console.warn('Failed to load events from localStorage:', error);
-    }
-    return false;
-  },
-
   getLayoutPresetFields() {
     return [
       'dayLabelShowWeekday',

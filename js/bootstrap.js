@@ -4,16 +4,23 @@ const spiralCalendar = new SpiralCalendar('spiral');
 try { spiralCalendar.initializeZoomFailSafe(); } catch (_) {}
 
 
-// Save events and flush any deferred settings before the page is suspended.
+spiralCalendar.setupEventStorageSync();
+
+// Events save when edited. Never write an old event snapshot on page exit.
 const flushPersistedCalendarState = () => {
-  spiralCalendar.saveEventsToStorage();
   if (typeof spiralCalendar.flushSettingsSave === 'function') {
     spiralCalendar.flushSettingsSave();
   } else {
     spiralCalendar.saveSettingsToStorage();
   }
 };
-window.addEventListener('beforeunload', flushPersistedCalendarState);
+window.addEventListener('beforeunload', (event) => {
+  flushPersistedCalendarState();
+  if (!spiralCalendar._allowDiscardUnsavedEvents && spiralCalendar.hasUnsavedEventChanges()) {
+    event.preventDefault();
+    event.returnValue = '';
+  }
+});
 window.addEventListener('pagehide', flushPersistedCalendarState);
 
 const isEditableTarget = (target) => {
