@@ -155,23 +155,28 @@ const extractLocationLabel = (payload, lat, lng) => {
 
 async function resolveLocationMetadataForCoordinates(lat, lng) {
   const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lng)}&localityLanguage=en`;
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!res.ok) throw new Error('Timezone lookup failed');
-  const data = await res.json();
-  return {
-    timezoneId: extractTimezoneId(data),
-    label: extractLocationLabel(data, lat, lng)
-  };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error('Timezone lookup failed');
+    const data = await res.json();
+    return { timezoneId: extractTimezoneId(data), label: extractLocationLabel(data, lat, lng) };
+  } finally { clearTimeout(timer); }
 }
 
+let locationUpdateToken = 0;
 async function updateLocationTimezoneFromCoordinates(lat, lng, preferredLabel = null) {
+  const token = ++locationUpdateToken;
   try {
     const metadata = await resolveLocationMetadataForCoordinates(lat, lng);
-    if (metadata.timezoneId && typeof spiralCalendar.setLocationTimeZoneId === 'function') {
+    if (token !== locationUpdateToken) return;
+    if (metadata.timezoneId && SpiralTime.validTimeZone(metadata.timezoneId)) {
       spiralCalendar.setLocationTimeZoneId(metadata.timezoneId);
     }
     updateLocationCurrentInfo(preferredLabel || metadata.label, lat, lng);
   } catch (_) {
+    if (token !== locationUpdateToken) return;
     // Keep existing timezone id if lookup fails.
     updateLocationCurrentInfo(preferredLabel, lat, lng);
   } finally {
@@ -179,23 +184,32 @@ async function updateLocationTimezoneFromCoordinates(lat, lng, preferredLabel = 
   }
 }
 
-async function applyLocation(lat, lng, label = null) {
+async function applyLocation(lat, lng, label = null, timeZone = null) {
   if (!latInput || !lngInput) return;
   const latNum = Number(lat);
   const lngNum = Number(lng);
-  if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return;
+  if (!Number.isFinite(latNum) || Math.abs(latNum) > 90 || !Number.isFinite(lngNum) || Math.abs(lngNum) > 180) {
+    alert('Latitude must be between -90 and 90, and longitude between -180 and 180.');
+    return;
+  }
   latInput.value = latNum.toFixed(4);
   lngInput.value = lngNum.toFixed(4);
   spiralCalendar.setNightOverlayLocation(latNum, lngNum);
   updateLocationCurrentInfo(label, latNum, lngNum);
-  await updateLocationTimezoneFromCoordinates(latNum, lngNum, label);
+  if (timeZone && SpiralTime.validTimeZone(timeZone)) {
+    locationUpdateToken++;
+    spiralCalendar.setLocationTimeZoneId(timeZone);
+    updateLocationTimezoneInfo();
+  } else {
+    await updateLocationTimezoneFromCoordinates(latNum, lngNum, label);
+  }
 }
 
 if (setLocationBtn && latInput && lngInput) {
   setLocationBtn.addEventListener('click', () => {
-    const lat = parseFloat(latInput.value);
-    const lng = parseFloat(lngInput.value);
-    if (!isNaN(lat) && !isNaN(lng)) {
+    const lat = Number(latInput.value);
+    const lng = Number(lngInput.value);
+    if (latInput.value.trim() && lngInput.value.trim() && Number.isFinite(lat) && Number.isFinite(lng)) {
       void applyLocation(lat, lng);
     } else {
       alert('Please enter valid latitude and longitude.');
@@ -269,133 +283,84 @@ if (latInput && lngInput && typeof LOCATION_COORDS === 'object' && LOCATION_COOR
 }
 updateLocationCurrentInfo(null, LOCATION_COORDS.lat, LOCATION_COORDS.lng);
 
-// Simple geocoding using OpenStreetMap Nominatim (no API key, rate-limited)
-async function geocodeQuery(query, limit = 1) {
-  const safeLimit = Math.max(1, Math.min(5, Number(limit) || 1));
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=${safeLimit}&addressdetails=0&q=${encodeURIComponent(query)}`;
-  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-  if (!res.ok) throw new Error('Geocoding failed');
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
-}
-
 if (locationSearch && locationSearchBtn && locationSearchSuggestions) {
-  let locationSuggestionTimer = null;
-  let suggestionRequestToken = 0;
-  let currentSuggestions = [];
-
-  const hideLocationSuggestions = () => {
-    suggestionRequestToken += 1;
-    if (locationSuggestionTimer) {
-      clearTimeout(locationSuggestionTimer);
-      locationSuggestionTimer = null;
-    }
-    currentSuggestions = [];
-    locationSearchSuggestions.innerHTML = '';
+  const client = new SpiralLocationSearch();
+  const status = document.getElementById('locationSearchStatus');
+  let requestToken = 0;
+  let controller = null;
+  const setStatus = text => { if (status) status.textContent = text; };
+  const dismiss = () => {
+    requestToken++;
+    controller?.abort();
+    controller = null;
+    locationSearchSuggestions.replaceChildren();
     locationSearchSuggestions.style.display = 'none';
+    locationSearchBtn.disabled = false;
+    locationSearchBtn.innerHTML = `<img src="${getLocationIcon('search')}" alt="Search" style="width: 16px; height: 16px;">`;
   };
-
-  const showLocationSuggestions = (results) => {
-    currentSuggestions = Array.isArray(results) ? results : [];
-    if (!currentSuggestions.length) {
-      hideLocationSuggestions();
-      return;
-    }
-
-    locationSearchSuggestions.innerHTML = '';
-    currentSuggestions.forEach((result, index) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.setAttribute('role', 'option');
-      button.id = `locationSuggestion-${index}`;
-      button.textContent = compactLocationLabel(result.display_name, result.lat, result.lon);
-      button.addEventListener('mousedown', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        locationSearch.value = button.textContent;
-        hideLocationSuggestions();
-        await applyLocation(result.lat, result.lon, result.display_name || button.textContent);
-      });
-      locationSearchSuggestions.appendChild(button);
-    });
-    locationSearchSuggestions.style.display = 'block';
-  };
-
-  const loadLocationSuggestions = async (query) => {
-    const q = (query || '').trim();
-    if (q.length < 2) {
-      hideLocationSuggestions();
-      return;
-    }
-
-    const requestToken = ++suggestionRequestToken;
-    try {
-      const results = await geocodeQuery(q, 5);
-      if (requestToken !== suggestionRequestToken) return;
-      showLocationSuggestions(results);
-    } catch (_) {
-      if (requestToken !== suggestionRequestToken) return;
-      hideLocationSuggestions();
-    }
-  };
-
   const triggerSearch = async () => {
-    const q = (locationSearch.value || '').trim();
-    if (!q) return;
-    hideLocationSuggestions();
+    if (locationSearchBtn.disabled) return;
+    const query = locationSearch.value.trim();
+    dismiss();
+    if (query.length < 2) { setStatus('Enter at least two characters to search.'); return; }
+    const token = requestToken;
+    controller = new AbortController();
     locationSearchBtn.disabled = true;
-    const prev = locationSearchBtn.innerHTML;
     locationSearchBtn.innerHTML = `<img src="${getLocationIcon('wait')}" alt="Loading" style="width: 16px; height: 16px;">`;
+    setStatus('Searching...');
     try {
-      const results = await geocodeQuery(q, 1);
-      const result = Array.isArray(results) && results.length ? results[0] : null;
-      if (!result) {
-        alert('No results found for that location.');
-      } else {
-        const locationLabel = compactLocationLabel(result.display_name, result.lat, result.lon);
-        locationSearch.value = locationLabel;
-        await applyLocation(result.lat, result.lon, result.display_name || locationLabel);
+      const { results, stale } = await client.search(query, { signal: controller.signal });
+      if (token !== requestToken) return;
+      setStatus(results.length ? `Choose a place from ${results.length} results.${stale ? ' Showing saved results while search is unavailable.' : ''}` : 'No places found. Try a city name or postal code.');
+      for (const result of results) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = result.label;
+        button.addEventListener('click', () => {
+          locationSearch.value = result.label;
+          dismiss();
+          setStatus(`Selected ${result.label}.`);
+          void applyLocation(result.latitude, result.longitude, result.label, result.timeZone);
+          locationSearch.focus();
+        });
+        locationSearchSuggestions.appendChild(button);
       }
-    } catch (e) {
-      alert('Could not search location. Please try again.');
+      locationSearchSuggestions.style.display = results.length ? 'block' : 'none';
+    } catch (error) {
+      if (token === requestToken) setStatus(error.message || 'Could not search places. Please try again.');
     } finally {
-      locationSearchBtn.disabled = false;
-      locationSearchBtn.innerHTML = prev;
+      if (token === requestToken) {
+        controller = null;
+        locationSearchBtn.disabled = false;
+        locationSearchBtn.innerHTML = `<img src="${getLocationIcon('search')}" alt="Search" style="width: 16px; height: 16px;">`;
+      }
     }
   };
-
-  locationSearchBtn.addEventListener('click', triggerSearch);
-  locationSearch.addEventListener('input', () => {
-    if (locationSuggestionTimer) clearTimeout(locationSuggestionTimer);
-    locationSuggestionTimer = setTimeout(() => {
-      void loadLocationSuggestions(locationSearch.value || '');
-    }, 250);
-  });
-  locationSearch.addEventListener('blur', () => {
-    setTimeout(() => hideLocationSuggestions(), 150);
-  });
-  locationSearch.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      hideLocationSuggestions();
-      return;
-    }
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (currentSuggestions.length > 0) {
-        const topResult = currentSuggestions[0];
-        const locationLabel = compactLocationLabel(topResult.display_name, topResult.lat, topResult.lon);
-        locationSearch.value = locationLabel;
-        hideLocationSuggestions();
-        void applyLocation(topResult.lat, topResult.lon, topResult.display_name || locationLabel);
-        return;
-      }
-      triggerSearch();
+  locationSearchBtn.addEventListener('click', () => void triggerSearch());
+  locationSearch.addEventListener('input', () => { dismiss(); setStatus('Press Enter or Search to look up a place.'); });
+  locationSearch.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { dismiss(); setStatus(''); }
+    if (event.key === 'Enter') { event.preventDefault(); void triggerSearch(); }
+    if (event.key === 'ArrowDown') {
+      const first = locationSearchSuggestions.querySelector('button');
+      if (first) { event.preventDefault(); first.focus(); }
     }
   });
-  document.addEventListener('mousedown', (e) => {
-    if (!locationSearchSuggestions.contains(e.target) && e.target !== locationSearch) {
-      hideLocationSuggestions();
+  locationSearchSuggestions.addEventListener('keydown', event => {
+    const buttons = [...locationSearchSuggestions.querySelectorAll('button')];
+    const index = buttons.indexOf(event.target);
+    if (event.key === 'Escape') { event.preventDefault(); dismiss(); setStatus(''); locationSearch.focus(); }
+    if (event.key === 'Enter' && index >= 0) { event.preventDefault(); buttons[index].click(); }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const next = index + (event.key === 'ArrowDown' ? 1 : -1);
+      if (next < 0) locationSearch.focus();
+      else buttons[Math.min(next, buttons.length - 1)]?.focus();
     }
+  });
+  document.addEventListener('pointerdown', event => {
+    if (!locationSearchSuggestions.contains(event.target) && event.target !== locationSearch
+      && !locationSearchBtn.contains(event.target)) { dismiss(); setStatus(''); }
   });
 }
 
@@ -415,7 +380,8 @@ if (useLocationTimezoneToggle) {
 }
 
 updateLocationTimezoneInfo();
-if (Number.isFinite(Number(LOCATION_COORDS.lat)) &&
+if (spiralCalendar.state.useLocationTimezone && !spiralCalendar.state.locationTimezoneId &&
+    Number.isFinite(Number(LOCATION_COORDS.lat)) &&
     Number.isFinite(Number(LOCATION_COORDS.lng))) {
   void updateLocationTimezoneFromCoordinates(LOCATION_COORDS.lat, LOCATION_COORDS.lng);
 }

@@ -80,7 +80,10 @@ Object.assign(SpiralCalendar.prototype, {
     const newTime = new Date(hourStartMs + minute * 60 * 1000);
 
     const ev = this.handleDragState.event;
-    if (!this.setEventHandleTime(ev, this.mouseState.draggingHandle, newTime)) return false;
+    const index = this.findEventEntryAtSegmentPoint(seg);
+    const entry = index === null ? null : this.getAllEventsForSegment(seg.day, seg.segment)[index];
+    const preferredOffsetMs = entry?.event === ev ? entry.displayInterval.offsetMs : undefined;
+    if (!this.setEventHandleTime(ev, this.mouseState.draggingHandle, newTime, { preferredOffsetMs })) return false;
 
     this._detailViewHasChanges = true;
     this._eventsVersion++;
@@ -1740,7 +1743,7 @@ getTimezoneOffsetHours(date = new Date()) {
 setUseLocationTimezone(enabled) {
   const previous = this.state.useLocationTimezone;
   this.state.useLocationTimezone = !!enabled;
-  try { this.reprojectEventTimes(); }
+  try { this.refreshEventProjections(); }
   catch (error) {
     this.state.useLocationTimezone = previous;
     alert(error.message);
@@ -1761,7 +1764,7 @@ setLocationTimeZoneId(timeZoneId) {
     : null;
   const previous = this.state.locationTimezoneId;
   this.state.locationTimezoneId = normalized;
-  try { this.reprojectEventTimes(); }
+  try { this.refreshEventProjections(); }
   catch (error) {
     this.state.locationTimezoneId = previous;
     alert(error.message);

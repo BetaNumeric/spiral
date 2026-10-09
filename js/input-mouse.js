@@ -258,59 +258,7 @@ Object.assign(SpiralCalendar.prototype, {
       
       // Handle event time handle dragging
       if (this.mouseState.isHandleDragging && this.handleDragState && this.handleDragState.event) {
-        // Determine which hour segment we're over
-        const seg = this.findSegmentAtPoint(canvasX, canvasY, { clampToOuterFallback: true });
-        if (seg) {
-          // Compute minute within this segment using pre-rotation coordinates
-          const canvasWidth = this.canvas.clientWidth;
-          const canvasHeight = this.canvas.clientHeight;
-          const { centerX, centerY } = this.calculateCenter(canvasWidth, canvasHeight);
-          // Transform point to pre-rotation spiral space
-          let modelX = this.canvasPixelsToCss(canvasX) - centerX;
-          let modelY = this.canvasPixelsToCss(canvasY) - centerY;
-          if (this.state.staticMode) {
-            modelX = -modelX; modelY = -modelY;
-          } else {
-            const cosR = Math.cos(this.state.rotation);
-            const sinR = Math.sin(this.state.rotation);
-            const tx = cosR * modelX - sinR * modelY;
-            const ty = sinR * modelX + cosR * modelY;
-            modelX = tx; modelY = ty;
-          }
-          // Angle in draw space: ang = atan2(y, x), and ang = -th + offset => th = -ang + offset
-          const ang = Math.atan2(modelY, modelX);
-          const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
-          const rawStartAngle = seg.day * 2 * Math.PI + seg.segment * segmentAngle;
-          const rawEndAngle = rawStartAngle + segmentAngle;
-          let th = -ang + CONFIG.INITIAL_ROTATION_OFFSET;
-          // Normalize th to be within [rawStartAngle, rawEndAngle]
-          while (th < rawStartAngle) th += 2 * Math.PI;
-          while (th > rawEndAngle) th -= 2 * Math.PI;
-          // Compute minute fraction within the hour
-          let minuteFrac = 1 - (th - rawStartAngle) / segmentAngle;
-          // Clamp to [0,1]
-          minuteFrac = Math.max(0, Math.min(1, minuteFrac));
-          // Snap to nearest 5-minute step
-          let minute = Math.round((minuteFrac * 60) / 5) * 5;
-          // Keep within hour bounds
-          if (minute >= 60) minute = 55;
-          if (minute < 0) minute = 0;
-          // Compute the UTC hour start datetime for this segment
-          const hourStartMs = this.getSegmentHourRange(seg.day, seg.segment).startMs;
-          const newTime = new Date(hourStartMs + minute * 60 * 1000);
-          const ev = this.handleDragState.event;
-          if (!this.setEventHandleTime(ev, this.mouseState.draggingHandle, newTime)) return;
-
-          // Mark as changed and redraw
-          this._detailViewHasChanges = true;
-          // Rebuild layout cache since event times changed
-          this._eventsVersion++;
-          if (typeof this.syncSelectedSegmentToDraggedHandle === 'function') {
-            this.syncSelectedSegmentToDraggedHandle(ev);
-          }
-          this.ensureLayoutCache();
-          this.drawSpiral();
-        }
+        this.updateDraggingHandleAtCanvasPoint(canvasX, canvasY);
         this.refreshCanvasCursor();
         return;
       }
@@ -864,7 +812,7 @@ Object.assign(SpiralCalendar.prototype, {
                       calendar: btn.event.calendar || 'Home'
                     })
                   };
-                  try { this.initializeEventTime(newEvent, { rejectGap: true }); }
+                  try { this.normalizeRuntimeEvent(newEvent); }
                   catch (error) { alert(error.message); return; }
                   this.runWithStudyEventSource('detail_view', () => {
                     this.events.push(newEvent);
@@ -936,6 +884,7 @@ Object.assign(SpiralCalendar.prototype, {
       const segment = this.findSegmentAtPoint(canvasX, canvasY);
 
       if (segment) {
+        const hitIndex = this.findEventEntryAtSegmentPoint(segment);
         // Check if this is the same segment that's already selected
         const isSameSegment = this.mouseState.selectedSegment && 
                              this.mouseState.selectedSegment.day === segment.day && 
@@ -944,6 +893,11 @@ Object.assign(SpiralCalendar.prototype, {
         if (isSameSegment) {
           // Clicked the same segment again
           if (this.state.detailViewDay !== null) {
+            if (hitIndex !== null && hitIndex !== this.mouseState.selectedEventIndex) {
+              this.mouseState.selectedEventIndex = hitIndex;
+              this.drawSpiral();
+              return;
+            }
             const detailEventState = this.getDetailViewEventState();
             const selectedEventCount = detailEventState ? detailEventState.selectedEventCount : 0;
             const activeEvent = detailEventState ? detailEventState.activePersistedEvent : null;
@@ -971,11 +925,11 @@ Object.assign(SpiralCalendar.prototype, {
               }
             }
           } else {
-            this.openDetailViewForSegment(segment, { selectedEventIndex: 0 });
+            this.openDetailViewForSegment(segment, { selectedEventIndex: hitIndex ?? 0 });
           }
         } else {
           // Clicked a different segment - select it and reset event index
-          this.openDetailViewForSegment(segment, { selectedEventIndex: 0 });
+          this.openDetailViewForSegment(segment, { selectedEventIndex: hitIndex ?? 0 });
         }
         
         this.mouseState.selectedSegment = segment;

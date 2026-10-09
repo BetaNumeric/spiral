@@ -1,10 +1,10 @@
-// Coordinate event writes without changing the existing localStorage format.
+// Coordinate writes to the canonical event store.
 // Keep this boundary independent of calendar rendering and date interpretation.
 (function (globalScope) {
   'use strict';
 
   class SpiralEventStorage {
-    static KEY = 'spiralCalendarEvents';
+    static KEY = 'spiralCalendarEventsV2';
 
     constructor(options = {}) {
       this.getStorage = options.getStorage || (() => globalScope.localStorage);
@@ -22,16 +22,8 @@
     static parse(raw) {
       if (raw === null) return [];
       const events = JSON.parse(raw);
-      if (!Array.isArray(events) || events.some(event => {
-        if (!event || typeof event !== 'object' || Array.isArray(event)) return true;
-        return ['start', 'end'].some(key => {
-          const value = event[key];
-          return !['string', 'number'].includes(typeof value) ||
-            !Number.isFinite(new Date(value).getTime());
-        });
-      })) {
-        throw new Error('Stored events contain invalid data.');
-      }
+      if (!Array.isArray(events)) throw new Error('Stored events contain invalid data.');
+      SpiralEventModel.validateUnique(events.map(event => SpiralEventModel.normalize(event, { stored: true })));
       return events;
     }
 
@@ -68,7 +60,7 @@
         return this.locks.request(SpiralEventStorage.KEY, callback);
       }
       // Older browsers can coordinate through a shared IndexedDB transaction.
-      // Only the lock lives here; events remain in their original storage key.
+      // Only the lock lives here; event records remain in localStorage.
       if (!this.indexedDB) throw new Error('Safe event saving is unavailable in this browser.');
       if (!this.databasePromise) {
         this.databasePromise = new Promise((resolve, reject) => {

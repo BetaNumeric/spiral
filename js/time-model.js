@@ -62,7 +62,7 @@
     return (instantToWall(d, timeZone).getTime() - d.getTime()) / HOUR;
   }
 
-  function wallToInstant(value, timeZone, { disambiguation = 'compatible', notBefore = -Infinity } = {}) {
+  function wallCandidates(value, timeZone) {
     const wallMs = new Date(value).getTime();
     if (!Number.isFinite(wallMs)) throw new Error('Invalid event date.');
     // Probe both sides of nearby offset transitions, including half-hour DST changes.
@@ -72,6 +72,15 @@
     }
     const candidates = [...offsets].map(offset => wallMs - offset);
     const exact = candidates.filter(ms => instantToWall(ms, timeZone).getTime() === wallMs).sort((a, b) => a - b);
+    return { wallMs, candidates, exact };
+  }
+
+  function possibleInstants(value, timeZone) {
+    return wallCandidates(value, timeZone).exact.map(ms => new Date(ms));
+  }
+
+  function wallToInstant(value, timeZone, { disambiguation = 'compatible', notBefore = -Infinity } = {}) {
+    const { wallMs, candidates, exact } = wallCandidates(value, timeZone);
     if (exact.length) {
       const chosen = exact.find(ms => ms >= notBefore);
       if (chosen === undefined) throw new Error('The event must end after it starts.');
@@ -94,5 +103,5 @@
   }
 
   scope.SpiralTime = Object.freeze({ HOUR, DAY, parseWall, formatWall, deviceTimeZone,
-    validTimeZone, instantToWall, wallToInstant, offsetHours, dayStart });
+    validTimeZone, instantToWall, wallToInstant, possibleInstants, offsetHours, dayStart });
 })(typeof globalThis !== 'undefined' ? globalThis : window);

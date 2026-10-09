@@ -2,8 +2,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
+import { webcrypto } from 'node:crypto';
 
-const context = vm.createContext({ console });
+const context = vm.createContext({ console, crypto: webcrypto });
+for (const file of ['time-model', 'event-model']) {
+  vm.runInContext(fs.readFileSync(new URL(`../js/${file}.js`, import.meta.url), 'utf8'), context);
+}
 vm.runInContext(fs.readFileSync(new URL('../js/event-storage.js', import.meta.url), 'utf8'), context);
 const EventStorage = context.SpiralEventStorage;
 const key = EventStorage.KEY;
@@ -12,7 +16,7 @@ const event = title => ({
   start: '2026-10-08T09:00:00.000Z',
   end: '2026-10-08T10:00:00.000Z',
   calendar: 'Home',
-  persistentUID: title,
+  persistentUID: title, sequence: 0, timeModel: 'instant-v1',
   color: '#abcdef',
   extraMetadata: { preserved: true }
 });
@@ -50,12 +54,12 @@ function fixture(initial = null) {
 }
 
 test('load and save preserve existing event dates, IDs and metadata', async () => {
-  const f = fixture(snapshot('legacy'));
+  const f = fixture(snapshot('saved'));
   const store = f.create();
-  assert.equal(JSON.stringify(store.load()), snapshot('legacy'));
-  assert.equal(await store.save(snapshot('legacy')), true);
+  assert.equal(JSON.stringify(store.load()), snapshot('saved'));
+  assert.equal(await store.save(snapshot('saved')), true);
   assert.equal(f.writes, 0);
-  assert.equal(f.raw, snapshot('legacy'));
+  assert.equal(f.raw, snapshot('saved'));
 });
 
 test('empty storage loads safely and accepts the first event', async () => {
@@ -204,19 +208,20 @@ test('blocked storage access never attempts to replace unreadable data', async (
 });
 
 vm.runInContext('class SpiralCalendar {}', context);
-for (const file of ['time-model', 'event-time']) {
+for (const file of ['event-projection', 'event-time']) {
   vm.runInContext(fs.readFileSync(new URL(`../js/${file}.js`, import.meta.url), 'utf8'), context);
 }
 vm.runInContext(fs.readFileSync(new URL('../js/event-storage-ui.js', import.meta.url), 'utf8'), context);
 const calendarPrototype = vm.runInContext('SpiralCalendar.prototype', context);
 
-test('versioned events load as wall coordinates and save their actual instants without drift', async () => {
+test('versioned events retain actual instants in memory and storage without drift', async () => {
   const saved = { ...event('canonical'), timeModel: 'instant-v1' };
   const { f, calendar } = calendarFixture(JSON.stringify([saved]));
   calendar.state.useLocationTimezone = true;
   calendar.state.locationTimezoneId = 'Europe/Berlin';
   assert.equal(calendar.loadEventsFromStorage(), true);
-  assert.equal(calendar.events[0].start.toISOString(), '2026-10-08T11:00:00.000Z');
+  assert.equal(calendar.events[0].start.toISOString(), saved.start);
+  assert.equal(calendar.getEventWallDate(calendar.events[0], 'start').toISOString(), '2026-10-08T11:00:00.000Z');
   assert.equal(calendar.hasUnsavedEventChanges(), false);
   assert.equal(await calendar.saveEventsToStorage(), true);
   assert.equal(JSON.parse(f.raw)[0].start, saved.start);
@@ -226,7 +231,42 @@ test('versioned events load as wall coordinates and save their actual instants w
   assert.equal(calendar.hasUnsavedEventChanges(), false);
 });
 
-test('a stored projection that cannot be rendered keeps the current memory and original stored bytes', () => {
+test('calendar revisions increase once per edit, including rapid saves, and survive a failed write retry', async () => {
+  const { f, calendar } = calendarFixture();
+  calendar.loadEventsFromStorage();
+  const uid = calendar.events[0].persistentUID;
+  calendar.events[0].title = 'First edit';
+  const first = calendar.saveEventsToStorage();
+  calendar.events[0].title = 'Second edit';
+  const second = calendar.saveEventsToStorage();
+  assert.deepEqual(await Promise.all([first, second]), [true, true]);
+  assert.equal(JSON.parse(f.raw)[0].sequence, 2);
+  f.failWrites = true;
+  calendar.events[0].description = 'Unsaved change';
+  assert.equal(await calendar.saveEventsToStorage(), false);
+  assert.equal(calendar.events[0].sequence, 3);
+  f.failWrites = false;
+  assert.equal(await calendar.saveEventsToStorage(), true);
+  assert.equal(JSON.parse(f.raw)[0].sequence, 3);
+  assert.equal(JSON.parse(f.raw)[0].persistentUID, uid);
+  calendar.loadEventsFromStorage();
+  calendar.events[0].title = 'After reload';
+  assert.equal(await calendar.saveEventsToStorage(), true);
+  assert.equal(JSON.parse(f.raw)[0].sequence, 4);
+});
+
+test('ambiguous or duplicate records cannot be loaded into the current event store', () => {
+  const current = event('current');
+  for (const records of [[{ ...current, timeModel: undefined }], [{ ...current, sequence: undefined }],
+    [{ ...current, start: '2026-10-08T09:00' }], [current, current]]) {
+    const original = JSON.stringify(records);
+    const f = fixture(original);
+    assert.throws(() => f.create().load());
+    assert.equal(f.raw, original);
+  }
+});
+
+test('stored repeated-hour events load without changing the original bytes', () => {
   const saved = { ...event('repeated hour'), timeModel: 'instant-v1',
     start: '2026-10-25T00:45:00.000Z', end: '2026-10-25T01:15:00.000Z' };
   const raw = JSON.stringify([saved]);
@@ -234,10 +274,11 @@ test('a stored projection that cannot be rendered keeps the current memory and o
   calendar.state.useLocationTimezone = true;
   calendar.state.locationTimezoneId = 'Europe/Berlin';
   calendar.events = [{ title: 'Keep current memory' }];
-  assert.equal(calendar.loadEventsFromStorage(), false);
+  assert.equal(calendar.loadEventsFromStorage(), true);
   assert.equal(f.raw, raw);
-  assert.equal(calendar.events[0].title, 'Keep current memory');
-  assert.equal(calendar.getEventStorage().error.kind, 'load');
+  assert.equal(calendar.events[0].start.toISOString(), saved.start);
+  assert.equal(calendar.getEventProjection(calendar.events[0]).intervals.length, 2);
+  assert.equal(calendar.hasUnsavedEventChanges(), false);
 });
 
 function calendarFixture(initial = snapshot('original')) {

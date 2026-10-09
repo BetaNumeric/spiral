@@ -1,57 +1,19 @@
 // Spiral Rendering
 Object.assign(SpiralCalendar.prototype, {
   createVisibleEventBoundaryLookup() {
-      const visibleEventRanges = [];
-      const eventRangeByEvent = new WeakMap();
-      for (const event of this.events) {
-        const eventCalendar = event.calendar || 'Home';
-        if (!this.state.visibleCalendars.includes(eventCalendar)) continue;
-        const range = {
-          event,
-          startMs: this.getEventStartMs(event),
-          endMs: this.getEventEndMs(event)
-        };
-        if (!Number.isFinite(range.startMs) || !Number.isFinite(range.endMs)) continue;
-        visibleEventRanges.push(range);
-        eventRangeByEvent.set(event, range);
-      }
-
-      const isEventOverlappedAtUtc = (targetEvent, utcMs) => {
-        const targetRange = eventRangeByEvent.get(targetEvent);
-        if (!targetRange || utcMs < targetRange.startMs || utcMs >= targetRange.endMs) return false;
-        for (const otherRange of visibleEventRanges) {
-          if (otherRange.event === targetEvent) continue;
-          if (otherRange.startMs <= utcMs && otherRange.endMs > utcMs) {
-            return true;
-          }
-        }
-        return false;
-      };
-
-      const isEventTouchingAtStartUtc = (targetEvent, utcMs) => {
-        const targetRange = eventRangeByEvent.get(targetEvent);
-        if (!targetRange || targetRange.startMs !== utcMs) return false;
-        for (const otherRange of visibleEventRanges) {
-          if (otherRange.event === targetEvent) continue;
-          if (otherRange.endMs === utcMs) return true;
-        }
-        return false;
-      };
-
-      const isEventTouchingAtEndUtc = (targetEvent, utcMs) => {
-        const targetRange = eventRangeByEvent.get(targetEvent);
-        if (!targetRange || targetRange.endMs !== utcMs) return false;
-        for (const otherRange of visibleEventRanges) {
-          if (otherRange.event === targetEvent) continue;
-          if (otherRange.startMs === utcMs) return true;
-        }
-        return false;
-      };
+      const ranges = this.getVisibleEvents().flatMap(event => this.getEventProjection(event).intervals
+        .map(interval => ({ event, interval })));
+      const isEventOverlappedAtWall = (targetEvent, wallMs) => ranges.some(({ event, interval }) =>
+        event !== targetEvent && interval.startMs <= wallMs && wallMs < interval.endMs);
+      const isEventTouchingAtStartWall = (targetEvent, wallMs) => ranges.some(({ event, interval }) =>
+        event !== targetEvent && interval.endMs === wallMs);
+      const isEventTouchingAtEndWall = (targetEvent, wallMs) => ranges.some(({ event, interval }) =>
+        event !== targetEvent && interval.startMs === wallMs);
 
       return {
-        isEventOverlappedAtUtc,
-        isEventTouchingAtStartUtc,
-        isEventTouchingAtEndUtc
+        isEventOverlappedAtWall,
+        isEventTouchingAtStartWall,
+        isEventTouchingAtEndWall
       };
     },
 
@@ -897,7 +859,13 @@ Object.assign(SpiralCalendar.prototype, {
         }
 
         if (!isDraftEventActive && selectedEventCount > 1) {
-          const eventCounterText = `Event ${activeEventIndex + 1} of ${selectedEventCount}`;
+          const selectedInterval = detailEventState.activeDisplayInterval;
+          const offsetLabel = selectedInterval?.offsetMs != null && this.getEventProjection(detailEvent).intervals.length > 1
+            ? ` (${this.formatEventOffset(selectedInterval.offsetMs)})` : '';
+          const eventsInHour = [...new Set(detailEventState.segmentEventEntries.map(entry => entry.event))];
+          const counter = eventsInHour.length === 1 ? `Part ${activeEventIndex + 1} of ${selectedEventCount}`
+            : `Event ${eventsInHour.indexOf(detailEvent) + 1} of ${eventsInHour.length}`;
+          const eventCounterText = `${counter}${offsetLabel}`;
           this.ctx.fillStyle = '#666';
           this.ctx.font = getFontString(smallFontSize);
           this.ctx.textAlign = 'center';
@@ -1199,12 +1167,15 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     createPersistentDateTimeInputs(event, centerX, dateTimeY, baseFontSize, circleRadius) {
-      // Create a unique ID for this event (using start time as identifier)
-      const eventId = event.start.getTime() + '_' + event.title;
+      // Keep editor identity stable through edits and refresh it on zone changes.
+      const eventId = `${event.persistentUID}|${this.getCalendarTimeZone()}`;
       
       // Check if inputs are already created for this event
       if (this.persistentInputsState.currentEventId === eventId && this.persistentInputsState.inputsCreated) {
-        // Inputs already exist for this event, don't recreate them
+        for (const type of ['start', 'end']) {
+          const input = document.getElementById(type === 'start' ? 'persistentStartDateTime' : 'persistentEndDateTime');
+          if (input && document.activeElement !== input) input.value = SpiralTime.formatWall(this.getEventWallDate(event, type));
+        }
         return;
       }
       
@@ -1225,7 +1196,7 @@ Object.assign(SpiralCalendar.prototype, {
       const startInput = document.createElement('input');
       startInput.id = 'persistentStartDateTime';
       startInput.type = 'datetime-local';
-      startInput.value = SpiralTime.formatWall(new Date(event.start));
+      startInput.value = SpiralTime.formatWall(this.getEventWallDate(event, 'start'));
       
       const inputWidth = circleRadius * 1.2; // Scale with circle size
       const inputHeight = baseFontSize * 1.2;
@@ -1253,7 +1224,7 @@ Object.assign(SpiralCalendar.prototype, {
       const endInput = document.createElement('input');
       endInput.id = 'persistentEndDateTime';
       endInput.type = 'datetime-local';
-      endInput.value = SpiralTime.formatWall(new Date(event.end));
+      endInput.value = SpiralTime.formatWall(this.getEventWallDate(event, 'end'));
       
       const endInputTop = dateTimeY + inputHeight * 0.6;
       
@@ -1308,15 +1279,9 @@ Object.assign(SpiralCalendar.prototype, {
                 const newStart = parseDateTimeLocalAsUTC(startInput.value);
       const newEnd = parseDateTimeLocalAsUTC(endInput.value);
           
-          // Prevent end date from being earlier than start date
-          if (newEnd <= newStart) {
-            // Auto-adjust end time to be 1 hour after start time
-            const adjustedEnd = this.getDefaultEventEnd(newStart, event);
-            endInput.value = SpiralTime.formatWall(adjustedEnd);
-            if (!this.applyEventTimeRange(event, newStart, adjustedEnd)) return;
-          } else {
-            if (!this.applyEventTimeRange(event, newStart, newEnd)) return;
-          }
+          const adjustedEnd = this.getAdjustedEventWallEnd(event, newStart, newEnd);
+          endInput.value = SpiralTime.formatWall(adjustedEnd);
+          if (!this.applyEventTimeRange(event, newStart, adjustedEnd)) return;
 
           this.syncEventAutoColor(event);
           colorInput.value = this.getColorPickerColorForEvent(event);
@@ -1340,7 +1305,10 @@ Object.assign(SpiralCalendar.prototype, {
       };
 
       // Add event listeners
-      startInput.addEventListener('change', updateEvent);
+      startInput.addEventListener('change', () => {
+        if (startInput.value) endInput.value = SpiralTime.formatWall(this.getDefaultEventEnd(parseDateTimeLocalAsUTC(startInput.value)));
+        updateEvent();
+      });
       endInput.addEventListener('change', updateEvent);
       colorInput.addEventListener('change', () => {
         this.setEventCustomColor(event, colorInput.value);
@@ -1355,16 +1323,7 @@ Object.assign(SpiralCalendar.prototype, {
         setTimeout(() => renderEventList(), 0);
       });
       
-      // Auto-populate end date when start date changes
-      startInput.addEventListener('change', () => {
-        if (startInput.value) {
-        const startDate = parseDateTimeLocalAsUTC(startInput.value);
-          const endDate = new Date(startDate);
-        endDate.setUTCHours(startDate.getUTCHours() + 1); // Add 1 hour
-          endInput.value = SpiralTime.formatWall(endDate);
-          updateEvent(); // Update the event with new end time
-        }
-      });
+
     },
 
     createDateTimeEditor(event, clickX, clickY) {
@@ -1384,7 +1343,7 @@ Object.assign(SpiralCalendar.prototype, {
       startInput.type = 'datetime-local';
       
       // Format current start time for input
-      const startDate = new Date(event.start);
+      const startDate = this.getEventWallDate(event, 'start');
       startInput.value = SpiralTime.formatWall(startDate);
       
       const inputWidth = 180;
@@ -1414,7 +1373,7 @@ Object.assign(SpiralCalendar.prototype, {
       endInput.id = 'endDateTimeEditor';
       endInput.type = 'datetime-local';
       
-      const endDate = new Date(event.end);
+      const endDate = this.getEventWallDate(event, 'end');
       endInput.value = SpiralTime.formatWall(endDate);
       
       const endInputTop = dateTimeY + inputHeight / 4;
@@ -1648,9 +1607,9 @@ Object.assign(SpiralCalendar.prototype, {
         ? startup.revealedHourSegmentKeys
         : null;
       const {
-        isEventOverlappedAtUtc,
-        isEventTouchingAtStartUtc,
-        isEventTouchingAtEndUtc
+        isEventOverlappedAtWall,
+        isEventTouchingAtStartWall,
+        isEventTouchingAtEndWall
       } = this.createVisibleEventBoundaryLookup();
       
       // Clear and prepare canvas
@@ -2329,7 +2288,7 @@ Object.assign(SpiralCalendar.prototype, {
                 // Stable order bottom->top by descending coverage within hour, then lane, then start time
                 const ordered = idxList.map(i => {
                   const ev = allEvents[i];
-                  const laneFromPersistent = eventToLane.get(ev.event);
+                  const laneFromPersistent = eventToLane.get(ev.displayInterval);
                   const lane = (laneFromPersistent !== undefined) ? laneFromPersistent : (hourLanes[i] ?? 0);
                   return { idx: i, lane, startUtcMs: ev.startUtcMs || 0, startMin: ev.startMinute };
                 }).sort((a, b) => {
@@ -2363,14 +2322,14 @@ Object.assign(SpiralCalendar.prototype, {
                     const eventData = allEvents[i];
                     const subStart = aMin / 60;
                     const subEnd = bMin / 60;
-                    const subStartUtcMs = segmentHourStartMs + aMin * 60 * 1000;
-                    const subEndUtcMs = segmentHourStartMs + bMin * 60 * 1000;
-                    const coverChronologicalStartHourJoin = aMin === 0 && eventData.startUtcMs < segmentHourStartMs;
-                    const coverChronologicalEndHourJoin = bMin === 60 && eventData.endUtcMs > segmentHourEndMs;
-                    const continuesAcrossSubStart = eventData.startUtcMs < subStartUtcMs;
-                    const continuesAcrossSubEnd = eventData.endUtcMs > subEndUtcMs;
-                    const hasActualEventStartHere = eventData.startUtcMs >= subStartUtcMs && eventData.startUtcMs < subEndUtcMs;
-                    const hasActualEventEndHere = eventData.endUtcMs > subStartUtcMs && eventData.endUtcMs <= subEndUtcMs;
+                    const subStartWallMs = segmentHourStartMs + aMin * 60 * 1000;
+                    const subEndWallMs = segmentHourStartMs + bMin * 60 * 1000;
+                    const coverChronologicalStartHourJoin = aMin === 0 && eventData.startWallMs < segmentHourStartMs;
+                    const coverChronologicalEndHourJoin = bMin === 60 && eventData.endWallMs > segmentHourEndMs;
+                    const continuesAcrossSubStart = eventData.startWallMs < subStartWallMs;
+                    const continuesAcrossSubEnd = eventData.endWallMs > subEndWallMs;
+                    const hasActualEventStartHere = eventData.startWallMs >= subStartWallMs && eventData.startWallMs < subEndWallMs;
+                    const hasActualEventEndHere = eventData.endWallMs > subStartWallMs && eventData.endWallMs <= subEndWallMs;
                     const eventSliceStart = (rank === 0) ? 0 : (rank / m);
                     const eventSliceEnd = 1;
                     const segmentAngleSize = rawEndAngle - rawStartAngle;
@@ -2391,17 +2350,18 @@ Object.assign(SpiralCalendar.prototype, {
                         coverEndEdge: coverChronologicalStartHourJoin || (!hasActualEventStartHere && continuesAcrossSubStart),
                         drawStartEdge: hasActualEventEndHere && (
                           this.state.showAllEventBoundaryStrokes ||
-                          (active.length > 1 && isEventOverlappedAtUtc(eventData.event, subEndUtcMs - 1)) ||
-                          isEventTouchingAtEndUtc(eventData.event, subEndUtcMs)
+                          (active.length > 1 && isEventOverlappedAtWall(eventData.event, subEndWallMs - 1)) ||
+                          isEventTouchingAtEndWall(eventData.event, subEndWallMs)
                         ),
                         drawEndEdge: hasActualEventStartHere && (
                           this.state.showAllEventBoundaryStrokes ||
-                          (active.length > 1 && isEventOverlappedAtUtc(eventData.event, subStartUtcMs + 1)) ||
-                          isEventTouchingAtStartUtc(eventData.event, subStartUtcMs)
+                          (active.length > 1 && isEventOverlappedAtWall(eventData.event, subStartWallMs + 1)) ||
+                          isEventTouchingAtStartWall(eventData.event, subStartWallMs)
                         ),
                         originalRadiusFunction: radiusFunction,
                         color: eventData.color,
                         event: eventData.event,
+                        displayInterval: eventData.displayInterval,
                         rawStartAngle,
                         rawEndAngle,
                         day,
@@ -2421,7 +2381,7 @@ Object.assign(SpiralCalendar.prototype, {
                   const { numLanes } = this.computeEventLanes(allEvents);
                   return Math.max(1, numLanes);
                 }
-                const componentId = eventToComponent ? eventToComponent.get(evData.event) : undefined;
+                const componentId = eventToComponent ? eventToComponent.get(evData.displayInterval) : undefined;
                 const componentCount = componentId !== undefined && componentLaneCount
                   ? componentLaneCount.get(componentId)
                   : null;
@@ -2440,7 +2400,7 @@ Object.assign(SpiralCalendar.prototype, {
                   groupRequiredCount = Math.max(groupRequiredCount, getLaneCountForEvent(allEvents[i]));
                 }
                 const persistentLanes = idxList.map(i => {
-                  const pl = eventToLane.get(allEvents[i].event);
+                  const pl = eventToLane.get(allEvents[i].displayInterval);
                   return (pl !== undefined) ? pl : (hourLanes[i] ?? 0);
                 });
                 const maxPersistentLane = persistentLanes.reduce((maxLane, lane) => Math.max(maxLane, lane), 0);
@@ -2458,12 +2418,12 @@ Object.assign(SpiralCalendar.prototype, {
               const eventData = allEvents[i];
               const minuteStart = eventData.startMinute / 60;
               const minuteEnd = eventData.endMinute / 60;
-                const eventStartUtcMs = segmentHourStartMs + eventData.startMinute * 60 * 1000;
-                const eventEndUtcMs = segmentHourStartMs + eventData.endMinute * 60 * 1000;
-                const coverChronologicalStartHourJoin = eventData.startMinute === 0 && eventData.startUtcMs < segmentHourStartMs;
-                const coverChronologicalEndHourJoin = eventData.endMinute === 60 && eventData.endUtcMs > segmentHourEndMs;
-                const hasActualEventStartHere = eventData.startUtcMs >= eventStartUtcMs && eventData.startUtcMs < eventEndUtcMs;
-                const hasActualEventEndHere = eventData.endUtcMs > eventStartUtcMs && eventData.endUtcMs <= eventEndUtcMs;
+                const eventStartWallMs = segmentHourStartMs + eventData.startMinute * 60 * 1000;
+                const eventEndWallMs = segmentHourStartMs + eventData.endMinute * 60 * 1000;
+                const coverChronologicalStartHourJoin = eventData.startMinute === 0 && eventData.startWallMs < segmentHourStartMs;
+                const coverChronologicalEndHourJoin = eventData.endMinute === 60 && eventData.endWallMs > segmentHourEndMs;
+                const hasActualEventStartHere = eventData.startWallMs >= eventStartWallMs && eventData.startWallMs < eventEndWallMs;
+                const hasActualEventEndHere = eventData.endWallMs > eventStartWallMs && eventData.endWallMs <= eventEndWallMs;
                 const eventSliceStart = eventSliceStartArr[i];
                 const eventSliceEnd = eventSliceEndArr[i];
             const segmentAngleSize = rawEndAngle - rawStartAngle;
@@ -2484,17 +2444,18 @@ Object.assign(SpiralCalendar.prototype, {
                 coverEndEdge: coverChronologicalStartHourJoin,
                 drawStartEdge: hasActualEventEndHere && (
                   this.state.showAllEventBoundaryStrokes ||
-                  ((eventSliceStart > 0 || eventSliceEnd < 1) && isEventOverlappedAtUtc(eventData.event, eventEndUtcMs - 1)) ||
-                  isEventTouchingAtEndUtc(eventData.event, eventEndUtcMs)
+                  ((eventSliceStart > 0 || eventSliceEnd < 1) && isEventOverlappedAtWall(eventData.event, eventEndWallMs - 1)) ||
+                  isEventTouchingAtEndWall(eventData.event, eventEndWallMs)
                 ),
                 drawEndEdge: hasActualEventStartHere && (
                   this.state.showAllEventBoundaryStrokes ||
-                  ((eventSliceStart > 0 || eventSliceEnd < 1) && isEventOverlappedAtUtc(eventData.event, eventStartUtcMs + 1)) ||
-                  isEventTouchingAtStartUtc(eventData.event, eventStartUtcMs)
+                  ((eventSliceStart > 0 || eventSliceEnd < 1) && isEventOverlappedAtWall(eventData.event, eventStartWallMs + 1)) ||
+                  isEventTouchingAtStartWall(eventData.event, eventStartWallMs)
                 ),
                 originalRadiusFunction: radiusFunction,
                 color: eventData.color,
                 event: eventData.event,
+                displayInterval: eventData.displayInterval,
                     rawStartAngle,
                     rawEndAngle,
                     day,

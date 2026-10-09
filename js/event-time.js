@@ -1,161 +1,200 @@
-// The canvas still consumes wall-clock Date coordinates. Only this adapter
-// converts versioned events to/from the canonical instants used by storage and sharing.
+// Runtime event Dates always represent actual instants. Only projections encode wall coordinates.
 Object.assign(SpiralCalendar.prototype, {
   getCalendarTimeZone() {
     const zone = this.state?.useLocationTimezone && this.state.locationTimezoneId;
     return zone && SpiralTime.validTimeZone(zone) ? zone : SpiralTime.deviceTimeZone();
   },
 
-  getEventTimeProjections() {
-    return this._eventTimeProjections || (this._eventTimeProjections = new WeakMap());
+  getDisplayInstant() {
+    if (this.autoTimeAlignState?.enabled) return new Date();
+    const wall = this.getDisplayTime();
+    const interval = this.mouseState?.selectedSegment && this.state.detailViewDay !== null
+      ? this.getDetailViewEventState()?.activeDisplayInterval : null;
+    if (interval?.offsetMs != null && interval.startMs <= wall.getTime() && wall.getTime() < interval.endMs) {
+      return new Date(wall.getTime() - interval.offsetMs);
+    }
+    return SpiralTime.wallToInstant(wall, this.getCalendarTimeZone());
   },
 
-  projectEventTime(event) {
-    if (event.timeModel !== 'instant-v1') return event; // Unclassified legacy dates retain their existing meaning.
-    const start = new Date(event.start);
-    const end = new Date(event.end);
+  getEventProjection(event) {
+    const cache = this._eventDisplayProjections || (this._eventDisplayProjections = new WeakMap());
+    const previous = cache.get(event);
     const zone = this.getCalendarTimeZone();
-    event.start = event.allDay && event.startDate
-      ? SpiralTime.parseWall(`${event.startDate}T00:00`) : SpiralTime.instantToWall(start, zone);
-    event.end = event.allDay && event.endDate
-      ? SpiralTime.parseWall(`${event.endDate}T00:00`) : SpiralTime.instantToWall(end, zone);
-    if (!Number.isFinite(event.start.getTime()) || !Number.isFinite(event.end.getTime())) {
-      throw new Error('Invalid calendar date.');
-    }
-    if (event.end <= event.start) {
-      throw new Error('An event crosses a repeated clock hour that Spiral cannot yet display in this time zone. Choose another display time zone.');
-    }
-    this.getEventTimeProjections().set(event, {
-      zone, startWall: event.start.getTime(), endWall: event.end.getTime(),
-      startInstant: start.getTime(), endInstant: end.getTime()
-    });
+    const startMs = new Date(event.start).getTime();
+    const endMs = new Date(event.end).getTime();
+    if (previous && previous.zone === zone && previous.startInstantMs === startMs && previous.endInstantMs === endMs
+      && previous.allDay === (event.allDay === true) && previous.startDate === event.startDate && previous.endDate === event.endDate) return previous;
+    const projection = SpiralEventProjection.project(event, zone);
+    cache.set(event, projection);
+    return projection;
+  },
+
+  getEventWallDate(event, type) {
+    if (!['start', 'end'].includes(type)) throw new Error('Invalid event endpoint.');
+    return new Date(this.getEventProjection(event)[`${type}Ms`]);
+  },
+
+  normalizeRuntimeEvent(event) {
+    const record = SpiralEventModel.normalize(event);
+    const normalized = { ...record, start: new Date(record.start), end: new Date(record.end) };
+    this.getEventProjection(normalized);
+    Object.assign(event, normalized);
     return event;
   },
 
   getEventInstant(event, type) {
-    if (event.timeModel !== 'instant-v1') return new Date(event[type]);
-    const projection = this.getEventTimeProjections().get(event);
-    const wallMs = new Date(event[type]).getTime();
-    if (projection && projection[`${type}Wall`] === wallMs) return new Date(projection[`${type}Instant`]);
-    const notBefore = type === 'end' ? this.getEventInstant(event, 'start').getTime() + 1 : -Infinity;
-    const instant = SpiralTime.wallToInstant(wallMs, projection?.zone || this.getCalendarTimeZone(), { notBefore });
-    if (projection) {
-      projection[`${type}Wall`] = wallMs;
-      projection[`${type}Instant`] = instant.getTime();
-    }
-    return instant;
+    if (!['start', 'end'].includes(type)) throw new Error('Invalid event endpoint.');
+    return SpiralEventModel.parseInstant(event[type]);
   },
 
-  initializeEventTime(event, { rejectGap = false } = {}) {
-    const zone = this.getCalendarTimeZone();
+  resolveNewEventWallTime(wall, { occurrence, disambiguation = 'reject', notBefore = -Infinity } = {}) {
+    if (occurrence === undefined) return SpiralTime.wallToInstant(wall, this.getCalendarTimeZone(), { disambiguation, notBefore });
+    const chosen = SpiralTime.possibleInstants(wall, this.getCalendarTimeZone())[occurrence];
+    if (!chosen || chosen.getTime() < notBefore) throw new Error('Choose an occurrence with the end after the start.');
+    return chosen;
+  },
+
+  initializeEventFromWallTimes(event, { rejectGap = false, startOccurrence, endOccurrence } = {}) {
     const disambiguation = rejectGap ? 'reject' : 'compatible';
-    const start = SpiralTime.wallToInstant(event.start, zone, { disambiguation });
-    const end = SpiralTime.wallToInstant(event.end, zone, { disambiguation, notBefore: start.getTime() + 1 });
-    event.timeModel = 'instant-v1';
-    event.start = start;
-    event.end = end;
-    return this.projectEventTime(event);
+    const start = this.resolveNewEventWallTime(event.start, { disambiguation, occurrence: startOccurrence });
+    const end = this.resolveNewEventWallTime(event.end, { disambiguation, occurrence: endOccurrence, notBefore: start.getTime() + 1 });
+    const candidate = this.normalizeRuntimeEvent({ ...event, timeModel: 'instant-v1', start, end });
+    Object.assign(event, candidate);
+    return event;
   },
 
-  getDefaultEventEnd(start, event = null) {
-    const nextHour = new Date(start.getTime() + SpiralTime.HOUR);
-    if (event && event.timeModel !== 'instant-v1') return nextHour;
-    const zone = (event && this.getEventTimeProjections().get(event)?.zone) || this.getCalendarTimeZone();
-    return SpiralTime.instantToWall(SpiralTime.wallToInstant(nextHour, zone), zone);
+  getDefaultEventRange(startWall, options = {}) {
+    const start = this.resolveNewEventWallTime(startWall, options);
+    return { start, end: new Date(start.getTime() + SpiralTime.HOUR) };
   },
 
-  applyEventTimeRange(event, start, end) {
-    if (![start, end].every(d => Number.isFinite(d.getTime())) || end <= start) return false;
-    if (event.timeModel === 'instant-v1') {
-      try {
-        const zone = this.getEventTimeProjections().get(event)?.zone || this.getCalendarTimeZone();
-        SpiralTime.wallToInstant(start, zone, { disambiguation: 'reject' });
-        SpiralTime.wallToInstant(end, zone, { disambiguation: 'reject' });
-      } catch (error) { alert(error.message); return false; }
+  getDefaultEventEnd(startWall, options = {}) {
+    return SpiralTime.instantToWall(this.getDefaultEventRange(startWall, options).end, this.getCalendarTimeZone());
+  },
+
+  resolveEventWallTime(event, type, wall, { disambiguation = 'reject', notBefore = -Infinity, occurrence, preferredOffsetMs } = {}) {
+    const zone = this.getCalendarTimeZone();
+    if (occurrence !== undefined) {
+      return this.resolveNewEventWallTime(wall, { occurrence, notBefore });
     }
-    event.start = start;
-    event.end = end;
-    return true;
+    if (event.allDay) return SpiralTime.wallToInstant(wall, zone, { disambiguation, notBefore });
+    if (Number.isFinite(preferredOffsetMs)) {
+      const preferred = wall.getTime() - preferredOffsetMs;
+      if (preferred >= notBefore && SpiralTime.instantToWall(preferred, zone).getTime() === wall.getTime()) return new Date(preferred);
+    }
+    const current = this.getEventInstant(event, type);
+    if (this.getEventWallDate(event, type).getTime() === wall.getTime() && current.getTime() >= notBefore) return current;
+    // Keep the current occurrence when editing within an ambiguous repeated hour.
+    const preferred = wall.getTime() - SpiralTime.offsetHours(current, zone) * SpiralTime.HOUR;
+    if (preferred >= notBefore && SpiralTime.instantToWall(preferred, zone).getTime() === wall.getTime()) return new Date(preferred);
+    return SpiralTime.wallToInstant(wall, zone, { disambiguation, notBefore });
   },
 
-  setEventHandleTime(event, type, value) {
-    if (!['start', 'end'].includes(type) || !Number.isFinite(value.getTime())) return false;
+  applyEventTimeRange(event, startWall, endWall, { startOccurrence, endOccurrence } = {}) {
+    if (![startWall, endWall].every(date => Number.isFinite(date.getTime()))) return false;
+    try {
+      const start = this.resolveEventWallTime(event, 'start', startWall, { occurrence: startOccurrence });
+      const end = this.resolveEventWallTime(event, 'end', endWall, { notBefore: start.getTime() + 1, occurrence: endOccurrence });
+      const candidate = { ...event, start, end };
+      const allDay = event.allDay && [startWall, endWall].every(date =>
+        date.getUTCHours() === 0 && date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0 && date.getUTCMilliseconds() === 0);
+      if (allDay) {
+        candidate.startDate = SpiralTime.formatWall(startWall).split('T')[0];
+        candidate.endDate = SpiralTime.formatWall(endWall).split('T')[0];
+      } else { delete candidate.allDay; delete candidate.startDate; delete candidate.endDate; }
+      this.getEventProjection(candidate);
+      Object.assign(event, candidate);
+      if (!allDay) { delete event.allDay; delete event.startDate; delete event.endDate; }
+      return true;
+    } catch (error) { alert(error.message); return false; }
+  },
+
+  setEventHandleTime(event, type, wall, { preferredOffsetMs } = {}) {
+    if (!['start', 'end'].includes(type) || !Number.isFinite(wall.getTime())) return false;
     const other = type === 'start' ? 'end' : 'start';
     const minimumDuration = 5 * 60000;
-    let changed;
-    if (event.timeModel === 'instant-v1') {
-      const projection = this.getEventTimeProjections().get(event);
-      const zone = projection?.zone || this.getCalendarTimeZone();
-      const candidate = SpiralTime.wallToInstant(value, zone).getTime();
-      const bound = this.getEventInstant(event, other).getTime();
-      const instant = type === 'start' ? Math.min(candidate, bound - minimumDuration)
-        : Math.max(candidate, bound + minimumDuration);
-      changed = SpiralTime.instantToWall(instant, zone);
-      // The current renderer needs a positive wall interval even during a repeated hour.
-      if (type === 'start' ? changed >= event.end : changed <= event.start) return false;
-      if (projection) {
-        projection[`${type}Wall`] = changed.getTime();
-        projection[`${type}Instant`] = instant;
-      }
-    } else {
-      const bound = event[other].getTime();
-      changed = new Date(type === 'start' ? Math.min(value.getTime(), bound - minimumDuration)
-        : Math.max(value.getTime(), bound + minimumDuration));
+    const base = event.allDay ? { ...event,
+      start: SpiralTime.wallToInstant(this.getEventWallDate(event, 'start'), this.getCalendarTimeZone()),
+      end: SpiralTime.wallToInstant(this.getEventWallDate(event, 'end'), this.getCalendarTimeZone())
+    } : event;
+    const bound = this.getEventInstant(base, other).getTime();
+    const candidateMs = this.resolveEventWallTime(event, type, wall, { disambiguation: 'compatible', preferredOffsetMs }).getTime();
+    const instantMs = type === 'start' ? Math.min(candidateMs, bound - minimumDuration) : Math.max(candidateMs, bound + minimumDuration);
+    const candidate = { ...base, [type]: new Date(instantMs) };
+    const changedWall = SpiralTime.instantToWall(instantMs, this.getCalendarTimeZone());
+    const otherWall = this.getEventWallDate(event, other);
+    if (event.allDay) {
+      const startWall = type === 'start' ? changedWall : otherWall;
+      const endWall = type === 'end' ? changedWall : otherWall;
+      const allDay = [startWall, endWall].every(date => date.getUTCHours() === 0 && date.getUTCMinutes() === 0
+        && date.getUTCSeconds() === 0 && date.getUTCMilliseconds() === 0);
+      if (allDay) {
+        candidate.startDate = SpiralTime.formatWall(startWall).split('T')[0];
+        candidate.endDate = SpiralTime.formatWall(endWall).split('T')[0];
+      } else { delete candidate.allDay; delete candidate.startDate; delete candidate.endDate; }
     }
-    event[type] = changed;
-    event.lastModified = Date.now();
+    this.getEventProjection(candidate);
+    Object.assign(event, candidate, { lastModified: Date.now() });
+    if (!candidate.allDay) { delete event.allDay; delete event.startDate; delete event.endDate; }
+    if (event.isDraft) event.autoEnd = false;
     return true;
+  },
+
+  getAdjustedEventWallEnd(event, startWall, requestedEnd, options = {}) {
+    if (requestedEnd > startWall) return requestedEnd;
+    try {
+      const start = this.resolveEventWallTime(event, 'start', startWall, { occurrence: options.startOccurrence });
+      this.resolveEventWallTime(event, 'end', requestedEnd, { notBefore: start.getTime() + 1, occurrence: options.endOccurrence });
+      return requestedEnd;
+    } catch (error) {
+      if (options.startOccurrence !== undefined || options.endOccurrence !== undefined) throw error;
+      const start = this.resolveEventWallTime(event, 'start', startWall);
+      return SpiralTime.instantToWall(start.getTime() + SpiralTime.HOUR, this.getCalendarTimeZone());
+    }
+  },
+
+  formatEventOffset(offset) {
+    const minutes = Math.round(Math.abs(offset) / 60000);
+    return `UTC${offset < 0 ? '-' : '+'}${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+  },
+
+  getEventEndpointLabel(event, type) {
+    const wall = this.getEventWallDate(event, type);
+    const label = this.formatDateTimeCompact(wall);
+    if (event.allDay || SpiralTime.possibleInstants(wall, this.getCalendarTimeZone()).length < 2) return label;
+    return `${label}\n${this.formatEventOffset(wall.getTime() - this.getEventInstant(event, type).getTime())}`;
+  },
+
+  getEventDurationLabel(event) {
+    if (event.allDay) {
+      const days = (SpiralTime.parseWall(`${event.endDate}T00:00`) - SpiralTime.parseWall(`${event.startDate}T00:00`)) / SpiralTime.DAY;
+      return `${days} ${days === 1 ? 'day' : 'days'} (all day)`;
+    }
+    const duration = this.getEventInstant(event, 'end') - this.getEventInstant(event, 'start');
+    const hours = Math.floor(duration / SpiralTime.HOUR);
+    const minutes = Math.floor(duration % SpiralTime.HOUR / 60000);
+    const seconds = Math.round(duration % 60000) / 1000;
+    return [[hours, 'hour'], [minutes, 'minute'], [seconds, 'second']]
+      .filter(([value]) => value > 0)
+      .map(([value, unit]) => `${value} ${unit}${value === 1 ? '' : 's'}`).join(' ');
   },
 
   serializeEventTime(event) {
-    const start = this.getEventInstant(event, 'start');
-    const end = this.getEventInstant(event, 'end');
-    const result = { ...event, start: start.toISOString(), end: end.toISOString() };
-    if (event.timeModel === 'instant-v1') {
-      if (end <= start) throw new Error('The event must end after it starts.');
-      // A time edit changes an all-day event into a timed event; date edits retain exclusivity.
-      const allDay = event.allDay && [event.start, event.end].every(d =>
-        d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0);
-      if (allDay) {
-        result.startDate = SpiralTime.formatWall(event.start).split('T')[0];
-        result.endDate = SpiralTime.formatWall(event.end).split('T')[0];
-      } else {
-        delete result.allDay;
-        delete result.startDate;
-        delete result.endDate;
-      }
-    }
-    return result;
+    return SpiralEventModel.normalize(event);
   },
 
-  reprojectEventTimes() {
-    const changed = this.events.filter(e => e.timeModel === 'instant-v1');
-    const records = changed.map(e => this.serializeEventTime(e));
-    const projected = records.map(record => this.projectEventTime({ ...record }));
-    changed.forEach((event, i) => {
-      Object.assign(event, projected[i]);
-      if (!records[i].allDay) {
-        delete event.allDay;
-        delete event.startDate;
-        delete event.endDate;
-      }
-      this.copyEventTimeProjection(projected[i], event);
-    });
+  refreshEventProjections() {
+    // Prepare all projections first so an unsupported zone change can be rolled back.
+    for (const event of [...this.events, ...(this.draftEvent ? [this.draftEvent] : [])]) this.getEventProjection(event);
     this._eventsVersion++;
     this.layoutCache = null;
+    this.refreshEventCreationPanel?.();
     this.requestEventListRender?.();
-  },
-
-  copyEventTimeProjection(source, target) {
-    const projection = this.getEventTimeProjections().get(source);
-    if (projection) this.getEventTimeProjections().set(target, { ...projection });
   },
 
   formatEventIcsDates(event) {
     const record = this.serializeEventTime(event);
-    if (record.timeModel === 'instant-v1' && record.allDay) {
-      return `DTSTART;VALUE=DATE:${record.startDate.replace(/-/g, '')}\r\nDTEND;VALUE=DATE:${record.endDate.replace(/-/g, '')}\r\n`;
-    }
+    if (record.allDay) return `DTSTART;VALUE=DATE:${record.startDate.replace(/-/g, '')}\r\nDTEND;VALUE=DATE:${record.endDate.replace(/-/g, '')}\r\n`;
     return `DTSTART:${formatIcsDateUTC(record.start)}\r\nDTEND:${formatIcsDateUTC(record.end)}\r\n`;
   }
 });

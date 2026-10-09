@@ -2,22 +2,25 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
+import { webcrypto } from 'node:crypto';
 
-const context = vm.createContext({ console, Date, Intl, WeakMap, Map, Set, alert() {},
+const context = vm.createContext({ console, Date, Intl, WeakMap, Map, Set, crypto: webcrypto, alert() {},
   CONFIG: { SEGMENTS_PER_DAY: 24 }, SpiralCalendar: class {} });
-for (const file of ['time-model', 'icalendar', 'core-methods', 'state-storage-sync', 'event-time']) {
+for (const file of ['config-utils', 'time-model', 'event-model', 'icalendar', 'core-methods', 'state-storage-sync', 'event-projection', 'event-time', 'pickers-calendars']) {
   vm.runInContext(fs.readFileSync(new URL(`../js/${file}.js`, import.meta.url), 'utf8'), context);
 }
 context.formatIcsDateUTC = value => new Date(value).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 const Time = context.SpiralTime;
 const ICS = context.SpiralICalendar;
 const wall = Time.parseWall;
+context.parseDateTimeLocalAsUTC = wall;
 const berlin = 'Europe/Berlin';
 function calendar() {
   const app = new context.SpiralCalendar();
   app.state = { useLocationTimezone: true, locationTimezoneId: berlin, days: 7, rotation: Math.PI,
     visibleCalendars: ['Home', 'Work'] };
   app.events = [];
+  app.getDisplayColorForEvent = () => '#123456';
   app._eventsVersion = 0;
   app.referenceTime = wall('2026-10-08T00:00');
   app.getRenderVisibilityRange = theta => ({ min: -app.state.rotation - 2 * Math.PI,
@@ -93,56 +96,235 @@ test('half-hour DST changes use the actual gap size', () => {
 
 test('new events display wall time and serialize/export canonical instants', () => {
   const app = calendar();
-  const e = app.initializeEventTime(event(), { rejectGap: true });
-  assert.equal(e.start.toISOString(), '2026-10-08T09:00:00.000Z');
+  const e = app.initializeEventFromWallTimes(event(), { rejectGap: true });
+  assert.equal(e.start.toISOString(), '2026-10-08T07:00:00.000Z');
+  assert.equal(Time.formatWall(app.getEventWallDate(e, 'start')), '2026-10-08T09:00');
   assert.equal(app.serializeEventTime(e).start, '2026-10-08T07:00:00.000Z');
   assert.equal(app.formatEventIcsDates(e), 'DTSTART:20261008T070000Z\r\nDTEND:20261008T080000Z\r\n');
 });
 
-test('legacy timestamps and metadata are never reinterpreted or tagged automatically', () => {
+test('display projections are immutable, cached, and never become event source data', () => {
   const app = calendar();
-  const e = { ...event(), extra: 'preserve' };
-  app.projectEventTime(e);
+  const e = app.initializeEventFromWallTimes(event());
+  const start = e.start;
+  const projection = app.getEventProjection(e);
+  assert.ok(Object.isFrozen(projection));
+  assert.equal(app.getEventProjection(e), projection);
+  assert.equal(projection.startInstantMs, start.getTime());
+  assert.equal(projection.startMs, wall('2026-10-08T09:00').getTime());
+  assert.throws(() => { projection.startMs = 0; }, TypeError);
+  app.getEventWallDate(e, 'start').setTime(0);
+  assert.equal(e.start, start);
+  assert.equal(app.getEventProjection(e), projection);
+  app.state.locationTimezoneId = 'Asia/Kathmandu';
+  app.events = [e];
+  app.refreshEventProjections();
+  assert.equal(e.start, start);
+  assert.equal(Time.formatWall(app.getEventWallDate(e, 'start')), '2026-10-08T12:45');
+  assert.equal(app.serializeEventTime(e).start, '2026-10-08T07:00:00.000Z');
+});
+
+test('direct UTC edits invalidate the display cache and save the same actual timestamp', () => {
+  const app = calendar();
+  const e = app.initializeEventFromWallTimes(event());
+  const previous = app.getEventProjection(e);
+  e.start.setUTCMinutes(15);
+  assert.notEqual(app.getEventProjection(e), previous);
+  assert.equal(Time.formatWall(app.getEventWallDate(e, 'start')), '2026-10-08T09:15');
+  assert.equal(app.serializeEventTime(e).start, '2026-10-08T07:15:00.000Z');
+});
+
+test('editing and dragging inside either occurrence of a repeated hour retain that occurrence', () => {
+  const app = calendar();
+  for (const hour of ['00', '01']) {
+    const e = app.normalizeRuntimeEvent({ start: `2026-10-25T${hour}:10:00Z`, end: `2026-10-25T${hour}:50:00Z` });
+    assert.ok(app.applyEventTimeRange(e, wall('2026-10-25T02:15'), wall('2026-10-25T02:45')));
+    assert.equal(e.start.toISOString(), `2026-10-25T${hour}:15:00.000Z`);
+    assert.ok(app.setEventHandleTime(e, 'end', wall('2026-10-25T02:40')));
+    assert.equal(e.end.toISOString(), `2026-10-25T${hour}:40:00.000Z`);
+  }
+});
+
+test('drafts in a skipped hour start at a valid local time with a positive duration', () => {
+  const app = calendar();
+  app.referenceTime = wall('2026-03-29T00:00');
+  app.createEventColorState = () => ({ color: '#123456' });
+  const draft = app.createDraftEventForSegmentId(2);
+  assert.equal(Time.formatWall(app.getEventWallDate(draft, 'start')), '2026-03-29T03:00');
+  assert.equal(Time.formatWall(app.getEventWallDate(draft, 'end')), '2026-03-29T04:00');
+  assert.equal(draft.end - draft.start, Time.HOUR);
+});
+
+test('new defaults last one elapsed hour across repeated, skipped, fractional and ordinary dates', () => {
+  const app = calendar();
+  const cases = [
+    [berlin, '2026-10-25T02:00', 0, '2026-10-25T00:00:00.000Z', '2026-10-25T02:00'],
+    [berlin, '2026-10-25T02:00', 1, '2026-10-25T01:00:00.000Z', '2026-10-25T03:00'],
+    [berlin, '2026-10-25T02:30', 0, '2026-10-25T00:30:00.000Z', '2026-10-25T02:30'],
+    [berlin, '2026-03-29T01:30', undefined, '2026-03-29T00:30:00.000Z', '2026-03-29T03:30'],
+    ['Australia/Lord_Howe', '2026-04-05T01:30', 0, '2026-04-04T14:30:00.000Z', '2026-04-05T02:00'],
+    ['Australia/Lord_Howe', '2026-04-05T01:30', 1, '2026-04-04T15:00:00.000Z', '2026-04-05T02:30'],
+    ['Australia/Lord_Howe', '2026-10-04T01:30', undefined, '2026-10-03T15:00:00.000Z', '2026-10-04T03:00'],
+    [berlin, '2026-12-31T23:30', undefined, '2026-12-31T22:30:00.000Z', '2027-01-01T00:30']
+  ];
+  for (const [zone, value, occurrence, instant, endWall] of cases) {
+    app.state.locationTimezoneId = zone;
+    const range = app.getDefaultEventRange(wall(value), { occurrence });
+    assert.equal(range.start.toISOString(), instant);
+    assert.equal(range.end - range.start, Time.HOUR);
+    assert.equal(Time.formatWall(app.getDefaultEventEnd(wall(value), { occurrence })), endWall);
+  }
+  app.state.locationTimezoneId = berlin;
+  assert.throws(() => app.getDefaultEventRange(wall('2026-03-29T02:00')), /does not exist/);
+});
+
+test('new event occurrence choices preserve equal or reversed wall endpoints and reject invalid choices atomically', () => {
+  const app = calendar();
+  for (const [start, end, minutes] of [['02:00', '02:00', 60], ['02:45', '02:15', 30]]) {
+    const e = app.initializeEventFromWallTimes(event(`2026-10-25T${start}`, `2026-10-25T${end}`),
+      { rejectGap: true, startOccurrence: 0, endOccurrence: 1 });
+    assert.equal(e.end - e.start, minutes * 60000);
+    assert.equal(app.serializeEventTime(e).end, e.end.toISOString());
+  }
+  const invalid = event('2026-10-25T02:00', '2026-10-25T02:30');
+  const before = JSON.stringify(invalid);
+  assert.throws(() => app.initializeEventFromWallTimes(invalid,
+    { rejectGap: true, startOccurrence: 1, endOccurrence: 0 }), /end after the start/);
+  assert.equal(JSON.stringify(invalid), before);
+});
+
+test('the October 25 two oclock canvas draft lasts one hour with one projected band', () => {
+  const app = calendar();
+  app.referenceTime = wall('2026-10-25T00:00');
+  app.createEventColorState = () => ({ color: '#123456' });
+  const draft = app.createDraftEventForSegmentId(2);
+  assert.equal(draft.start.toISOString(), '2026-10-25T00:00:00.000Z');
+  assert.equal(draft.end.toISOString(), '2026-10-25T01:00:00.000Z');
+  assert.equal(app.getEventProjection(draft).intervals.length, 1);
+  assert.equal(Time.formatWall(app.getEventWallDate(draft, 'end')), '2026-10-25T02:00');
+  assert.equal(app.getEventDurationLabel(draft), '1 hour');
+  assert.equal('autoEnd' in app.serializeEventTime(draft), false);
+});
+
+test('draft start choices keep a suggested one hour end until the end is edited or dragged', () => {
+  const app = calendar();
+  app.referenceTime = wall('2026-10-25T00:00');
+  app.createEventColorState = () => ({ color: '#123456' });
+  app.syncEventAutoColor = app.ensureLayoutCache = app.drawSpiral = app.saveEventsToStorage = app._ensureSelectedSegmentContainsEventOrJump = () => {};
+  context.document = { getElementById: () => null };
+  context.setTimeout = () => {};
+  const draft = app.draftEvent = app.createDraftEventForSegmentId(2);
+  assert.ok(app.applyEventDateTimeInputValue(draft, 'start', '2026-10-25T02:00', { occurrence: 1 }));
+  assert.equal(draft.start.toISOString(), '2026-10-25T01:00:00.000Z');
+  assert.equal(draft.end.toISOString(), '2026-10-25T02:00:00.000Z');
+  assert.equal(draft.autoEnd, true);
+  assert.ok(app.applyEventDateTimeInputValue(draft, 'end', '2026-10-25T02:45', { occurrence: 1 }));
+  assert.equal(draft.autoEnd, false);
+  assert.ok(app.applyEventDateTimeInputValue(draft, 'start', '2026-10-25T02:15', { occurrence: 1 }));
+  assert.equal(draft.end.toISOString(), '2026-10-25T01:45:00.000Z');
+  assert.equal(draft.end - draft.start, 30 * 60000);
+  const dragged = app.createDraftEventForSegmentId(2);
+  assert.ok(app.setEventHandleTime(dragged, 'end', wall('2026-10-25T02:30'), { preferredOffsetMs: Time.HOUR }));
+  assert.equal(dragged.autoEnd, false);
+});
+
+test('automatic end correction retains the chosen start occurrence', () => {
+  const app = calendar();
+  const e = app.normalizeRuntimeEvent({ start: '2026-10-25T01:15:00Z', end: '2026-10-25T01:45:00Z' });
+  assert.equal(Time.formatWall(app.getAdjustedEventWallEnd(e, wall('2026-10-25T02:50'), wall('2026-10-25T01:30'))), '2026-10-25T03:50');
+});
+
+test('duration labels measure actual time and all-day labels count calendar dates', () => {
+  const app = calendar();
+  for (const [duration, label] of [[Time.HOUR, '1 hour'], [90 * 60000, '1 hour 30 minutes'],
+    [25 * Time.HOUR, '25 hours'], [1500, '1.5 seconds'], [60000, '1 minute']]) {
+    const start = new Date('2026-10-25T00:00:00Z');
+    assert.equal(app.getEventDurationLabel({ start, end: new Date(start.getTime() + duration) }), label);
+  }
+  const allDay = parse('DTSTART;VALUE=DATE:20261025\r\nDTEND;VALUE=DATE:20261026')[0];
+  assert.equal(allDay.end - allDay.start, 25 * Time.HOUR);
+  assert.equal(app.getEventDurationLabel(allDay), '1 day (all day)');
+});
+
+test('the picker rejects a nonexistent end before applying its automatic range correction', () => {
+  const app = calendar();
+  const e = app.initializeEventFromWallTimes(event('2026-03-29T03:00', '2026-03-29T04:00'));
+  const before = JSON.stringify(app.serializeEventTime(e));
+  assert.equal(app.applyEventDateTimeInputValue(e, 'end', '2026-03-29T02:30'), false);
+  assert.equal(JSON.stringify(app.serializeEventTime(e)), before);
+});
+
+test('both renderer segment ranges and navigation use local coordinates of canonical events', () => {
+  const app = calendar();
+  const e = app.initializeEventFromWallTimes(event());
+  app.events = [e];
+  app.getDisplayColorForEvent = () => '#123456';
+  const position = app.getEventStartNavigationTarget(e);
+  assert.equal(app.getAllEventsForSegment(position.day, position.segment + 2).length, 0);
+  const visible = app.getAllEventsForSegment(position.day, position.segment);
+  assert.equal(visible.length, 1);
+  assert.equal(visible[0].event, e);
+  assert.equal(visible[0].startUtcMs, e.start.getTime());
+  assert.equal(app.getEventStartNavigationTarget(e).segmentId, 9);
+});
+
+test('all-day edits after a zone change resolve both endpoints in the current zone', () => {
+  const app = calendar();
+  for (const drag of [false, true]) {
+    const e = app.normalizeRuntimeEvent(parse('DTSTART;VALUE=DATE:20261008\r\nDTEND;VALUE=DATE:20261010')[0]);
+    app.state.locationTimezoneId = 'Pacific/Honolulu';
+    if (drag) assert.ok(app.setEventHandleTime(e, 'start', wall('2026-10-08T09:00')));
+    else assert.ok(app.applyEventTimeRange(e, wall('2026-10-08T09:00'), app.getEventWallDate(e, 'end')));
+    assert.equal(e.start.toISOString(), '2026-10-08T19:00:00.000Z');
+    assert.equal(e.end.toISOString(), '2026-10-10T10:00:00.000Z');
+    assert.equal(e.allDay, undefined);
+  }
+});
+
+test('event records use one explicit UTC format and discard view-only metadata', () => {
+  const app = calendar();
+  const e = app.initializeEventFromWallTimes({ ...event(), extra: 'view only' });
   const record = app.serializeEventTime(e);
-  assert.equal(record.start, '2026-10-08T09:00:00.000Z');
-  assert.equal(record.extra, 'preserve');
-  assert.equal(record.timeModel, undefined);
+  assert.equal(record.timeModel, 'instant-v1');
+  assert.equal(record.sequence, 0);
+  assert.equal(record.extra, undefined);
 });
 
 test('a new event survives JSON storage and reload without double conversion', () => {
   const app = calendar();
-  const e = app.initializeEventTime(event());
+  const e = app.initializeEventFromWallTimes(event());
   const saved = JSON.stringify(app.serializeEventTime(e));
-  const loaded = app.projectEventTime(JSON.parse(saved));
+  const loaded = app.normalizeRuntimeEvent(JSON.parse(saved));
   assert.equal(loaded.start.getTime(), e.start.getTime());
   assert.equal(JSON.stringify(app.serializeEventTime(loaded)), saved);
 });
 
 test('changing the display zone reprojects new events without changing their stored records', () => {
   const app = calendar();
-  const e = app.initializeEventTime(event());
-  app.events = [e, event()];
+  const e = app.initializeEventFromWallTimes(event());
+  app.events = [e, app.initializeEventFromWallTimes(event())];
   const saved = JSON.stringify(app.serializeEventTime(e));
   app.state.locationTimezoneId = 'America/New_York';
-  app.reprojectEventTimes();
-  assert.equal(Time.formatWall(e.start), '2026-10-08T03:00');
+  app.refreshEventProjections();
+  assert.equal(Time.formatWall(app.getEventWallDate(e, 'start')), '2026-10-08T03:00');
   assert.equal(JSON.stringify(app.serializeEventTime(e)), saved);
-  assert.equal(Time.formatWall(app.events[1].start), '2026-10-08T09:00');
+  assert.equal(Time.formatWall(app.getEventWallDate(app.events[1], 'start')), '2026-10-08T03:00');
 });
 
-test('an unsupported repeated-hour projection leaves every current event unchanged', () => {
+test('changing zones supports repeated-hour projections without changing any timestamps', () => {
   const app = calendar();
-  app.events = [app.initializeEventTime(event()), app.initializeEventTime(event('2026-11-01T06:45', '2026-11-01T07:15'))];
+  app.events = [app.initializeEventFromWallTimes(event()), app.initializeEventFromWallTimes(event('2026-11-01T06:45', '2026-11-01T07:15'))];
   const before = app.events.map(e => [e.start.getTime(), e.end.getTime()]);
   app.state.locationTimezoneId = 'America/New_York';
-  assert.throws(() => app.reprojectEventTimes(), /repeated clock hour/);
+  app.refreshEventProjections();
+  assert.equal(app.getEventProjection(app.events[1]).intervals.length, 2);
   assert.deepEqual(app.events.map(e => [e.start.getTime(), e.end.getTime()]), before);
 });
 
 test('ordinary edits resolve in the projection zone and retain an unchanged imported DST occurrence', () => {
   const app = calendar();
-  const e = app.projectEventTime({ timeModel: 'instant-v1', start: new Date('2026-10-25T01:30:00Z'), end: new Date('2026-10-25T02:30:00Z') });
-  assert.ok(app.applyEventTimeRange(e, new Date(e.start), wall('2026-10-25T04:00')));
+  const e = app.normalizeRuntimeEvent({ timeModel: 'instant-v1', start: new Date('2026-10-25T01:30:00Z'), end: new Date('2026-10-25T02:30:00Z') });
+  assert.ok(app.applyEventTimeRange(e, app.getEventWallDate(e, 'start'), wall('2026-10-25T04:00')));
   assert.equal(app.serializeEventTime(e).start, '2026-10-25T01:30:00.000Z');
   assert.equal(app.serializeEventTime(e).end, '2026-10-25T03:00:00.000Z');
   assert.equal(app.applyEventTimeRange(e, wall('2026-03-29T02:30'), wall('2026-03-29T04:00')), false);
@@ -150,36 +332,36 @@ test('ordinary edits resolve in the projection zone and retain an unchanged impo
 
 test('merge updates retain the incoming instant projection, including repeated hours', () => {
   const app = calendar();
-  const source = app.projectEventTime({ timeModel: 'instant-v1', start: new Date('2026-10-25T01:30:00Z'), end: new Date('2026-10-25T02:30:00Z') });
+  const source = app.normalizeRuntimeEvent({ timeModel: 'instant-v1', start: new Date('2026-10-25T01:30:00Z'), end: new Date('2026-10-25T02:30:00Z') });
   const target = { ...source };
-  app.copyEventTimeProjection(source, target);
+  // Canonical instants survive copying without a hidden projection transfer.
   assert.equal(app.serializeEventTime(target).start, '2026-10-25T01:30:00.000Z');
 });
 
 test('mouse and touch handle edits normalize DST gaps and retain positive real durations', () => {
   const app = calendar();
-  const e = app.initializeEventTime(event('2026-03-29T01:30', '2026-03-29T03:00'));
+  const e = app.initializeEventFromWallTimes(event('2026-03-29T01:30', '2026-03-29T03:00'));
   assert.ok(app.setEventHandleTime(e, 'end', wall('2026-03-29T02:30')));
-  assert.equal(Time.formatWall(e.end), '2026-03-29T03:30');
+  assert.equal(Time.formatWall(app.getEventWallDate(e, 'end')), '2026-03-29T03:30');
   assert.ok(app.setEventHandleTime(e, 'start', wall('2026-03-29T03:45')));
-  assert.equal(Time.formatWall(e.start), '2026-03-29T03:25');
+  assert.equal(Time.formatWall(app.getEventWallDate(e, 'start')), '2026-03-29T03:25');
   const record = app.serializeEventTime(e);
   assert.equal(new Date(record.end) - new Date(record.start), 5 * 60000);
 });
 
-test('automatically suggested end times skip nonexistent hours while legacy dates retain their convention', () => {
+test('automatically suggested end times skip nonexistent hours for every event', () => {
   const app = calendar();
   const start = wall('2026-03-29T01:30');
   assert.equal(Time.formatWall(app.getDefaultEventEnd(start)), '2026-03-29T03:30');
-  assert.equal(Time.formatWall(app.getDefaultEventEnd(start, {})), '2026-03-29T02:30');
+  assert.equal(Time.formatWall(app.getDefaultEventEnd(start, {})), '2026-03-29T03:30');
 });
 
-test('legacy handle edits retain their wall-coordinate meaning and minimum duration', () => {
+test('handle edits retain their minimum duration and serialize UTC instants', () => {
   const app = calendar();
-  const e = event();
+  const e = app.initializeEventFromWallTimes(event());
   assert.ok(app.setEventHandleTime(e, 'start', wall('2026-10-08T11:00')));
-  assert.equal(Time.formatWall(e.start), '2026-10-08T09:55');
-  assert.equal(app.serializeEventTime(e).start, '2026-10-08T09:55:00.000Z');
+  assert.equal(Time.formatWall(app.getEventWallDate(e, 'start')), '2026-10-08T09:55');
+  assert.equal(app.serializeEventTime(e).start, '2026-10-08T07:55:00.000Z');
 });
 
 test('ICS imports distinguish UTC, named time zones and floating time', () => {
@@ -192,11 +374,11 @@ test('ICS imports distinguish UTC, named time zones and floating time', () => {
 
 test('all-day events retain their exclusive calendar dates across zone changes and export', () => {
   const app = calendar();
-  const e = app.projectEventTime(parse('DTSTART;VALUE=DATE:20261008\r\nDTEND;VALUE=DATE:20261010')[0]);
+  const e = app.normalizeRuntimeEvent(parse('DTSTART;VALUE=DATE:20261008\r\nDTEND;VALUE=DATE:20261010')[0]);
   app.events = [e];
   app.state.locationTimezoneId = 'Pacific/Honolulu';
-  app.reprojectEventTimes();
-  assert.equal(Time.formatWall(e.start), '2026-10-08T00:00');
+  app.refreshEventProjections();
+  assert.equal(Time.formatWall(app.getEventWallDate(e, 'start')), '2026-10-08T00:00');
   assert.equal(app.formatEventIcsDates(e), 'DTSTART;VALUE=DATE:20261008\r\nDTEND;VALUE=DATE:20261010\r\n');
 });
 
@@ -207,12 +389,12 @@ test('all-day default duration is one day and an explicit week spans seven days'
 
 test('editing an all-day event into a timed event survives changing the display zone', () => {
   const app = calendar();
-  const e = app.projectEventTime(parse('DTSTART;VALUE=DATE:20261008\r\nDTEND;VALUE=DATE:20261010')[0]);
+  const e = app.normalizeRuntimeEvent(parse('DTSTART;VALUE=DATE:20261008\r\nDTEND;VALUE=DATE:20261010')[0]);
   assert.ok(app.applyEventTimeRange(e, wall('2026-10-08T09:00'), wall('2026-10-08T10:00')));
   app.events = [e];
   app.state.locationTimezoneId = 'America/New_York';
-  app.reprojectEventTimes();
-  assert.equal(Time.formatWall(e.start), '2026-10-08T03:00');
+  app.refreshEventProjections();
+  assert.equal(Time.formatWall(app.getEventWallDate(e, 'start')), '2026-10-08T03:00');
   assert.equal(app.serializeEventTime(e).allDay, undefined);
   assert.equal(app.formatEventIcsDates(e), 'DTSTART:20261008T070000Z\r\nDTEND:20261008T080000Z\r\n');
 });
@@ -248,8 +430,142 @@ test('invalid dates, reversed intervals and invalid durations cannot poison an i
     'DTSTART;VALUE=DATE:20261008\r\nDURATION:PT1H']) assert.throws(() => parse(properties));
 });
 
-test('a repeated-hour interval the renderer cannot represent is reported explicitly', () => {
-  assert.throws(() => parse('DTSTART:20261025T004500Z\r\nDTEND:20261025T011500Z'), /repeated clock hour/);
+test('ICS accepts a positive interval whose local ending clock time precedes its start', () => {
+  const e = parse('DTSTART:20261025T004500Z\r\nDTEND:20261025T011500Z')[0];
+  assert.equal(e.end - e.start, 30 * 60000);
+  assert.equal(calendar().getEventProjection(e).intervals.length, 2);
+});
+
+test('fall-back projections preserve both pieces, including their offset and exact duration', () => {
+  const app = calendar();
+  const e = app.normalizeRuntimeEvent({ start: '2026-10-25T00:45:00Z', end: '2026-10-25T01:15:00Z' });
+  const intervals = app.getEventProjection(e).intervals;
+  assert.deepEqual(Array.from(intervals, piece => [Time.formatWall(piece.startMs), Time.formatWall(piece.endMs), piece.offsetMs]), [
+    ['2026-10-25T02:45', '2026-10-25T03:00', 2 * Time.HOUR],
+    ['2026-10-25T02:00', '2026-10-25T02:15', Time.HOUR]
+  ]);
+  assert.equal(intervals.reduce((duration, piece) => duration + piece.endMs - piece.startMs, 0), e.end - e.start);
+  assert.ok(Object.isFrozen(intervals) && intervals.every(Object.isFrozen));
+  app.events = [e];
+  const target = app.getEventStartNavigationTarget(e);
+  const entries = app.getAllEventsForSegment(target.day, target.segment);
+  assert.deepEqual(Array.from(entries, entry => [entry.startMinute, entry.endMinute]), [[45, 60], [0, 15]]);
+  assert.ok(entries.every(entry => entry.event === e));
+});
+
+test('spring-forward projections leave the skipped hour blank and keep transition endpoints exclusive', () => {
+  const app = calendar();
+  const e = app.normalizeRuntimeEvent({ start: '2026-03-29T00:30:00Z', end: '2026-03-29T01:30:00Z' });
+  assert.deepEqual(Array.from(app.getEventProjection(e).intervals, piece => [Time.formatWall(piece.startMs), Time.formatWall(piece.endMs)]), [
+    ['2026-03-29T01:30', '2026-03-29T02:00'], ['2026-03-29T03:00', '2026-03-29T03:30']
+  ]);
+  app.events = [e];
+  const target = app.getEventStartNavigationTarget(e);
+  assert.equal(app.getAllEventsForSegment(target.day, target.segment - 1).length, 0);
+  const endAtTransition = app.normalizeRuntimeEvent({ start: '2026-03-29T00:30:00Z', end: '2026-03-29T01:00:00Z' });
+  assert.equal(app.getEventProjection(endAtTransition).intervals.length, 1);
+  assert.equal(Time.formatWall(app.getEventProjection(endAtTransition).intervals[0].endMs), '2026-03-29T02:00');
+});
+
+test('projection discovers half-hour offset changes without assuming a one-hour jump', () => {
+  const app = calendar();
+  app.state.locationTimezoneId = 'Australia/Lord_Howe';
+  const e = app.normalizeRuntimeEvent({ start: '2026-04-04T14:50:00Z', end: '2026-04-04T15:10:00Z' });
+  assert.deepEqual(Array.from(app.getEventProjection(e).intervals, piece => [Time.formatWall(piece.startMs), Time.formatWall(piece.endMs)]), [
+    ['2026-04-05T01:50', '2026-04-05T02:00'], ['2026-04-05T01:30', '2026-04-05T01:40']
+  ]);
+});
+
+test('overlapping occurrences of one event have distinct lanes and a shared overlap component', () => {
+  const app = calendar();
+  app.referenceTime = wall('2026-10-25T00:00');
+  app.state.rotation = 0;
+  const e = app.normalizeRuntimeEvent({ start: '2026-10-24T23:30:00Z', end: '2026-10-25T02:30:00Z' });
+  app.events = [e];
+  const pieces = app.getEventProjection(e).intervals;
+  const { eventToLane } = app.computePersistentEventLanesForWindow();
+  assert.notEqual(eventToLane.get(pieces[0]), eventToLane.get(pieces[1]));
+  const { eventToComponent, componentLaneCount } = app.computeEventComponentsForWindow(eventToLane);
+  assert.equal(eventToComponent.get(pieces[0]), eventToComponent.get(pieces[1]));
+  assert.equal(componentLaneCount.get(eventToComponent.get(pieces[0])), 2);
+  assert.equal(app.getMaxOverlapForEventAcrossHours(e), 2);
+});
+
+test('hit testing selects the rendered occurrence instead of the first entry in the hour', () => {
+  const app = calendar();
+  const e = app.normalizeRuntimeEvent({ start: '2026-10-25T00:10:00Z', end: '2026-10-25T01:50:00Z' });
+  app.events = [e];
+  const target = app.getEventStartNavigationTarget(e);
+  const pieces = app.getEventProjection(e).intervals;
+  app.eventSegments = pieces.map((piece, index) => ({ event: e, displayInterval: piece, day: target.day, segment: target.segment,
+    timeStartTheta: 1, timeEndTheta: 2, isCircleMode: true, innerRadius: 100 + index * 20, outerRadius: 120 + index * 20 }));
+  assert.equal(app.findEventEntryAtSegmentPoint({ ...target, angle: 1.5, radius: 130 }), 1);
+  assert.equal(app.findEventEntryAtSegmentPoint({ ...target, angle: 1.5 + 10 * Math.PI, radius: 130 }), 1);
+  assert.equal(app.findEventEntryAtSegmentPoint({ ...target, angle: 1.5, radius: 110 }), 0);
+  assert.equal(app.findEventEntryAtSegmentPoint({ ...target, angle: 1.5, radius: 80 }), null);
+});
+
+test('equal or reversed wall endpoints can retain a positive interval across the clock change', () => {
+  const app = calendar();
+  const e = app.initializeEventFromWallTimes(event('2026-10-25T02:45', '2026-10-25T02:15'), { rejectGap: true });
+  assert.equal(e.start.toISOString(), '2026-10-25T00:45:00.000Z');
+  assert.equal(e.end.toISOString(), '2026-10-25T01:15:00.000Z');
+  assert.ok(app.applyEventTimeRange(e, wall('2026-10-25T02:45'), wall('2026-10-25T02:15')));
+  assert.ok(app.setEventHandleTime(e, 'end', wall('2026-10-25T02:05')));
+  assert.equal(e.end.toISOString(), '2026-10-25T01:05:00.000Z');
+  assert.ok(app.setEventHandleTime(e, 'start', wall('2026-10-25T02:55')));
+  assert.equal(e.start.toISOString(), '2026-10-25T00:55:00.000Z');
+});
+
+test('dragging to a rendered occurrence uses that band offset and keeps the minimum duration', () => {
+  const app = calendar();
+  const e = app.normalizeRuntimeEvent({ start: '2026-10-25T00:10:00Z', end: '2026-10-25T01:50:00Z' });
+  assert.ok(app.setEventHandleTime(e, 'end', wall('2026-10-25T02:35'), { preferredOffsetMs: 2 * Time.HOUR }));
+  assert.equal(e.end.toISOString(), '2026-10-25T00:35:00.000Z');
+  assert.ok(app.setEventHandleTime(e, 'end', wall('2026-10-25T02:35'), { preferredOffsetMs: Time.HOUR }));
+  assert.equal(e.end.toISOString(), '2026-10-25T01:35:00.000Z');
+  assert.ok(app.setEventHandleTime(e, 'start', wall('2026-10-25T02:40'), { preferredOffsetMs: Time.HOUR }));
+  assert.equal(e.end - e.start, 5 * 60000);
+});
+
+test('browsing a selected repeated-hour piece uses that occurrence, while the live clock stays actual', () => {
+  const app = calendar();
+  const e = app.normalizeRuntimeEvent({ start: '2026-10-25T00:10:00Z', end: '2026-10-25T01:50:00Z' });
+  app.autoTimeAlignState = { enabled: false };
+  app.mouseState = { selectedSegment: {} };
+  app.state.detailViewDay = 0;
+  app.getDisplayTime = () => wall('2026-10-25T02:30');
+  app.getDetailViewEventState = () => ({ activeDisplayInterval: app.getEventProjection(e).intervals[1] });
+  assert.equal(app.getDisplayInstant().toISOString(), '2026-10-25T01:30:00.000Z');
+  app.autoTimeAlignState.enabled = true;
+  assert.ok(Math.abs(app.getDisplayInstant().getTime() - Date.now()) < 100);
+});
+
+test('explicit occurrence choices update the actual timestamp and reject an invalid duration atomically', () => {
+  const app = calendar();
+  const e = app.initializeEventFromWallTimes(event('2026-10-25T02:10', '2026-10-25T03:30'));
+  assert.ok(app.applyEventTimeRange(e, wall('2026-10-25T02:10'), wall('2026-10-25T03:30'), { startOccurrence: 1 }));
+  assert.equal(e.start.toISOString(), '2026-10-25T01:10:00.000Z');
+  const before = JSON.stringify(app.serializeEventTime(e));
+  assert.equal(app.applyEventTimeRange(e, wall('2026-10-25T02:10'), wall('2026-10-25T02:40'), { endOccurrence: 0 }), false);
+  assert.equal(JSON.stringify(app.serializeEventTime(e)), before);
+});
+
+test('all-day dates remain one continuous interval on a daylight-saving date', () => {
+  const app = calendar();
+  const e = app.normalizeRuntimeEvent(parse('DTSTART;VALUE=DATE:20261025\r\nDTEND;VALUE=DATE:20261026')[0]);
+  const pieces = app.getEventProjection(e).intervals;
+  assert.equal(pieces.length, 1);
+  assert.equal(pieces[0].endMs - pieces[0].startMs, Time.DAY);
+  assert.equal(e.end - e.start, 25 * Time.HOUR);
+});
+
+test('the manual clock-change calendar has three distinct positive events with the documented durations', () => {
+  const input = fs.readFileSync(new URL('./fixtures/clock-changes.ics', import.meta.url), 'utf8');
+  const events = ICS.parse(input, berlin);
+  assert.equal(events.length, 3);
+  assert.equal(new Set(events.map(e => e.persistentUID)).size, 3);
+  assert.deepEqual(Array.from(events, e => (e.end - e.start) / 60000), [30, 60, 20]);
 });
 
 test('visible layout windows follow navigation, include partial hours and support past dates', () => {

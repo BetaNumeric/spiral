@@ -294,7 +294,7 @@ class SpiralCalendar {
         eventListOptions: null,
         settingsSaveTimerId: null
       };
-      this.eventTimestampCache = new WeakMap();
+      this._eventDisplayProjections = new WeakMap();
       
       // Overlay data to draw after events
       this.nightOverlays = [];

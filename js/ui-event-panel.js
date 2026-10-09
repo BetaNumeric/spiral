@@ -12,6 +12,11 @@ Object.assign(SpiralCalendar.prototype, {
     const eventEnd = document.getElementById('eventEnd');
     const eventStartBox = document.getElementById('eventStartBox');
     const eventEndBox = document.getElementById('eventEndBox');
+    const occurrenceFields = {
+      start: { input: eventStart, row: document.getElementById('eventStartOccurrenceRow'), select: document.getElementById('eventStartOccurrence') },
+      end: { input: eventEnd, row: document.getElementById('eventEndOccurrenceRow'), select: document.getElementById('eventEndOccurrence') }
+    };
+    const eventDuration = document.getElementById('eventDuration');
     const eventColor = document.getElementById('eventColor');
     const colorBox = document.getElementById('colorBox');
     const addEventBtn = document.getElementById('addEventBtn');
@@ -79,10 +84,59 @@ Object.assign(SpiralCalendar.prototype, {
       return this.formatDateTime(new Date(d));
     };
 
+    const syncOccurrence = (type, preferredInstant = null, notBefore = -Infinity) => {
+      const { input, row, select } = occurrenceFields[type];
+      const zone = this.getCalendarTimeZone();
+      const wall = SpiralTime.parseWall(input.value);
+      const choices = Number.isFinite(wall.getTime()) ? SpiralTime.possibleInstants(wall, zone) : [];
+      const previous = select.dataset.wallValue === input.value && select.dataset.zone === zone ? Number(select.value) : -1;
+      select.replaceChildren();
+      choices.forEach((instant, index) => {
+        const option = document.createElement('option');
+        option.value = String(index);
+        option.textContent = `${index === 0 ? 'First occurrence' : 'Second occurrence'} (${this.formatEventOffset(wall - instant)})`;
+        select.appendChild(option);
+      });
+      const preferred = preferredInstant ? choices.findIndex(instant => instant.getTime() === preferredInstant.getTime()) : -1;
+      const firstValid = choices.findIndex(instant => instant.getTime() >= notBefore);
+      select.value = String(preferred >= 0 ? preferred : previous >= 0 && previous < choices.length ? previous : Math.max(0, firstValid));
+      select.dataset.wallValue = input.value;
+      select.dataset.zone = zone;
+      row.hidden = choices.length < 2;
+      row.style.display = row.hidden ? 'none' : 'block';
+    };
+    const getOccurrence = type => occurrenceFields[type].select.options.length > 1 ? Number(occurrenceFields[type].select.value) : undefined;
+    const getPanelTimeRange = () => {
+      const start = this.resolveNewEventWallTime(SpiralTime.parseWall(eventStart.value), { occurrence: getOccurrence('start') });
+      const end = this.resolveNewEventWallTime(SpiralTime.parseWall(eventEnd.value), { occurrence: getOccurrence('end'), notBefore: start.getTime() + 1 });
+      return { start, end };
+    };
     const syncEventBoxes = () => {
       if (eventStartBox) eventStartBox.textContent = eventStart && eventStart.value ? formatBox(eventStart.value) : '';
       if (eventEndBox) eventEndBox.textContent = eventEnd && eventEnd.value ? formatBox(eventEnd.value) : '';
+      syncOccurrence('start');
+      let notBefore = -Infinity;
+      try { notBefore = this.resolveNewEventWallTime(SpiralTime.parseWall(eventStart.value), { occurrence: getOccurrence('start') }).getTime() + 1; } catch (_) {}
+      syncOccurrence('end', null, notBefore);
+      try {
+        const range = getPanelTimeRange();
+        eventDuration.textContent = `Duration: ${this.getEventDurationLabel(range)}`;
+        addEventBtn.disabled = false;
+      } catch (error) {
+        eventDuration.textContent = eventStart.value && eventEnd.value ? error.message : 'Choose a start and end time.';
+        addEventBtn.disabled = true;
+      }
     };
+    const populateDefaultEnd = () => {
+      syncOccurrence('start');
+      try {
+        const range = this.getDefaultEventRange(SpiralTime.parseWall(eventStart.value), { occurrence: getOccurrence('start') });
+        eventEnd.value = SpiralTime.formatWall(SpiralTime.instantToWall(range.end, this.getCalendarTimeZone()));
+        syncOccurrence('end', range.end);
+      } catch (_) {}
+      syncEventBoxes();
+    };
+    this.refreshEventCreationPanel = syncEventBoxes;
     const getAddPanelStartDate = () => {
       try {
         if (eventStart && eventStart.value) {
@@ -175,8 +229,6 @@ Object.assign(SpiralCalendar.prototype, {
         openAnchoredPicker(eventEndBox, eventEnd);
       }
     });
-    if (eventStart) eventStart.addEventListener('change', syncEventBoxes);
-    if (eventEnd) eventEnd.addEventListener('change', syncEventBoxes);
 
     // Helper function to create "All:" header item
     const createAllHeaderItem = (isBottomList = false) => {
@@ -637,99 +689,9 @@ Object.assign(SpiralCalendar.prototype, {
       return allLi;
     };
       
-    const ISO_EVENT_DATE_RE = /^([+-]?\d{1,6})-(\d{2})-(\d{2})(?:[T\s](\d{2})(?::?(\d{2}))(?::?(\d{2}))?(?:\.(\d{1,3}))?(Z|[+-]\d{2}:?\d{2})?)?$/;
-    const buildUTCDate = (year, monthIndex, day, hour = 0, minute = 0, second = 0, millisecond = 0) => {
-      const date = new Date(0);
-      date.setUTCHours(0, 0, 0, 0);
-      date.setUTCFullYear(year, monthIndex, day);
-      date.setUTCHours(hour, minute, second, millisecond);
-      return date;
-    };
-    const buildLocalDate = (year, monthIndex, day, hour = 0, minute = 0, second = 0, millisecond = 0) => {
-      const date = new Date(0);
-      date.setHours(0, 0, 0, 0);
-      date.setFullYear(year, monthIndex, day);
-      date.setHours(hour, minute, second, millisecond);
-      return date;
-    };
-    const matchesUTCDateParts = (date, year, monthIndex, day, hour, minute, second, millisecond) => (
-      date.getUTCFullYear() === year &&
-      date.getUTCMonth() === monthIndex &&
-      date.getUTCDate() === day &&
-      date.getUTCHours() === hour &&
-      date.getUTCMinutes() === minute &&
-      date.getUTCSeconds() === second &&
-      date.getUTCMilliseconds() === millisecond
-    );
-    const matchesLocalDateParts = (date, year, monthIndex, day, hour, minute, second, millisecond) => (
-      date.getFullYear() === year &&
-      date.getMonth() === monthIndex &&
-      date.getDate() === day &&
-      date.getHours() === hour &&
-      date.getMinutes() === minute &&
-      date.getSeconds() === second &&
-      date.getMilliseconds() === millisecond
-    );
-    const parseTimezoneOffsetMinutes = (offset) => {
-      if (!offset || offset === 'Z') return 0;
-      const sign = offset[0] === '-' ? -1 : 1;
-      const normalized = offset.slice(1).replace(':', '');
-      const hours = Number(normalized.slice(0, 2));
-      const minutes = Number(normalized.slice(2, 4) || '0');
-      if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return NaN;
-      return sign * (hours * 60 + minutes);
-    };
     const parseEventDateValue = (value) => {
-      if (value instanceof Date) {
-        const cloned = new Date(value.getTime());
-        return Number.isFinite(cloned.getTime()) ? cloned : null;
-      }
-      if (typeof value === 'number') {
-        const date = new Date(value);
-        return Number.isFinite(date.getTime()) ? date : null;
-      }
-      if (typeof value === 'string') {
-        const raw = value.trim();
-        if (!raw) return null;
-        const match = raw.match(ISO_EVENT_DATE_RE);
-        if (match) {
-          const [, yearStr, monthStr, dayStr, hourStr, minuteStr, secondStr, millisecondStr, timezoneStr] = match;
-          const year = Number(yearStr);
-          const monthIndex = Number(monthStr) - 1;
-          const day = Number(dayStr);
-          const hasTime = Boolean(hourStr);
-          const hour = hasTime ? Number(hourStr) : 0;
-          const minute = hasTime ? Number(minuteStr || '0') : 0;
-          const second = hasTime ? Number(secondStr || '0') : 0;
-          const millisecond = hasTime && millisecondStr ? Number(millisecondStr.padEnd(3, '0')) : 0;
-          if (![year, monthIndex, day, hour, minute, second, millisecond].every(Number.isFinite)) {
-            return null;
-          }
-          if (timezoneStr) {
-            const wallClockUTC = buildUTCDate(year, monthIndex, day, hour, minute, second, millisecond);
-            if (!matchesUTCDateParts(wallClockUTC, year, monthIndex, day, hour, minute, second, millisecond)) {
-              return null;
-            }
-            const offsetMinutes = parseTimezoneOffsetMinutes(timezoneStr);
-            if (!Number.isFinite(offsetMinutes)) return null;
-            return timezoneStr === 'Z'
-              ? wallClockUTC
-              : new Date(wallClockUTC.getTime() - offsetMinutes * 60 * 1000);
-          }
-          if (!hasTime) {
-            const utcDate = buildUTCDate(year, monthIndex, day, 0, 0, 0, 0);
-            return matchesUTCDateParts(utcDate, year, monthIndex, day, 0, 0, 0, 0) ? utcDate : null;
-          }
-          const localDate = buildLocalDate(year, monthIndex, day, hour, minute, second, millisecond);
-          return matchesLocalDateParts(localDate, year, monthIndex, day, hour, minute, second, millisecond)
-            ? localDate
-            : null;
-        }
-        const date = new Date(raw);
-        return Number.isFinite(date.getTime()) ? date : null;
-      }
-      const date = new Date(value);
-      return Number.isFinite(date.getTime()) ? date : null;
+      try { return SpiralEventModel.parseInstant(value); }
+      catch (_) { return null; }
     };
     const getEventDateSortValue = (value) => {
       const date = value instanceof Date ? value : parseEventDateValue(value);
@@ -787,7 +749,7 @@ Object.assign(SpiralCalendar.prototype, {
       const selectedEvent = selectedEventsHere[selectedEventIndex] ? selectedEventsHere[selectedEventIndex].event : null;
       const isSelectedEvent = selectedEvent === ev;
       const activeEventIds = this._eventListActiveIds || new Set();
-      const eventId = ev.id || ev.start;
+      const eventId = ev.persistentUID;
       const isSpiralHighlightedEvent = activeEventIds.has(eventId);
       const useFullRowHighlight = isSelectedEvent || isSpiralHighlightedEvent;
       let selectedRowStyle = '';
@@ -814,7 +776,7 @@ Object.assign(SpiralCalendar.prototype, {
       leftContent.style.cssText = 'display: flex; align-items: center; ' + leftWidth + 'min-width: ' + (isDesktopEventPanel ? '48px' : ((isMobile || isEventPanel) ? '60px' : '0')) + '; flex-shrink: 1;';
         
         // Format time using UTC to avoid DST issues (date is shown in day header)
-        const eventDate = parseEventDateValue(ev.start);
+        const eventDate = this.getEventWallDate(ev, 'start');
         const hours = eventDate ? pad2(eventDate.getUTCHours()) : '--';
         const minutes = eventDate ? pad2(eventDate.getUTCMinutes()) : '--';
         const dateStr = `${hours}:${minutes}`;
@@ -999,19 +961,7 @@ Object.assign(SpiralCalendar.prototype, {
             icsContent += 'PRODID:-//Spiral Calendar//Calendar//EN\r\n';
             icsContent += 'CALSCALE:GREGORIAN\r\n';
             icsContent += 'METHOD:PUBLISH\r\n';
-            icsContent += 'BEGIN:VEVENT\r\n';
-            icsContent += `UID:${generateEventUID(event)}\r\n`;
-            icsContent += `DTSTAMP:${formatIcsDateUTC(new Date())}\r\n`;
-            icsContent += this.formatEventIcsDates(event);
-            icsContent += `SUMMARY:${escapeIcsText(event.title)}\r\n`;
-            if (event.description) {
-              icsContent += `DESCRIPTION:${escapeIcsText(event.description)}\r\n`;
-            }
-            icsContent += `X-SPIRAL-COLOR:${event.color}\r\n`;
-            // Add iOS-friendly properties
-            icsContent += 'STATUS:CONFIRMED\r\n';
-            icsContent += `SEQUENCE:${generateEventSequence(event)}\r\n`;
-            icsContent += 'END:VEVENT\r\n';
+            icsContent += this.formatEventIcs(event);
             icsContent += 'END:VCALENDAR\r\n';
 
             const blob = new Blob([icsContent], { type: 'text/calendar' });
@@ -1079,19 +1029,7 @@ Object.assign(SpiralCalendar.prototype, {
             icsContent += 'PRODID:-//Spiral Calendar//Calendar//EN\r\n';
             icsContent += 'CALSCALE:GREGORIAN\r\n';
             icsContent += 'METHOD:PUBLISH\r\n';
-            icsContent += 'BEGIN:VEVENT\r\n';
-            icsContent += `UID:${generateEventUID(event)}\r\n`;
-            icsContent += `DTSTAMP:${formatIcsDateUTC(new Date())}\r\n`;
-            icsContent += this.formatEventIcsDates(event);
-            icsContent += `SUMMARY:${escapeIcsText(event.title)}\r\n`;
-            if (event.description) {
-              icsContent += `DESCRIPTION:${escapeIcsText(event.description)}\r\n`;
-            }
-            icsContent += `X-SPIRAL-COLOR:${event.color}\r\n`;
-            // Add iOS-friendly properties
-            icsContent += 'STATUS:CONFIRMED\r\n';
-            icsContent += `SEQUENCE:${generateEventSequence(event)}\r\n`;
-            icsContent += 'END:VEVENT\r\n';
+            icsContent += this.formatEventIcs(event);
             icsContent += 'END:VCALENDAR\r\n';
 
             const blob = new Blob([icsContent], { type: 'text/calendar' });
@@ -1225,23 +1163,25 @@ Object.assign(SpiralCalendar.prototype, {
         })
         .map(event => ({
           event,
-          startDate: parseEventDateValue(event.start),
-          endDate: parseEventDateValue(event.end)
+          startDate: this.getEventWallDate(event, 'start'),
+          endDate: this.getEventWallDate(event, 'end'),
+          startInstant: this.getEventInstant(event, 'start'),
+          endInstant: this.getEventInstant(event, 'end')
         }))
         .sort((a, b) => {
-          const startDiff = compareEventDateValues(a.startDate, b.startDate);
+          const startDiff = compareEventDateValues(a.startInstant, b.startInstant);
           if (startDiff !== 0) return startDiff;
-          const endDiff = compareEventDateValues(a.endDate, b.endDate);
+          const endDiff = compareEventDateValues(a.endInstant, b.endInstant);
           if (endDiff !== 0) return endDiff;
           return String(a.event.title || '').localeCompare(String(b.event.title || ''));
         });
 
       const PRELOAD_LIMIT = 100;
-      const displayTime = this.getDisplayTime();
+      const displayTime = this.getDisplayInstant();
       
       // Initialize or manage sliding window bounds if the list is huge
       if (!this._eventListBounds || options.reset || searchQuery !== (this._lastSearchQuery || '')) {
-        let centerIdx = sortedEntries.findIndex(e => e.startDate !== null && e.startDate >= displayTime);
+        let centerIdx = sortedEntries.findIndex(e => e.startInstant >= displayTime);
         if (centerIdx === -1) centerIdx = Math.max(0, sortedEntries.length - 1);
         
         this._eventListBounds = {
@@ -1383,7 +1323,9 @@ Object.assign(SpiralCalendar.prototype, {
       // First, check for all currently happening events (start <= displayTime < end)
       // Handle overlapping events by highlighting all of them
       const currentEvents = sortedEntries
-        .filter(({ startDate, endDate }) => startDate && endDate && startDate <= displayTime && displayTime < endDate)
+        .filter(({ event, startInstant, endInstant, startDate, endDate }) => event.allDay
+          ? startDate <= this.getDisplayTime() && this.getDisplayTime() < endDate
+          : startInstant <= displayTime && displayTime < endInstant)
         .map(({ event }) => event);
       
       // Create a Set of highlighted event IDs (for fast lookup)
@@ -1393,15 +1335,15 @@ Object.assign(SpiralCalendar.prototype, {
       if (currentEvents.length > 0) {
         // Highlight all currently happening events (including overlapping ones)
         currentEvents.forEach(e => {
-          const eventId = e.id || e.start;
+          const eventId = e.persistentUID;
           highlightedEventIds.add(eventId);
           activeEventIds.add(eventId);
         });
       } else {
         // No current event, find the next upcoming event
-        const upcomingEvent = sortedEntries.find(({ startDate }) => startDate && startDate > displayTime);
+        const upcomingEvent = sortedEntries.find(({ startInstant }) => startInstant > displayTime);
         if (upcomingEvent) {
-          const eventId = upcomingEvent.event.id || upcomingEvent.event.start;
+          const eventId = upcomingEvent.event.persistentUID;
           highlightedEventIds.add(eventId);
         }
       }
@@ -1411,7 +1353,7 @@ Object.assign(SpiralCalendar.prototype, {
       // Calculate height scale for each event - scale all highlighted events (current or next)
       const getEventHeightScale = (event) => {
         // Scale all highlighted events (3.5x size)
-        const eventId = event.id || event.start;
+        const eventId = event.persistentUID;
         if (highlightedEventIds.has(eventId)) {
           return 3.5;
         }
@@ -1443,7 +1385,8 @@ Object.assign(SpiralCalendar.prototype, {
         const dayParts = parseEventDayKey(dayKey);
         if (!dayParts) return li;
         const { year, month, day } = dayParts;
-        const dateObj = buildUTCDate(year, month, day);
+        const dateObj = new Date(0);
+        dateObj.setUTCFullYear(year, month, day);
         const today = SpiralTime.instantToWall(new Date(), this.getCalendarTimeZone());
         const todayKey = makeEventDayKey(today);
         const isToday = dayKey === todayKey;
@@ -1640,7 +1583,7 @@ Object.assign(SpiralCalendar.prototype, {
           eventList.appendChild(eventItem);
           
           // Track the first highlighted event item for scrolling
-          const eventId = ev.id || ev.start;
+          const eventId = ev.persistentUID;
           if (highlightedEventIds.has(eventId) && !firstHighlightedItem) {
             firstHighlightedItem = eventItem;
           }
@@ -1857,19 +1800,7 @@ Object.assign(SpiralCalendar.prototype, {
       icsContent += 'METHOD:PUBLISH\r\n';
 
       this.events.forEach((event) => {
-        icsContent += 'BEGIN:VEVENT\r\n';
-        icsContent += `UID:${generateEventUID(event)}\r\n`;
-        icsContent += `DTSTAMP:${formatIcsDateUTC(new Date())}\r\n`;
-        icsContent += this.formatEventIcsDates(event);
-        icsContent += `SUMMARY:${escapeIcsText(event.title)}\r\n`;
-        if (event.description) {
-          icsContent += `DESCRIPTION:${escapeIcsText(event.description)}\r\n`;
-        }
-        icsContent += `X-SPIRAL-COLOR:${event.color}\r\n`;
-        if (event.calendar) {
-          icsContent += `X-SPIRAL-CALENDAR:${escapeIcsText(event.calendar)}\r\n`;
-        }
-        icsContent += 'END:VEVENT\r\n';
+        icsContent += this.formatEventIcs(event);
       });
 
       icsContent += 'END:VCALENDAR\r\n';
@@ -1967,305 +1898,64 @@ Object.assign(SpiralCalendar.prototype, {
 
 
 
-    const parseICSContent = content => SpiralICalendar.parse(content, this.getCalendarTimeZone());
-    const toValidDate = (value) => {
-      return parseEventDateValue(value);
-    };
-    const normalizeImportedColor = (value) => {
-      if (typeof value === 'string') {
-        const raw = value.trim();
-        if (raw) {
-          if (/^hsl/i.test(raw)) {
-            try {
-              return normalizeHexColor(this.hslToHex(raw));
-            } catch (_) {}
-          }
-          const normalizedHex = normalizeHexColor(raw, '');
-          if (normalizedHex) {
-            return normalizedHex;
-          }
-        }
-      }
-      return '';
-    };
-    const normalizeImportedEvent = (event) => {
-      if (!event || typeof event !== 'object') return null;
-      const start = toValidDate(event.start);
-      const end = toValidDate(event.end);
-      if (!start || !end || end <= start) return null;
-
-      const calendar = (typeof event.calendar === 'string' && event.calendar.trim())
-        ? event.calendar.trim()
-        : 'Home';
-      const title = (typeof event.title === 'string' && event.title.trim())
-        ? event.title.trim()
-        : 'Untitled Event';
-      const description = typeof event.description === 'string'
-        ? event.description
-        : '';
-      const persistentUID = (typeof event.persistentUID === 'string' && event.persistentUID.trim())
-        ? event.persistentUID.trim()
-        : '';
-      const importedColor = normalizeImportedColor(event.color);
-      const colorState = this.createEventColorState({
-        calendarName: calendar,
-        eventDate: start,
-        colorSeed: event.colorSeed,
-        customColor: event.colorIsCustom === true ? importedColor : null
-      });
-
-      const normalized = {
-        ...event,
-        title,
-        description,
-        start,
-        end,
-        calendar,
-        ...colorState,
-        addedToCalendar: !!event.addedToCalendar,
-        lastModified: Number.isFinite(Number(event.lastModified))
-          ? Number(event.lastModified)
-          : Date.now(),
-        lastAddedToCalendar: Number.isFinite(Number(event.lastAddedToCalendar))
-          ? Number(event.lastAddedToCalendar)
-          : null,
-        persistentUID
-      };
-
-      if (!normalized.persistentUID) {
-        normalized.persistentUID = generateEventUID(normalized);
-      }
-      this.projectEventTime(normalized);
-      return normalized;
-    };
-    const getEventMergeSignature = (event) => {
-      const startMs = this.getEventInstant(event, 'start').getTime();
-      const endMs = this.getEventInstant(event, 'end').getTime();
-      return [
-        event.timeModel || '',
-        !!event.allDay,
-        event && event.calendar ? event.calendar : 'Home',
-        event && event.title ? event.title : '',
-        event && event.description ? event.description : '',
-        startMs,
-        endMs
-      ].join('||');
-    };
-    const isSameEventContent = (a, b) => {
-      return (
-        (a.timeModel || '') === (b.timeModel || '') &&
-        !!a.allDay === !!b.allDay &&
-        (a.startDate || '') === (b.startDate || '') &&
-        (a.endDate || '') === (b.endDate || '') &&
-        (a.title || '') === (b.title || '') &&
-        (a.description || '') === (b.description || '') &&
-        (a.calendar || 'Home') === (b.calendar || 'Home') &&
-        normalizeHexColor(a.color || '') === normalizeHexColor(b.color || '') &&
-        this.getEventInstant(a, 'start').getTime() === this.getEventInstant(b, 'start').getTime() &&
-        this.getEventInstant(a, 'end').getTime() === this.getEventInstant(b, 'end').getTime()
-      );
-    };
-    const mergeImportedEvents = (incomingEvents) => {
-      const existingById = new Map();
-      const existingBySignature = new Map();
-      this.events.forEach((event) => {
-        const eventId = (typeof event.persistentUID === 'string' && event.persistentUID.trim())
-          ? event.persistentUID.trim()
-          : generateEventUID(event);
-        event.persistentUID = eventId;
-        existingById.set(eventId, event);
-        existingBySignature.set(getEventMergeSignature(event), event);
-      });
-
-      let added = 0;
-      let updated = 0;
-      let skipped = 0;
-
-      incomingEvents.forEach((incoming) => {
-        const incomingId = (typeof incoming.persistentUID === 'string' && incoming.persistentUID.trim())
-          ? incoming.persistentUID.trim()
-          : generateEventUID(incoming);
-        incoming.persistentUID = incomingId;
-
-        const signature = getEventMergeSignature(incoming);
-        const existing = existingById.get(incomingId) || existingBySignature.get(signature);
-
-        if (!existing) {
-          this.events.push(incoming);
-          existingById.set(incomingId, incoming);
-          existingBySignature.set(signature, incoming);
-          added++;
-          return;
-        }
-
-        if (isSameEventContent(existing, incoming)) {
-          existingById.set(incomingId, existing);
-          existingBySignature.set(signature, existing);
-          skipped++;
-          return;
-        }
-
-        const preservedPersistentUID = existing.persistentUID || incomingId;
-        const preservedAddedToCalendar = !!existing.addedToCalendar;
-        const preservedLastAddedToCalendar = Number.isFinite(Number(existing.lastAddedToCalendar))
-          ? Number(existing.lastAddedToCalendar)
-          : null;
-
-        Object.assign(existing, incoming);
-        if (!incoming.allDay) {
-          delete existing.allDay;
-          delete existing.startDate;
-          delete existing.endDate;
-        }
-        this.copyEventTimeProjection(incoming, existing);
-        existing.persistentUID = preservedPersistentUID;
-        existing.addedToCalendar = preservedAddedToCalendar;
-        existing.lastAddedToCalendar = preservedLastAddedToCalendar;
-        existing.lastModified = Date.now();
-
-        existingById.set(existing.persistentUID, existing);
-        existingById.set(incomingId, existing);
-        existingBySignature.set(getEventMergeSignature(existing), existing);
-        updated++;
-      });
-
-      return { added, updated, skipped };
-    };
-    const formatImportMessage = (sourceLabel, totalImported, mergeResult, missingCalendars, invalidCount) => {
-      const parts = [
-        `Processed ${totalImported} event${totalImported !== 1 ? 's' : ''} from ${sourceLabel}.`,
-        `Added ${mergeResult.added}, updated ${mergeResult.updated}, skipped ${mergeResult.skipped}.`
-      ];
-      if (invalidCount > 0) {
-        parts.push(`Ignored ${invalidCount} invalid event${invalidCount !== 1 ? 's' : ''}.`);
-      }
-      if (missingCalendars.size > 0) {
-        parts.push(`Created ${missingCalendars.size} new calendar(s): ${Array.from(missingCalendars).join(', ')}.`);
-      }
-      return parts.join(' ');
+    const normalizeImportedEvent = (input) => {
+      const record = SpiralEventModel.normalize(input);
+      const event = this.normalizeRuntimeEvent({ ...record });
+      const color = normalizeHexColor(/^hsl/i.test(record.color) ? this.hslToHex(record.color) : record.color, '');
+      Object.assign(event, this.createEventColorState({
+        calendarName: record.calendar,
+        eventDate: this.getEventWallDate(event, 'start'),
+        colorSeed: record.colorSeed,
+        customColor: record.colorIsCustom && color ? color : null
+      }));
+      return event;
     };
     importEventsFile.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      
       const reader = new FileReader();
       reader.onload = (evt) => {
         try {
-          const content = evt.target.result;
-          
-          // Try to parse as JSON first
-          try {
-            const imported = JSON.parse(content);
-            if (Array.isArray(imported)) {
-              const newEvents = imported
-                .map((ev) => normalizeImportedEvent(ev))
-                .filter(Boolean);
-              const invalidCount = imported.length - newEvents.length;
-               
-              // Auto-create missing calendars
-              const missingCalendars = new Set();
-              newEvents.forEach(event => {
-                if (event.calendar && !this.state.calendars.includes(event.calendar)) {
-                  missingCalendars.add(event.calendar);
-                }
-              });
-              
-              // Add missing calendars
-              missingCalendars.forEach(calendarName => {
-                this.state.calendars.push(calendarName);
-                // Make new calendars visible by default
-                if (!this.state.visibleCalendars.includes(calendarName)) {
-                  this.state.visibleCalendars.push(calendarName);
-                }
-              });
-              
-              if (missingCalendars.size > 0) {
-                this.requestSettingsSave();
-                if (typeof this.buildCalendarMenu === 'function') {
-                  this.buildCalendarMenu();
-                }
-              }
-
-              if (newEvents.length === 0) {
-                alert(`No valid events found in JSON file.${invalidCount > 0 ? ` Ignored ${invalidCount} invalid event${invalidCount === 1 ? '' : 's'}.` : ''}`);
-                e.target.value = '';
-                return;
-              }
-
-              const mergeResult = mergeImportedEvents(newEvents);
-              if (mergeResult.added > 0 || mergeResult.updated > 0) {
-                this.runWithStudyEventSource('import', () => {
-                  this._eventsVersion++; // Trigger layout cache rebuild
-                  this.saveEventsToStorage();
-                });
-                this.drawSpiral();
-                renderEventList();
-              }
-
-              alert(formatImportMessage('JSON file', newEvents.length, mergeResult, missingCalendars, invalidCount));
-              // Clear the file input so the same file can be imported again
-              e.target.value = '';
-              return;
-            }
-          } catch (jsonError) {
-            // Not JSON, try ICS
-          }
-          
-          // Try to parse as ICS
-          if (content.includes('BEGIN:VCALENDAR') && content.includes('BEGIN:VEVENT')) {
-            const importedEvents = parseICSContent(content)
-              .map((ev) => normalizeImportedEvent(ev))
-              .filter(Boolean);
-            if (importedEvents.length > 0) {
-              // Auto-create missing calendars
-              const missingCalendars = new Set();
-              importedEvents.forEach(event => {
-                if (event.calendar && !this.state.calendars.includes(event.calendar)) {
-                  missingCalendars.add(event.calendar);
-                }
-              });
-              
-              // Add missing calendars
-              missingCalendars.forEach(calendarName => {
-                this.state.calendars.push(calendarName);
-                // Make new calendars visible by default
-                if (!this.state.visibleCalendars.includes(calendarName)) {
-                  this.state.visibleCalendars.push(calendarName);
-                }
-              });
-              
-              if (missingCalendars.size > 0) {
-                this.runWithStudyEventSource('import', () => {
-                  this.requestSettingsSave();
-                });
-                if (typeof this.buildCalendarMenu === 'function') {
-                  this.buildCalendarMenu();
-                }
-              }
-
-              const mergeResult = mergeImportedEvents(importedEvents);
-              if (mergeResult.added > 0 || mergeResult.updated > 0) {
-                this.runWithStudyEventSource('import', () => {
-                  this._eventsVersion++; // Trigger layout cache rebuild
-                  this.saveEventsToStorage();
-                });
-                this.drawSpiral();
-                renderEventList();
-              }
-
-              alert(formatImportMessage('calendar file', importedEvents.length, mergeResult, missingCalendars, 0));
-              // Clear the file input so the same file can be imported again
-              e.target.value = '';
-        } else {
-              alert('No valid events found in the calendar file.');
-            }
+          const content = String(evt.target.result).trim();
+          let records;
+          if (content.startsWith('[') || content.startsWith('{')) {
+            records = JSON.parse(content);
+            if (!Array.isArray(records)) throw new Error('JSON imports must contain an array of events.');
+          } else if (content.includes('BEGIN:VCALENDAR')) {
+            records = SpiralICalendar.parse(content, this.getCalendarTimeZone());
           } else {
-            alert('Unsupported file format. Please use JSON or .ics calendar files.');
+            throw new Error('Unsupported file format. Please use JSON or .ics calendar files.');
           }
-        } catch (err) {
-          alert('Failed to import events: ' + err.message);
+          // A malformed date, duplicate UID or unsupported feature rejects the whole file.
+          const incoming = SpiralEventModel.validateUnique(records.map(normalizeImportedEvent));
+          if (!incoming.length) { alert('No events found in the file.'); return; }
+          const result = this.mergeImportedEvents(incoming);
+          const missingCalendars = new Set(this.events.map(event => event.calendar)
+            .filter(name => !this.state.calendars.includes(name)));
+          for (const name of missingCalendars) {
+            this.state.calendars.push(name);
+            if (!this.state.visibleCalendars.includes(name)) this.state.visibleCalendars.push(name);
+          }
+          if (result.added || result.updated) {
+            this.runWithStudyEventSource('import', () => {
+              if (missingCalendars.size) this.requestSettingsSave();
+              this._eventsVersion++;
+              this.saveEventsToStorage();
+            });
+            if (missingCalendars.size) this.buildCalendarMenu?.();
+            this.drawSpiral();
+            renderEventList();
+          }
+          alert(`Processed ${incoming.length} events. Added ${result.added}, updated ${result.updated}, skipped ${result.skipped}.`
+            + (result.stale ? ` Skipped ${result.stale} older revisions.` : '')
+            + (missingCalendars.size ? ` Created calendars: ${[...missingCalendars].join(', ')}.` : ''));
+        } catch (error) {
+          alert('Failed to import events: ' + error.message);
+        } finally {
+          e.target.value = '';
         }
       };
+      reader.onerror = () => { alert('Could not read the selected file.'); e.target.value = ''; };
       reader.readAsText(file);
     });
 
@@ -2676,9 +2366,21 @@ Object.assign(SpiralCalendar.prototype, {
 
         const rangeMs = endRange.getTime() - startRange.getTime();
         
+        const normalizeGeneratedRange = (start, end) => {
+          const zone = this.getCalendarTimeZone();
+          const instantStart = SpiralTime.wallToInstant(start, zone);
+          let instantEnd;
+          try { instantEnd = SpiralTime.wallToInstant(end, zone, { notBefore: instantStart.getTime() + 1 }); }
+          catch { instantEnd = new Date(instantStart.getTime() + Math.max(60000, end - start)); }
+          const projectedStart = SpiralTime.instantToWall(instantStart, zone);
+          const projectedEnd = SpiralTime.instantToWall(instantEnd, zone);
+          if (projectedEnd <= projectedStart) return null;
+          return { start: projectedStart, end: projectedEnd };
+        };
+
         // Helper function to check if two events overlap
         const eventsOverlap = (ev1, ev2) => {
-          return ev1.start < ev2.end && ev2.start < ev1.end;
+          return this.getEventProjection(ev2).intervals.some(interval => ev1.start.getTime() < interval.endMs && interval.startMs < ev1.end.getTime());
         };
         
         // Helper function to check if a new event overlaps with existing events
@@ -2817,10 +2519,7 @@ Object.assign(SpiralCalendar.prototype, {
             
             // Apply day/night bias using rejection sampling
             if (biasDay) {
-              const tzOffsetHours = (typeof this.getTimezoneOffsetHours === 'function')
-                ? this.getTimezoneOffsetHours(candidateStartDate)
-                : (candidateStartDate.getTimezoneOffset() / -60);
-              const localHour = ((candidateStartDate.getUTCHours() + tzOffsetHours) % 24 + 24) % 24 + candidateStartDate.getUTCMinutes() / 60;
+              const localHour = candidateStartDate.getUTCHours() + candidateStartDate.getUTCMinutes() / 60;
               const { sunrise, sunset } = this.getSunTimesForDate(candidateStartDate);
               const isDay = sunrise <= sunset ? (localHour >= sunrise && localHour < sunset)
                                               : (localHour >= sunrise || localHour < sunset); // polar edge-case
@@ -2843,7 +2542,10 @@ Object.assign(SpiralCalendar.prototype, {
             }
             
             // Check for overlaps with existing events
-            const candidateEvent = { start: startDate, end: endDate };
+            const candidateEvent = normalizeGeneratedRange(startDate, endDate);
+            if (!candidateEvent) continue;
+            startDate = candidateEvent.start;
+            endDate = candidateEvent.end;
             if (!hasOverlap(candidateEvent, this.events)) {
               foundNonOverlappingSlot = true;
               break;
@@ -2864,10 +2566,7 @@ Object.assign(SpiralCalendar.prototype, {
               
               // Apply day/night bias in fallback too
               if (biasDay) {
-            const tzOffsetHours = (typeof this.getTimezoneOffsetHours === 'function')
-              ? this.getTimezoneOffsetHours(startDate)
-              : (startDate.getTimezoneOffset() / -60);
-            const localHour = ((startDate.getUTCHours() + tzOffsetHours) % 24 + 24) % 24 + startDate.getUTCMinutes() / 60;
+            const localHour = startDate.getUTCHours() + startDate.getUTCMinutes() / 60;
                 const { sunrise, sunset } = this.getSunTimesForDate(startDate);
             const isDay = sunrise <= sunset ? (localHour >= sunrise && localHour < sunset)
                                                 : (localHour >= sunrise || localHour < sunset);
@@ -2888,6 +2587,9 @@ Object.assign(SpiralCalendar.prototype, {
             }
           }
 
+          const validRange = normalizeGeneratedRange(startDate, endDate);
+          if (!validRange) continue;
+          ({ start: startDate, end: endDate } = validRange);
           const colorState = this.createEventColorState({
             calendarName: 'Random',
             eventDate: startDate
@@ -2910,7 +2612,7 @@ Object.assign(SpiralCalendar.prototype, {
             calendar: 'Random'
             })
           };
-        this.initializeEventTime(ev);
+        this.initializeEventFromWallTimes(ev);
         this.events.push(ev);
         this._eventsVersion++;
         }
@@ -3024,15 +2726,17 @@ Object.assign(SpiralCalendar.prototype, {
       }
 
       renderEventList();
-      const now = SpiralTime.instantToWall(new Date(), this.getCalendarTimeZone());
-      const nextHour = new Date(now);
-      nextHour.setUTCHours(now.getUTCHours() + 1, 0, 0, 0);
-      const validNextHour = SpiralTime.instantToWall(SpiralTime.wallToInstant(nextHour, this.getCalendarTimeZone()), this.getCalendarTimeZone());
-      const nextHourString = SpiralTime.formatWall(validNextHour);
-      eventStart.value = nextHourString;
-      const endTime = this.getDefaultEventEnd(validNextHour);
-      eventEnd.value = SpiralTime.formatWall(endTime);
-      if (typeof syncEventBoxes === 'function') syncEventBoxes();
+      const instantNow = new Date();
+      const zone = this.getCalendarTimeZone();
+      const hourStart = SpiralTime.instantToWall(instantNow, zone);
+      hourStart.setUTCMinutes(0, 0, 0);
+      const nextHour = new Date(hourStart.getTime() + SpiralTime.HOUR);
+      const upcoming = [hourStart, nextHour].flatMap(wall => SpiralTime.possibleInstants(wall, zone))
+        .filter(instant => instant > instantNow).sort((a, b) => a - b);
+      const nextStart = upcoming[0] || SpiralTime.wallToInstant(nextHour, zone);
+      eventStart.value = SpiralTime.formatWall(SpiralTime.instantToWall(nextStart, zone));
+      syncOccurrence('start', nextStart);
+      populateDefaultEnd();
       applyAddEventPaletteSuggestion({ resetSeed: true, resetManual: true, forceAuto: true });
       eventTitle.value = '';
       eventDescription.value = '';
@@ -3131,6 +2835,8 @@ Object.assign(SpiralCalendar.prototype, {
     }
     // Add event
     addEventBtn.addEventListener('click', () => {
+      syncEventBoxes();
+      if (addEventBtn.disabled) return;
       this.playFeedback(); // Add click sound
       const title = eventTitle.value.trim();
       const description = eventDescription.value.trim();
@@ -3140,7 +2846,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (startDate && endDate) {
         const parsedStartDate = parseDateTimeLocalAsUTC(startDate);
         const parsedEndDate = parseDateTimeLocalAsUTC(endDate);
-        if (!Number.isFinite(parsedStartDate.getTime()) || !Number.isFinite(parsedEndDate.getTime()) || parsedEndDate <= parsedStartDate) {
+        if (!Number.isFinite(parsedStartDate.getTime()) || !Number.isFinite(parsedEndDate.getTime())) {
           alert('Choose valid dates with the end after the start.');
           return;
         }
@@ -3168,7 +2874,7 @@ Object.assign(SpiralCalendar.prototype, {
             calendar: chosenCalendar
           })
         };
-        try { this.initializeEventTime(event, { rejectGap: true }); }
+        try { this.initializeEventFromWallTimes(event, { rejectGap: true, startOccurrence: getOccurrence('start'), endOccurrence: getOccurrence('end') }); }
         catch (error) { alert(error.message); return; }
         this.runWithStudyEventSource('add_panel', () => {
           this.events.push(event);
@@ -3256,28 +2962,16 @@ Object.assign(SpiralCalendar.prototype, {
       descCharCount.textContent = e.target.value.length;
       });
       // Auto-populate end date when start date changes
-    eventStart.addEventListener('change', (e) => {
-      const startValue = e.target.value;
-      if (!startValue) return;
-      const start = SpiralTime.parseWall(startValue);
-      eventEnd.value = SpiralTime.formatWall(this.getDefaultEventEnd(start));
-      if (typeof syncEventBoxes === 'function') syncEventBoxes();
+    eventStart.addEventListener('change', () => {
+      populateDefaultEnd();
       applyAddEventPaletteSuggestion();
     });
-    // Prevent end date from being set earlier than start date
-    eventEnd.addEventListener('change', (e) => {
-      const startValue = eventStart.value;
-      const endValue = eventEnd.value;
-      if (!startValue || !endValue) return;
-      const startDate = parseDateTimeLocalAsUTC(startValue);
-      let endDate = parseDateTimeLocalAsUTC(endValue);
-      if (endDate <= startDate) {
-        // Auto-adjust end time to be 1 hour after start time
-        endDate = this.getDefaultEventEnd(startDate);
-        eventEnd.value = SpiralTime.formatWall(endDate);
-      }
-      if (typeof syncEventBoxes === 'function') syncEventBoxes();
-      });
+    eventEnd.addEventListener('change', syncEventBoxes);
+    occurrenceFields.start.select.addEventListener('change', populateDefaultEnd);
+    occurrenceFields.end.select.addEventListener('change', syncEventBoxes);
+    [eventStartBox, eventEndBox].forEach(box => box?.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); box.click(); }
+    }));
       
       // Render the event list after everything is set up
       renderEventList();

@@ -10,10 +10,14 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   serializeEventsForStorage() {
-    return JSON.stringify(this.events.map(event => {
+    return JSON.stringify(SpiralEventModel.validateUnique(this.events.map(event => {
       this.ensureEventColorMetadata(event);
       return this.serializeEventTime(event);
-    }));
+    })));
+  },
+
+  getEventRevisions() {
+    return this._eventRevisions || (this._eventRevisions = new SpiralEventModel.Revisions());
   },
 
   getEventStorageSnapshot(raw) {
@@ -36,7 +40,14 @@ Object.assign(SpiralCalendar.prototype, {
   saveEventsToStorage() {
     const storage = this.getEventStorage();
     let raw;
-    try { raw = this.serializeEventsForStorage(); }
+    try {
+      const records = this.getEventRevisions().prepare(JSON.parse(this.serializeEventsForStorage()));
+      records.forEach((record, index) => {
+        this.events[index].sequence = record.sequence;
+        this.events[index].lastModified = record.lastModified;
+      });
+      raw = JSON.stringify(records);
+    }
     catch (error) {
       storage.reportFailure('save', error);
       return Promise.resolve(false);
@@ -60,18 +71,15 @@ Object.assign(SpiralCalendar.prototype, {
     const storage = this.getEventStorage();
     try {
       const events = storage.load().map(event => {
-        const loaded = { ...event, start: new Date(event.start), end: new Date(event.end) };
-        this.projectEventTime(loaded);
-        if (!loaded.calendar) loaded.calendar = 'Home';
-        if (!loaded.persistentUID) loaded.persistentUID = generateEventUID(loaded);
-        if (!loaded.lastModified) loaded.lastModified = Date.now();
-        if (!loaded.lastAddedToCalendar) loaded.lastAddedToCalendar = null;
+        const loaded = SpiralEventModel.normalize(event, { stored: true });
+        this.normalizeRuntimeEvent(loaded);
         this.ensureEventColorMetadata(loaded);
         return loaded;
       });
       // Replace memory only after every stored event has loaded successfully.
       this.events = events;
       this._savedEventsSnapshot = this.getEventStorageSnapshot(this.serializeEventsForStorage());
+      this.getEventRevisions().reset(events.map(event => this.serializeEventTime(event)));
       this._externalEventStorageChangePending = false;
       this._eventsVersion++;
       if (options.external && this.studySession?.isRecording) {

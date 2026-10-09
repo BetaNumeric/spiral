@@ -155,6 +155,8 @@
       color: var(--dark-text-primary) !important;
     }
     body.dark-mode .dt-box { background: var(--dark-bg-secondary) !important; color: var(--dark-text-primary) !important; border-color: var(--dark-border) !important; }
+    body.dark-mode #eventStartOccurrence,
+    body.dark-mode #eventEndOccurrence { background: var(--dark-bg-secondary); color: var(--dark-text-primary); border-color: var(--dark-border); color-scheme: dark; }
     body.dark-mode button { color: var(--dark-text-secondary) !important; }
     
     /* Dark mode button styling */
@@ -871,6 +873,8 @@
       user-select: none;
     }
 
+    #addEventBtn:disabled { opacity: 0.55; cursor: default; }
+
     /* Reusable custom date/time box style */
     .dt-box {
       display: block;
@@ -1046,19 +1050,28 @@
       <div style="display: flex; gap: 0; margin-top: 0.85em; align-items: center;">
         <div style="flex: 1;">
           <div style="position: relative;">
-          <span id="eventStartBox" class="dt-box"></span>
+          <span id="eventStartBox" class="dt-box" role="button" tabindex="0" aria-label="Start date and time"></span>
           <input type="datetime-local" id="eventStart" class="visually-hidden-datetime">
         </div>
       </div>
         <div class="date-picker-separator" style="height: 0; border-top: 1px solid #ccc; flex: 0 0 16px;"></div>
         <div style="flex: 1;">
           <div style="position: relative;">
-          <span id="eventEndBox" class="dt-box"></span>
+          <span id="eventEndBox" class="dt-box" role="button" tabindex="0" aria-label="End date and time"></span>
           <input type="datetime-local" id="eventEnd" class="visually-hidden-datetime">
           </div>
         </div>
       </div>
-      
+      <label id="eventStartOccurrenceRow" hidden style="margin-top: 0.5em;">
+        Start occurrence
+        <select id="eventStartOccurrence" aria-describedby="eventDuration" style="width: 100%; padding: 0.4em; font: inherit;"></select>
+      </label>
+      <label id="eventEndOccurrenceRow" hidden style="margin-top: 0.5em;">
+        End occurrence
+        <select id="eventEndOccurrence" aria-describedby="eventDuration" style="width: 100%; padding: 0.4em; font: inherit;"></select>
+      </label>
+      <div id="eventDuration" role="status" aria-live="polite" style="margin-top: 0.5em; font-size: 0.9em;"></div>
+
       <label style="display: block; margin-top: 0.85em; width: 100%; position: relative; overflow: hidden;">
         <span id="colorBox" style="display: block; width: 100%; height: 2.2em; border-radius: 0.3em; border: 1px solid #ccc; background: #fff; cursor: pointer;"></span>
         <input type="color" id="eventColor" style="opacity: 0; position: absolute; top: 0; left: 0; width: 100%; height: 2.2em; cursor: pointer;">
@@ -1505,14 +1518,15 @@
         <!-- Location controls (only visible when night overlay is enabled) -->
         <div id="locationControls">
           <div class="location-control-row location-search-row">
-            <input type="text" id="locationSearch" class="location-field location-field-search" placeholder="Search location">
-            <button id="locationSearchBtn" class="location-action-btn location-icon-btn" title="Search"></button>
-            <button id="geoLocationBtn" class="location-action-btn location-icon-btn" title="Use device location"></button>
+            <input type="text" id="locationSearch" class="location-field location-field-search" placeholder="Search city or place" aria-label="City or place" aria-describedby="locationSearchStatus" autocomplete="off">
+            <button id="locationSearchBtn" class="location-action-btn location-icon-btn" title="Search" aria-label="Search places"></button>
+            <button id="geoLocationBtn" class="location-action-btn location-icon-btn" title="Use device location" aria-label="Use device location"></button>
           </div>
-          <div id="locationSearchSuggestions" role="listbox" aria-label="Location suggestions"></div>
+          <div id="locationSearchSuggestions" role="group" aria-label="Location results"></div>
+          <div id="locationSearchStatus" role="status" style="font-size: 0.78em; margin-top: 0.25em;"></div>
           <div class="location-control-row location-coord-row">
-            <input type="number" id="latInput" class="location-field" step="0.0001" placeholder="Lat" value="53.0793">
-            <input type="number" id="lngInput" class="location-field" step="0.0001" placeholder="Lng" value="8.8017">
+            <input type="number" id="latInput" class="location-field" step="0.0001" min="-90" max="90" placeholder="Lat" aria-label="Latitude" value="53.0793">
+            <input type="number" id="lngInput" class="location-field" step="0.0001" min="-180" max="180" placeholder="Lng" aria-label="Longitude" value="8.8017">
             <button id="setLocationBtn" class="location-action-btn location-icon-btn" title="Set coordinates" aria-label="Set coordinates"></button>
           </div>
           <label style="display:flex; align-items:center; gap:0.45em; margin-top: 0.8em; font-size: 0.9em;">
@@ -1594,6 +1608,9 @@
   <script src="js/app-version.js"></script>
   <script src="a2hs.js"></script>
   <script src="js/time-model.js"></script>
+  <script src="js/event-model.js"></script>
+  <script src="js/event-projection.js"></script>
+  <script src="js/location-search.js"></script>
   <script src="js/icalendar.js"></script>
   <script src="js/config-utils.js"></script>
   <script src="js/settings-config.js"></script>
@@ -1601,6 +1618,7 @@
   <script src="js/core.js"></script>
   <script src="js/core-methods.js"></script>
   <script src="js/event-time.js"></script>
+  <script src="js/event-transfer.js"></script>
   <script src="js/ui-handlers.js"></script>
   <script src="js/ui-event-panel.js"></script>
   <script src="js/input-mouse.js"></script>

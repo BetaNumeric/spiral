@@ -28,7 +28,7 @@ https://github.com/user-attachments/assets/25569a37-a7fb-4b82-8bc3-bdac0c8dc9c4
 
 ## **Adding and Editing Events**
 
-The info circle lets you add an event to the calendar. It contains several input fields and a button to add the event. In the center are two fields for setting the event’s start and end time and date, which defaults to the beginning and end of the selected segment. Above them, you can add a title and description. Below, you can choose which calendar the event belongs to. “Home” and “Work” are defaults, but custom calendars can be added.
+The info circle lets you add an event to the calendar. It contains several input fields and a button to add the event. In the center are two fields for setting the event’s start and end time and date. New events default to one elapsed hour from the selected segment, including clock changes. A duration label shows the actual time between the endpoints. Above them, you can add a title and description. Below, you can choose which calendar the event belongs to. “Home” and “Work” are defaults, but custom calendars can be added.
 The circle has an outline in the event’s color. You can change the randomly selected default color by clicking this ring or clicking on the selected segment containing the event.
 
 When you click the “Add Event” button at the bottom, the circle closes, and the event is added to the spiral calendar, coloring the area during which it takes place. Clicking any segment with an event in it opens a similar window, but with the event’s data already in the input fields. At the bottom, there are two buttons, one to delete the event and one to add a new event, which opens an empty circle like before. You can also quickly press the `Delete` or `Backspace` keys while an event is selected to trigger the deletion. If you change anything, the “add” button becomes a “done” button, which closes the event screen.
@@ -40,32 +40,59 @@ https://github.com/user-attachments/assets/3ff0ea48-aaf1-4e68-8e91-d3330bf4e0c8
 
 Another feature is the manipulation of an event’s length in the spiral directly. When clicking on an event, it will open the event circle and also show a handle at the start and end of the event. You can click and drag each handle to increase or decrease the event’s length. While dragging, it will switch to spiral mode and hide the event screen. When releasing the handle, the event is saved with the new start and end time. 
 
-All your events and configuration settings remain completely private, as the application stores its data entirely locally on your device within your browser's local storage.
+Events and configuration settings are stored locally in your browser. Explicit location searches send the place name to Open-Meteo; device-location and coordinate lookup use a reverse-geocoding service. Calendar sharing sends the events you choose to your external calendar.
 
 Event saves are coordinated across open windows. Idle windows refresh when another
 window saves events. If two windows edit an older copy, Spiral blocks the stale
 save and offers a download of the unsaved events before reloading the saved copy.
 Failed saves show a notice with retry and download actions; unreadable stored data
-is preserved rather than replaced with an empty calendar. The existing JSON event
-format and timestamps of older events are preserved. Reload older open windows after an app update
-so they also use these protections.
+is preserved rather than replaced with an empty calendar. Reload older open windows after an app update so they also use these protections.
 
-New events and calendar imports use `timeModel: "instant-v1"`: their JSON start
-and end values are real UTC instants, converted to the selected calendar time
-zone for display. Changing the display zone does not change these saved instants.
-Older events without that marker retain their existing behavior because their
-original time-zone meaning cannot be recovered reliably. No automatic date
-migration is performed. Reload all open windows after updating to version 1.42.21
-before editing events, so every window understands the new records.
+Events use one canonical format: `timeModel: "instant-v1"`, actual UTC start/end
+instants, a permanent UID (`persistentUID`), and a nonnegative increasing
+`sequence`. New events receive secure random UUIDs; imports retain their supplied
+UIDs. Runtime Dates retain the same actual timestamps as storage; both renderers
+use shared immutable display projections. Changing the display zone changes only the view. Content edits
+increase the revision; saving again or sharing an unchanged event does not.
+All calendar exports use the same serializer and retain these identities.
+Imports match by UID, keep distinct events with identical content, and skip
+older revisions. Invalid records and duplicate UIDs reject the entire file.
+JSON timestamps require an explicit UTC offset.
+
+Version 1.42.22 starts a new prototype event store, `spiralCalendarEventsV2`.
+Earlier sample records remain untouched under the old key but are not loaded
+or automatically migrated. No compatibility or legacy timestamp guessing is
+retained. Current-format JSON and ICS files can be imported normally.
 
 Calendar imports honor UTC dates, IANA `TZID` values, floating times in the
 selected zone, all-day dates with exclusive end dates, and day/week/time
-durations. Unsupported recurring schedules, custom time-zone definitions,
-cancellations, and intervals that run backwards through a repeated clock hour
-are rejected before any events are imported. Nonexistent clock times entered
+durations. Clock-change events render as separate pieces in both views; skipped
+hours stay blank, and repeated times can be created or edited by choosing their first or
+second occurrence. The Add Event panel displays these choices with UTC offsets
+and previews the actual duration. On October 25, 2026 in Europe/Berlin, a new
+event at the first 02:00 ends at the second 02:00 after one hour; starting at the
+second 02:00 instead ends at 03:00. All-day durations count calendar dates.
+Unsupported recurring schedules, custom time-zone definitions
+and cancellations are rejected before any events are imported. Nonexistent clock times entered
 manually during a daylight-saving change are reported instead of silently saved.
 The conversion boundary and its current limits are documented in
 [docs/time-model.md](docs/time-model.md).
+
+Location search runs only after pressing Enter or the Search button. It looks up
+cities, places and postal codes, shows selectable matches, and uses their IANA
+time zones. Results are cached for 24 hours; saved results up to seven days old
+are available when search is offline. Requests are serialized, spaced at least
+one second apart, cancelled when superseded, and time out after ten seconds.
+Coordinates and device location are still available. Keyboard users can use
+Arrow Down/Up to move through results and Enter to choose one.
+
+The default [Open-Meteo geocoding endpoint](https://open-meteo.com/en/docs/geocoding-api)
+is for non-commercial use under its [free-service terms](https://open-meteo.com/en/terms).
+A commercial release needs a suitable paid service or proxy. An
+Open-Meteo-compatible endpoint can be selected by setting
+`window.SPIRAL_LOCATION_SEARCH_ENDPOINT` before `bootstrap.js` loads. The UI
+attributes Open-Meteo and GeoNames. This provider supplies place lookup rather
+than street-address search; coordinates remain available for exact locations.
 
 Storage regression checks use Node's built-in test runner:
 `node --test tests/*.test.mjs`. In environments that prohibit spawning test
@@ -92,7 +119,7 @@ At the bottom, there is the option to reset the settings to the default.
 
 ## **Developer Mode and Experimental Features**
 
-More experimental settings are hidden, but can be accessed in the developer mode. Local builds keep developer and study controls hidden by default; append `?dev=1` to the URL to show the developer-mode toggle, append `?study=1` to show study-session controls, or combine them as `?dev=1&study=1`. These flags are remembered in local storage, so installing the PWA after opening one of those URLs keeps the same mode when the installed app later launches from its normal PWA start URL. Use `?dev=0` or `?study=0` to turn a remembered flag off. For build-level defaults, change `DEFAULT_DEV_MODE` or `DEFAULT_STUDY_MODE` in `js/config-utils.js`.
+The Dev Options button and Study Session section are visible by default, including in the installed PWA. Advanced dev settings start collapsed and can be opened with Show Dev Options. Earlier saved visibility flags do not hide these controls on a normal launch. To hide them for a particular page, use `?dev=0` or `?study=0`; returning to the normal URL shows them again. For build-level defaults, change `DEFAULT_DEV_MODE` or `DEFAULT_STUDY_MODE` in `js/config-utils.js`.
 
 For fine-grained control of the calendar's looks, the dev setting includes a group of advanced visual options. Here you can toggle additional guide lines (such as noon or 6 am / 6 pm markers), show or hide segment borders, and adjust how text is rendered inside the spiral (for example, showing year and month names only on the first segment of each period). You can also fine-tune how hours, days, months, and years are labeled, choosing between different formats and levels of detail.
 

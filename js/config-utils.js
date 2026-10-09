@@ -33,8 +33,8 @@ const CONFIG = {
 };
 
 const RUNTIME_FEATURE_FLAGS_STORAGE_KEY = 'spiralRuntimeFeatureFlags';
-const DEFAULT_DEV_MODE = false;
-const DEFAULT_STUDY_MODE = false;
+const DEFAULT_DEV_MODE = true;
+const DEFAULT_STUDY_MODE = true;
 
 function parseRuntimeFeatureFlagValue(value) {
   if (value === null || value === undefined) return null;
@@ -101,16 +101,19 @@ function resolveRuntimeFeatureFlag(paramName, fallback = false) {
     return urlValue;
   }
 
+  // Visible-by-default builds keep their controls available despite older saved opt-outs.
+  // An explicit URL flag still controls the current page.
+  if (fallback === true) return true;
   const storedValue = getStoredRuntimeFeatureFlag(paramName);
   if (storedValue !== null) return storedValue;
   return fallback;
 }
 
-// Advanced/research UI is opt-in for normal builds. URL flags are persisted for installed PWAs.
+// Developer and study controls are available on normal launches, including installed PWAs.
 const DEV_MODE = resolveRuntimeFeatureFlag('dev', DEFAULT_DEV_MODE);
 const STUDY_MODE = resolveRuntimeFeatureFlag('study', DEFAULT_STUDY_MODE);
 
-// Runtime DEV_MODE override (for toggle button). Default to hidden.
+// Advanced options start collapsed; their toggle button remains available.
 let runtimeDevModeOverride = false;
 
 // Helper function to get effective DEV_MODE state
@@ -188,9 +191,12 @@ try {
 // Format a Date as UTC for ICS (YYYYMMDDTHHMMSSZ)
 function formatIcsDateUTC(date) {
   const d = new Date(date);
+  if (!Number.isFinite(d.getTime()) || d.getUTCFullYear() < 0 || d.getUTCFullYear() > 9999) {
+    throw new Error('Calendar export requires dates between years 0000 and 9999.');
+  }
   const pad = (n) => String(n).padStart(2, '0');
   return (
-    d.getUTCFullYear() +
+    String(d.getUTCFullYear()).padStart(4, '0') +
     pad(d.getUTCMonth() + 1) +
     pad(d.getUTCDate()) +
     'T' +
@@ -205,53 +211,15 @@ function formatIcsDateUTC(date) {
 function escapeIcsText(text) {
   if (text == null) return '';
   return String(text)
+    .replace(/\r\n|\r/g, '\n')
     .replace(/\\/g, '\\\\')
     .replace(/[,;]/g, '\\$&')
-    .replace(/\n/g, '\\n')
-    .replace(/\r/g, '\\r');
+    .replace(/\n/g, '\\n');
 }
 
-// Generate consistent UID for calendar events to prevent duplicates
+// Assign an identity once; edits and exports keep it.
 function generateEventUID(event) {
-  // If event has a persistent UID, use it (for existing events)
-  if (event.persistentUID) {
-    return event.persistentUID;
-  }
-  
-  // For new events, create a hash-like identifier based on event properties
-  const eventKey = `${event.title}-${event.start.getTime()}-${event.end.getTime()}-${event.description || ''}`;
-  
-  // Simple hash function to create a consistent UID
-  let hash = 0;
-  for (let i = 0; i < eventKey.length; i++) {
-    const char = eventKey.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  
-  // Use absolute value and convert to base36 for shorter UID
-  const uidHash = Math.abs(hash).toString(36);
-  
-  // Format: spiral-[hash]-[calendar] for consistency
-  const calendar = event.calendar || 'Home';
-  return `spiral-${uidHash}-${calendar.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-}
-
-// Generate sequence number for event updates
-function generateEventSequence(event) {
-  // Use a combination of event properties to create a sequence number
-  // This helps calendar apps identify when an event has been updated
-  const sequenceKey = `${event.title}-${event.start.getTime()}-${event.end.getTime()}-${event.description || ''}-${event.color}`;
-  
-  let hash = 0;
-  for (let i = 0; i < sequenceKey.length; i++) {
-    const char = sequenceKey.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  
-  // Return a sequence number (0-999) based on the hash
-  return Math.abs(hash) % 1000;
+  return SpiralEventModel.initializeIdentity(event).persistentUID;
 }
 
 // Format a Date for <input type="datetime-local"> using local time

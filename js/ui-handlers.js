@@ -447,7 +447,8 @@ Object.assign(SpiralCalendar.prototype, {
     document.addEventListener('keydown', (e) => {
       const target = e.target;
       const tagName = target && target.tagName ? target.tagName.toLowerCase() : '';
-      const inInput = target && (target.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select');
+      const inInput = target && (target.isContentEditable || ['input', 'textarea', 'select', 'button'].includes(tagName)
+        || target.closest?.('[role="button"]'));
 
       // 1. Delete Event Handling via Delete or Backspace key
       if ((e.key === 'Delete' || e.key === 'Backspace') && !inInput) {
@@ -1575,8 +1576,8 @@ Object.assign(SpiralCalendar.prototype, {
     };
 
     window.addEventListener('keydown', (e) => {
-      // Don't intercept if user is typing in an input field
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+      // Native controls and handled keys keep their own keyboard behavior.
+      if (e.defaultPrevented || e.target.isContentEditable || e.target.closest?.('input, textarea, select, button, [role="button"]')) return;
       
       // Track modifiers globally
       this.keyboardState.modifiers.shift = e.shiftKey;

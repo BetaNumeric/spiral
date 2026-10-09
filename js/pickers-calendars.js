@@ -8,21 +8,104 @@ Object.assign(SpiralCalendar.prototype, {
     return probe.value === value;
   },
 
-  applyEventDateTimeInputValue(event, type, rawValue) {
+  commitEventDateTimeInput(event, type, value) {
+    const wall = SpiralTime.parseWall(value.trim());
+    if (!event.allDay && Number.isFinite(wall.getTime())
+      && SpiralTime.possibleInstants(wall, this.getCalendarTimeZone()).length > 1) {
+      this.openRepeatedTimeChooser(event, type, value);
+      return true;
+    }
+    return this.applyEventDateTimeInputValue(event, type, value);
+  },
+
+  openRepeatedTimeChooser(event, type, value) {
+    this._cleanupRepeatedTimeChooser?.();
+    const wall = SpiralTime.parseWall(value.trim());
+    const choices = SpiralTime.possibleInstants(wall, this.getCalendarTimeZone());
+    const panel = document.createElement('div');
+    panel.id = 'repeatedTimeChooser';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('aria-labelledby', 'repeatedTimeTitle');
+    panel.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10002;width:min(320px,calc(100vw - 32px));box-sizing:border-box;padding:16px;border:1px solid #888;border-radius:10px;box-shadow:0 8px 32px #0004;background:var(--dark-bg-secondary,white);color:var(--dark-text-primary,#222);';
+    if (!document.body.classList.contains('dark-mode')) { panel.style.background = 'white'; panel.style.color = '#222'; }
+    const heading = document.createElement('div');
+    heading.id = 'repeatedTimeTitle';
+    heading.textContent = 'This clock time occurs twice';
+    const label = document.createElement('label');
+    label.htmlFor = 'repeatedTimeOccurrence';
+    label.textContent = `${type === 'start' ? 'Start' : 'End'}: ${value.replace('T', ' ')}`;
+    label.style.cssText = 'display:block;margin:12px 0 6px;';
+    const select = document.createElement('select');
+    select.id = 'repeatedTimeOccurrence';
+    select.style.cssText = 'width:100%;padding:8px;font:inherit;';
+    choices.forEach((instant, index) => {
+      const option = document.createElement('option');
+      option.value = String(index);
+      option.textContent = `${index === 0 ? 'First occurrence' : 'Second occurrence'} (${this.formatEventOffset(wall - instant)})`;
+      select.appendChild(option);
+    });
+    try {
+      const preferred = this.resolveEventWallTime(event, type, wall).getTime();
+      select.value = String(Math.max(0, choices.findIndex(instant => instant.getTime() === preferred)));
+    } catch (_) { select.value = '0'; }
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;margin-top:12px;';
+    const cancel = document.createElement('button');
+    cancel.textContent = 'Cancel';
+    const apply = document.createElement('button');
+    apply.textContent = 'Apply';
+    const previousFocus = document.activeElement;
+    const cleanup = () => {
+      panel.remove();
+      if (this._cleanupRepeatedTimeChooser === cleanup) this._cleanupRepeatedTimeChooser = null;
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+    this._cleanupRepeatedTimeChooser = cleanup;
+    cancel.addEventListener('click', cleanup);
+    apply.addEventListener('click', () => {
+      if (this.applyEventDateTimeInputValue(event, type, value, { occurrence: Number(select.value) })) cleanup();
+    });
+    panel.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { e.preventDefault(); cleanup(); }
+      else if (e.key === 'Enter') { e.preventDefault(); apply.click(); }
+      else if (e.key === 'Tab') {
+        const elements = [select, cancel, apply];
+        const index = elements.indexOf(document.activeElement);
+        e.preventDefault();
+        elements[(index + (e.shiftKey ? 2 : 1)) % elements.length].focus();
+      }
+    });
+    actions.append(cancel, apply);
+    panel.append(heading, label, select, actions);
+    document.body.appendChild(panel);
+    select.focus();
+  },
+
+  applyEventDateTimeInputValue(event, type, rawValue, { occurrence } = {}) {
     if (!event || typeof rawValue !== 'string' || !rawValue.trim()) return false;
     const parsedValue = parseDateTimeLocalAsUTC(rawValue.trim());
     if (!(parsedValue instanceof Date) || !Number.isFinite(parsedValue.getTime())) {
       return false;
     }
-    if (event.timeModel === 'instant-v1') {
-      try { SpiralTime.wallToInstant(parsedValue, this.getCalendarTimeZone(), { disambiguation: 'reject' }); }
-      catch (error) { alert(error.message); return false; }
-    }
+    let chosen;
+    try { chosen = this.resolveEventWallTime(event, type, parsedValue, { occurrence }); }
+    catch (error) { alert(error.message); return false; }
 
-    const start = type === 'start' ? parsedValue : event.start;
-    const requestedEnd = type === 'end' ? parsedValue : event.end;
-    const end = requestedEnd <= start ? this.getDefaultEventEnd(start, event) : requestedEnd;
-    if (!this.applyEventTimeRange(event, start, end)) return false;
+    if (event.isDraft && event.autoEnd && type === 'start') {
+      const candidate = { ...event, start: chosen, end: new Date(chosen.getTime() + SpiralTime.HOUR) };
+      this.getEventProjection(candidate);
+      Object.assign(event, candidate);
+    } else {
+      const start = type === 'start' ? parsedValue : this.getEventWallDate(event, 'start');
+      const requestedEnd = type === 'end' ? parsedValue : this.getEventWallDate(event, 'end');
+      const options = type === 'start' ? { startOccurrence: occurrence } : { endOccurrence: occurrence };
+      let end;
+      try { end = this.getAdjustedEventWallEnd(event, start, requestedEnd, options); }
+      catch (error) { alert(error.message); return false; }
+      if (!this.applyEventTimeRange(event, start, end, options)) return false;
+    }
+    if (event.isDraft && type === 'end') event.autoEnd = false;
 
     this.syncEventAutoColor(event);
     const persistentColorPicker = document.getElementById('persistentColorPicker');
@@ -162,7 +245,7 @@ Object.assign(SpiralCalendar.prototype, {
       input.select();
     };
     const save = () => {
-      if (this.applyEventDateTimeInputValue(event, type, input.value)) {
+      if (this.commitEventDateTimeInput(event, type, input.value)) {
         cleanup();
       } else {
         showInvalidState();
@@ -195,9 +278,10 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   openDateTimePicker(event, type, anchorBox = null) {
-    const eventTime = new Date(type === 'start' ? event.start : event.end);
+    const eventTime = this.getEventWallDate(event, type);
     const localValue = SpiralTime.formatWall(eventTime);
-    if (!this.supportsNativeDateTimeLocalValue(localValue)) {
+    if (!this.supportsNativeDateTimeLocalValue(localValue)
+      || (!event.allDay && SpiralTime.possibleInstants(eventTime, this.getCalendarTimeZone()).length > 1)) {
       this.openExtendedDateTimeEditor(event, type, localValue, anchorBox);
       return;
     }
@@ -247,7 +331,7 @@ Object.assign(SpiralCalendar.prototype, {
     
     const handleChange = () => {
       if (input.value) {
-        this.applyEventDateTimeInputValue(event, type, input.value);
+        this.commitEventDateTimeInput(event, type, input.value);
       }
       if (input.parentNode) {
         input.remove();

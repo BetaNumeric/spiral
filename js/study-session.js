@@ -241,17 +241,7 @@ Object.assign(SpiralCalendar.prototype, {
     if (!event || typeof event !== 'object') return null;
     if (event.persistentUID) return event.persistentUID;
 
-    const normalizedEvent = {
-      ...event,
-      start: event.start instanceof Date ? event.start : new Date(event.start),
-      end: event.end instanceof Date ? event.end : new Date(event.end)
-    };
-
-    if (typeof generateEventUID === 'function') {
-      return generateEventUID(normalizedEvent);
-    }
-
-    return `${normalizedEvent.title || 'event'}-${normalizedEvent.start.getTime()}-${normalizedEvent.end.getTime()}`;
+    return generateEventUID(event);
   },
 
   describeEventForStudy(event) {

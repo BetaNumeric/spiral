@@ -86,18 +86,33 @@
           title: text(props.get('SUMMARY')?.value || 'Untitled Event'),
           description: text(props.get('DESCRIPTION')?.value || ''),
           calendar: text(props.get('X-SPIRAL-CALENDAR')?.value || 'Home'),
-          persistentUID: props.get('UID')?.value.trim() || '',
+          persistentUID: text(props.get('UID')?.value.trim() || ''),
+          sequence: props.has('SEQUENCE') ? Number(props.get('SEQUENCE').value) : 0,
           start: start.instant, end: end.instant, timeModel: 'instant-v1'
         };
+        if (props.has('SEQUENCE') && !/^\+?\d+$/.test(props.get('SEQUENCE').value)) throw new Error('Invalid calendar revision number.');
+        SpiralEventModel.initializeIdentity(event);
+        if (props.has('LAST-MODIFIED')) {
+          const modified = props.get('LAST-MODIFIED');
+          if (!/^\d{8}T\d{6}Z$/.test(modified.value)) throw new Error('LAST-MODIFIED must be a UTC date-time.');
+          event.lastModified = dateProperty(modified, 'UTC').instant.getTime();
+        }
         if (start.allDay) {
           event.allDay = true;
           event.startDate = SpiralTime.formatWall(start.wall).split('T')[0];
           event.endDate = SpiralTime.formatWall(end.wall).split('T')[0];
-        } else if (SpiralTime.instantToWall(end.instant, defaultZone) <= SpiralTime.instantToWall(start.instant, defaultZone)) {
-          throw new Error('An event crosses a repeated clock hour that Spiral cannot yet display. No events were imported.');
         }
         const color = props.get('X-SPIRAL-COLOR') || props.get('COLOR');
-        if (color) { event.color = color.value.trim(); event.colorIsCustom = true; }
+        const customColor = props.get('X-SPIRAL-COLOR-CUSTOM');
+        if (customColor && !['TRUE', 'FALSE'].includes(customColor.value)) throw new Error('Invalid calendar color mode.');
+        if (color) { event.color = text(color.value).trim(); event.colorIsCustom = customColor?.value !== 'FALSE'; }
+        const seed = props.get('X-SPIRAL-COLOR-SEED');
+        if (seed) {
+          if (!/^\d+$/.test(seed.value) || !Number.isInteger(Number(seed.value)) || Number(seed.value) > 0xffffffff) {
+            throw new Error('Invalid calendar color seed.');
+          }
+          event.colorSeed = Number(seed.value);
+        }
         events.push(event);
         props = null;
         continue;
@@ -112,13 +127,14 @@
       if (prop.name === 'STATUS' && prop.value.toUpperCase() === 'CANCELLED') {
         throw new Error('Calendar cancellations are not supported yet. No events were imported.');
       }
-      if (props.has(prop.name) && ['DTSTART', 'DTEND', 'DURATION', 'SUMMARY', 'DESCRIPTION', 'UID'].includes(prop.name)) {
+      if (props.has(prop.name) && ['DTSTART', 'DTEND', 'DURATION', 'SUMMARY', 'DESCRIPTION', 'UID', 'SEQUENCE', 'LAST-MODIFIED',
+        'X-SPIRAL-CALENDAR', 'X-SPIRAL-COLOR', 'X-SPIRAL-COLOR-CUSTOM', 'X-SPIRAL-COLOR-SEED'].includes(prop.name)) {
         throw new Error(`Duplicate calendar property: ${prop.name}.`);
       }
       props.set(prop.name, prop);
     }
     if (stack.length || props) throw new Error('Incomplete calendar file. No events were imported.');
-    return events;
+    return SpiralEventModel.validateUnique(events);
   }
 
   scope.SpiralICalendar = Object.freeze({ parse });

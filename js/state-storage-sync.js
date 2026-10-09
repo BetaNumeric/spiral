@@ -150,26 +150,7 @@ Object.assign(SpiralCalendar.prototype, {
           icsContent += 'METHOD:PUBLISH\r\n';
 
           for (const ev of this.events) {
-            icsContent += 'BEGIN:VEVENT\r\n';
-            icsContent += `UID:spiral-${ev.start.getTime()}-${ev.title.replace(/[^a-zA-Z0-9]/g, '')}\r\n`;
-            const formatDateForICS = (date) => {
-              return `${date.getUTCFullYear()}${pad2(date.getUTCMonth() + 1)}${pad2(date.getUTCDate())}T${pad2(date.getUTCHours())}${pad2(date.getUTCMinutes())}${pad2(date.getUTCSeconds())}Z`;
-            };
-            const escapeICS = (text) => {
-              return text.replace(/\\/g, '\\\\').replace(/[,;]/g, '\\$&').replace(/\n/g, '\\n');
-            };
-            
-            icsContent += `DTSTAMP:${formatIcsDateUTC(new Date())}\r\n`;
-            icsContent += this.formatEventIcsDates(ev);
-            icsContent += `SUMMARY:${escapeIcsText(ev.title)}\r\n`;
-            if (ev.description) {
-              icsContent += `DESCRIPTION:${escapeIcsText(ev.description)}\r\n`;
-            }
-            icsContent += `X-SPIRAL-COLOR:${ev.color}\r\n`;
-            // Add iOS-friendly properties
-            icsContent += 'STATUS:CONFIRMED\r\n';
-            icsContent += `SEQUENCE:${generateEventSequence(ev)}\r\n`;
-            icsContent += 'END:VEVENT\r\n';
+            icsContent += this.formatEventIcs(ev);
           }
 
           icsContent += 'END:VCALENDAR\r\n';
@@ -210,25 +191,7 @@ Object.assign(SpiralCalendar.prototype, {
             icsContent += 'METHOD:PUBLISH\r\n';
 
             for (const ev of this.events) {
-              icsContent += 'BEGIN:VEVENT\r\n';
-              icsContent += `UID:${generateEventUID(ev)}\r\n`;
-              const formatDateForICS = (date) => {
-                return `${date.getUTCFullYear()}${pad2(date.getUTCMonth() + 1)}${pad2(date.getUTCDate())}T${pad2(date.getUTCHours())}${pad2(date.getUTCMinutes())}${pad2(date.getUTCSeconds())}Z`;
-              };
-              const escapeICS = (text) => {
-                return text.replace(/\\/g, '\\\\').replace(/[,;]/g, '\\$&').replace(/\n/g, '\\n');
-              };
-              
-              icsContent += `DTSTAMP:${formatIcsDateUTC(new Date())}\r\n`;
-              icsContent += this.formatEventIcsDates(ev);
-              icsContent += `SUMMARY:${escapeIcsText(ev.title)}\r\n`;
-              if (ev.description) {
-                icsContent += `DESCRIPTION:${escapeIcsText(ev.description)}\r\n`;
-              }
-              icsContent += `X-SPIRAL-COLOR:${ev.color}\r\n`;
-              icsContent += 'STATUS:CONFIRMED\r\n';
-              icsContent += 'SEQUENCE:0\r\n';
-              icsContent += 'END:VEVENT\r\n';
+              icsContent += this.formatEventIcs(ev);
             }
 
             icsContent += 'END:VCALENDAR\r\n';
@@ -2247,6 +2210,7 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   closeDetailView(options = {}) {
+    this._cleanupRepeatedTimeChooser?.();
     const {
       clearSelection = false,
       clearDraft = false,
@@ -2388,7 +2352,7 @@ Object.assign(SpiralCalendar.prototype, {
 
     const isEnd = handle === 'end';
     const handleDate = this._normalizeHandleDate(
-      isEnd ? draggedEvent.end : draggedEvent.start,
+      this.getEventWallDate(draggedEvent, isEnd ? 'end' : 'start'),
       isEnd
     );
     const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
@@ -2424,7 +2388,9 @@ Object.assign(SpiralCalendar.prototype, {
     }
 
     const segmentEventEntries = this.getAllEventsForSegment(day, segment) || [];
-    const matchingEventIndex = segmentEventEntries.findIndex(entry => entry && entry.event === draggedEvent);
+    const endpoint = this.getEventInstant(draggedEvent, handle).getTime() - (handle === 'end' ? 1 : 0);
+    const matchingEventIndex = segmentEventEntries.findIndex(entry => entry && entry.event === draggedEvent
+      && (draggedEvent.allDay || (entry.displayInterval.startInstantMs <= endpoint && endpoint < entry.displayInterval.endInstantMs)));
     if (matchingEventIndex >= 0) {
       this.mouseState.selectedEventIndex = matchingEventIndex;
     } else if (draggedEvent.isDraft && this.draftEvent === draggedEvent) {
@@ -2625,8 +2591,11 @@ Object.assign(SpiralCalendar.prototype, {
     const selectedEventSegments = (this.eventSegments || []).filter(es => es && es.event === selectedEvent);
     const context = { visibilityRange, radiusFunction, segmentAngle, totalVisibleSegments, selectedEventSegments };
 
-    const startPos = this._computeSelectedEventHandlePosition(selectedEvent, context, selectedEvent.start, false);
-    const endPos = this._computeSelectedEventHandlePosition(selectedEvent, context, selectedEvent.end, true);
+    const intervals = this.getEventProjection(selectedEvent).intervals;
+    const startContext = { ...context, selectedEventSegments: selectedEventSegments.filter(es => es.displayInterval === intervals[0]) };
+    const endContext = { ...context, selectedEventSegments: selectedEventSegments.filter(es => es.displayInterval === intervals[intervals.length - 1]) };
+    const startPos = this._computeSelectedEventHandlePosition(selectedEvent, startContext, this.getEventWallDate(selectedEvent, 'start'), false);
+    const endPos = this._computeSelectedEventHandlePosition(selectedEvent, endContext, this.getEventWallDate(selectedEvent, 'end'), true);
     
     // Draw small circular handles with the event color stroke and white fill
     const eventColor = this.getDisplayColorForEvent(selectedEvent) || '#000';
@@ -2810,25 +2779,30 @@ Object.assign(SpiralCalendar.prototype, {
   createDraftEventForSegmentId(segmentId) {
     if (segmentId === null || segmentId === undefined) return null;
     const segmentDate = this.getSegmentDate(segmentId);
-    const segmentStart = new Date(segmentDate);
+    let segmentStart = new Date(segmentDate);
     segmentStart.setUTCMinutes(0, 0, 0);
-    const segmentEnd = this.getDefaultEventEnd(segmentStart);
+    const zone = this.getCalendarTimeZone();
+    segmentStart = SpiralTime.instantToWall(SpiralTime.wallToInstant(segmentStart, zone), zone);
+    const range = this.getDefaultEventRange(segmentStart);
     const colorState = this.createEventColorState({
       calendarName: 'Home',
       eventDate: segmentStart
     });
 
-    return {
+    const draft = {
       title: '',
       description: '',
-      start: new Date(segmentStart),
-      end: new Date(segmentEnd),
+      ...range,
       timeModel: 'instant-v1',
       ...colorState,
       calendar: 'Home',
       isDraft: true,
+      autoEnd: true,
       segmentId
     };
+    this.normalizeRuntimeEvent(draft);
+    draft.title = '';
+    return draft;
   },
 
   getDetailViewEventState(options = {}) {
@@ -2862,6 +2836,7 @@ Object.assign(SpiralCalendar.prototype, {
       selectedEventCount,
       activeEventIndex,
       activePersistedEvent,
+      activeDisplayInterval: segmentEventEntries[activeEventIndex]?.displayInterval || null,
       draftEvent,
       isDraftEventActive,
       detailEvent
@@ -2956,7 +2931,7 @@ Object.assign(SpiralCalendar.prototype, {
       this.mouseState.lastMouseX &&
       this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: startBoxX - boxWidth / 2, y: dateTimeY - boxHeight / 2, width: boxWidth, height: boxHeight });
     this.drawClickableBox(startBoxX, dateTimeY, boxWidth, boxHeight, 
-                         this.formatDateTimeCompact(new Date(event.start)), fontSize, '#f0f0f0', isHoverStart);
+                         this.getEventEndpointLabel(event, 'start'), fontSize, '#f0f0f0', isHoverStart);
     if (interactive) {
       this.canvasClickAreas.startDateBox = {
         x: startBoxX - boxWidth / 2,
@@ -2973,7 +2948,7 @@ Object.assign(SpiralCalendar.prototype, {
       this.mouseState.lastMouseX &&
       this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: endBoxX - boxWidth / 2, y: dateTimeY - boxHeight / 2, width: boxWidth, height: boxHeight });
     this.drawClickableBox(endBoxX, dateTimeY, boxWidth, boxHeight, 
-                         this.formatDateTimeCompact(new Date(event.end)), fontSize, '#f0f0f0', isHoverEnd);
+                         this.getEventEndpointLabel(event, 'end'), fontSize, '#f0f0f0', isHoverEnd);
     if (interactive) {
       this.canvasClickAreas.endDateBox = {
         x: endBoxX - boxWidth / 2,
@@ -2995,6 +2970,14 @@ Object.assign(SpiralCalendar.prototype, {
     
     // Calendar selection box (centered between date boxes and buttons)
     const calendarBoxY = buttonY ? (dateTimeY + buttonY) / 2 : dateTimeY + boxHeight + boxSpacing;
+    const durationY = (dateTimeY + calendarBoxY) / 2;
+    this.ctx.save();
+    this.ctx.font = `${baseFontSize * 0.65}px Arial`;
+    this.ctx.fillStyle = '#666'; // The detail circle has a white background in either theme.
+    this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'middle';
+    this.ctx.fillText(`Duration: ${this.getEventDurationLabel(event)}`, centerX, durationY, totalWidth);
+    this.ctx.restore();
     const calendarText = event.calendar || 'Home';
     const calendarBoxWidth = boxWidth; // Same width as date boxes
     const calendarBoxHeight = boxHeight; // Same height as date boxes
@@ -3031,37 +3014,28 @@ Object.assign(SpiralCalendar.prototype, {
             // Use white text on dark backgrounds, black on light
       const isLight = backgroundColor === '#f0f0f0' || backgroundColor === '#ffffff';
       this.ctx.fillStyle = isLight ? '#000' : '#fff';
-    this.ctx.font = getFontString(fontSize);
+    const lines = String(text).split('\n');
+    const textSize = lines.length > 1 ? Math.min(fontSize * 0.8, height / (lines.length * 1.3)) : fontSize;
+    this.ctx.font = getFontString(textSize);
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
-    
-    // Truncate text if it's too long to fit in the box
-    const maxWidth = width - 10; // Leave 5px padding on each side
-    let displayText = text;
-    
-    if (this.ctx.measureText(text).width > maxWidth) {
-      // Binary search to find the longest text that fits
-      let left = 0;
-      let right = text.length;
-      let bestFit = '';
-      
-      while (left <= right) {
-        const mid = Math.floor((left + right) / 2);
-        const testText = text.substring(0, mid) + '...';
-        const testWidth = this.ctx.measureText(testText).width;
-        
-        if (testWidth <= maxWidth) {
-          bestFit = testText;
-          left = mid + 1;
-        } else {
-          right = mid - 1;
+    const maxWidth = Math.max(1, width - 10);
+    lines.forEach((line, index) => {
+      let displayText = line;
+      if (this.ctx.measureText(line).width > maxWidth) {
+        let left = 0;
+        let right = line.length;
+        let bestFit = '...';
+        while (left <= right) {
+          const middle = Math.floor((left + right) / 2);
+          const candidate = line.substring(0, middle) + '...';
+          if (this.ctx.measureText(candidate).width <= maxWidth) { bestFit = candidate; left = middle + 1; }
+          else right = middle - 1;
         }
+        displayText = bestFit;
       }
-      
-      displayText = bestFit || '...';
-    }
-    
-    this.ctx.fillText(displayText, centerX, centerY);
+      this.ctx.fillText(displayText, centerX, centerY + (index - (lines.length - 1) / 2) * textSize * 1.2);
+    });
   },
 
   calculateTextHeight(text, maxWidth, fontSize) {
