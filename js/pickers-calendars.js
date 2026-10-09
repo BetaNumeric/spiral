@@ -369,7 +369,7 @@ Object.assign(SpiralCalendar.prototype, {
     try {
       if (this.mouseState && this.mouseState.selectedSegment) {
         const seg = this.mouseState.selectedSegment;
-        const list = this.getAllEventsForSegment(seg.day, seg.segment);
+        const list = this.getEventsForClockSegment(seg);
         if (list && list.some(ei => ei.event === event)) return;
       }
     } catch (_) { /* ignore */ }

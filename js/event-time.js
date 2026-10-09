@@ -7,6 +7,9 @@ Object.assign(SpiralCalendar.prototype, {
 
   getDisplayInstant() {
     if (this.autoTimeAlignState?.enabled) return new Date();
+    const layoutMs = this.referenceTime.getTime() + this.state.rotation / (2 * Math.PI) * 24 * SpiralTime.HOUR;
+    const clock = SpiralEventProjection.clockTime(layoutMs, this.getCalendarTimeZone());
+    if (Number.isFinite(clock.instantMs)) return new Date(clock.instantMs);
     const wall = this.getDisplayTime();
     const interval = this.mouseState?.selectedSegment && this.state.detailViewDay !== null
       ? this.getDetailViewEventState()?.activeDisplayInterval : null;

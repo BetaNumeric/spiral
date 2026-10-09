@@ -444,7 +444,7 @@ Object.assign(SpiralCalendar.prototype, {
       
       // Update tooltip info for hovered segment (only on desktop, not mobile)
       if (segment && !isMobileDevice()) {
-        const events = this.getAllEventsForSegment(segment.day, segment.segment);
+        const events = this.getEventsForClockSegment(segment);
         this.mouseState.hoveredEvent = {
           segment: segment,
           events: events
@@ -759,7 +759,7 @@ Object.assign(SpiralCalendar.prototype, {
               // "+ New" button clicked - create a draft event for editing
               if (addBtn.isAddAnotherButton) {
                 const selectedSegmentId = this.getSelectedSegmentId();
-                this.draftEvent = this.createDraftEventForSegmentId(selectedSegmentId);
+                this.draftEvent = this.createDraftEventForSegmentId(selectedSegmentId, this.mouseState.selectedSegment);
                 
                 // Reset selected event index to show the virtual event interface
                 this.mouseState.selectedEventIndex = 0;
@@ -888,7 +888,8 @@ Object.assign(SpiralCalendar.prototype, {
         // Check if this is the same segment that's already selected
         const isSameSegment = this.mouseState.selectedSegment && 
                              this.mouseState.selectedSegment.day === segment.day && 
-                             this.mouseState.selectedSegment.segment === segment.segment;
+                             this.mouseState.selectedSegment.segment === segment.segment &&
+                             this.mouseState.selectedSegment.clockOffsetMs === segment.clockOffsetMs;
         
         if (isSameSegment) {
           // Clicked the same segment again
@@ -1382,6 +1383,10 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     findSegmentAtPoint(canvasX, canvasY, options = {}) {
+      return this.annotateSegmentClock(this.findBaseSegmentAtPoint(canvasX, canvasY, options));
+    },
+
+    findBaseSegmentAtPoint(canvasX, canvasY, options = {}) {
       const canvasWidth = this.canvas.clientWidth;
       const canvasHeight = this.canvas.clientHeight;
       

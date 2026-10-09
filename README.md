@@ -66,8 +66,12 @@ retained. Current-format JSON and ICS files can be imported normally.
 
 Calendar imports honor UTC dates, IANA `TZID` values, floating times in the
 selected zone, all-day dates with exclusive end dates, and day/week/time
-durations. Clock-change events render as separate pieces in both views; skipped
-hours stay blank, and repeated times can be created or edited by choosing their first or
+durations. In both views, a repeated hour is divided into consecutive angular
+sections under the regular single hour label. A radial divider appears when an
+event occupies that hour or when Segment edges is enabled.
+Each fills the day ring's full thickness; simultaneous events still stack within
+their own section. Clicking an empty section creates an event in that occurrence.
+Skipped hours stay blank, and repeated times can be created or edited by choosing their first or
 second occurrence. The Add Event panel displays these choices with UTC offsets
 and previews the actual duration. On October 25, 2026 in Europe/Berlin, a new
 event at the first 02:00 ends at the second 02:00 after one hour; starting at the

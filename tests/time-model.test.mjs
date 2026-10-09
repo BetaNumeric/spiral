@@ -6,7 +6,7 @@ import { webcrypto } from 'node:crypto';
 
 const context = vm.createContext({ console, Date, Intl, WeakMap, Map, Set, crypto: webcrypto, alert() {},
   CONFIG: { SEGMENTS_PER_DAY: 24 }, SpiralCalendar: class {} });
-for (const file of ['config-utils', 'time-model', 'event-model', 'icalendar', 'core-methods', 'state-storage-sync', 'event-projection', 'event-time', 'pickers-calendars']) {
+for (const file of ['config-utils', 'time-model', 'event-model', 'icalendar', 'core-methods', 'state-storage-sync', 'event-projection', 'event-time', 'pickers-calendars', 'touch-time-orientation', 'render-circle', 'render-spiral']) {
   vm.runInContext(fs.readFileSync(new URL(`../js/${file}.js`, import.meta.url), 'utf8'), context);
 }
 context.formatIcsDateUTC = value => new Date(value).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
@@ -449,7 +449,7 @@ test('fall-back projections preserve both pieces, including their offset and exa
   app.events = [e];
   const target = app.getEventStartNavigationTarget(e);
   const entries = app.getAllEventsForSegment(target.day, target.segment);
-  assert.deepEqual(Array.from(entries, entry => [entry.startMinute, entry.endMinute]), [[45, 60], [0, 15]]);
+  assert.deepEqual(Array.from(entries, entry => [entry.startMinute, entry.endMinute]), [[22.5, 30], [30, 37.5]]);
   assert.ok(entries.every(entry => entry.event === e));
 });
 
@@ -476,7 +476,7 @@ test('projection discovers half-hour offset changes without assuming a one-hour 
   ]);
 });
 
-test('overlapping occurrences of one event have distinct lanes and a shared overlap component', () => {
+test('consecutive occurrences of one event share a lane and do not form an overlap component', () => {
   const app = calendar();
   app.referenceTime = wall('2026-10-25T00:00');
   app.state.rotation = 0;
@@ -484,11 +484,235 @@ test('overlapping occurrences of one event have distinct lanes and a shared over
   app.events = [e];
   const pieces = app.getEventProjection(e).intervals;
   const { eventToLane } = app.computePersistentEventLanesForWindow();
-  assert.notEqual(eventToLane.get(pieces[0]), eventToLane.get(pieces[1]));
+  assert.equal(eventToLane.get(pieces[0]), eventToLane.get(pieces[1]));
   const { eventToComponent, componentLaneCount } = app.computeEventComponentsForWindow(eventToLane);
-  assert.equal(eventToComponent.get(pieces[0]), eventToComponent.get(pieces[1]));
-  assert.equal(componentLaneCount.get(eventToComponent.get(pieces[0])), 2);
-  assert.equal(app.getMaxOverlapForEventAcrossHours(e), 2);
+  assert.notEqual(eventToComponent.get(pieces[0]), eventToComponent.get(pieces[1]));
+  assert.equal(componentLaneCount.get(eventToComponent.get(pieces[0])), 1);
+  assert.equal(app.getMaxOverlapForEventAcrossHours(e), 1);
+});
+
+test('repeated hour coordinates map first then second occurrence and preserve the transition boundary', () => {
+  const hour = wall('2026-10-25T02:00').getTime();
+  const Projection = context.SpiralEventProjection;
+  const layout = Projection.repeatedHour(hour, berlin);
+  assert.deepEqual(Array.from(layout.parts, part => [part.startFraction, part.endFraction, part.offsetMs]),
+    [[0, 0.5, 2 * Time.HOUR], [0.5, 1, Time.HOUR]]);
+  assert.ok(Object.isFrozen(layout) && Object.isFrozen(layout.parts) && layout.parts.every(Object.isFrozen));
+  assert.equal(Projection.layoutTime(hour + Time.HOUR, berlin, 2 * Time.HOUR), hour + Time.HOUR / 2);
+  assert.equal(Projection.layoutTime(hour, berlin, Time.HOUR), hour + Time.HOUR / 2);
+  for (const instant of ['2026-10-25T00:00:00Z', '2026-10-25T00:30:00Z', '2026-10-25T01:00:00Z', '2026-10-25T01:30:00Z']) {
+    const wallMs = Time.instantToWall(instant, berlin).getTime();
+    const offset = wallMs - Date.parse(instant);
+    const mapped = Projection.layoutTime(wallMs, berlin, offset);
+    assert.equal(Projection.clockTime(mapped, berlin).instantMs, Date.parse(instant));
+    assert.equal(Projection.clockTime(mapped, berlin).offsetMs, offset);
+  }
+});
+
+test('half-hour repeats divide the affected wedge in proportion to each actual occurrence', () => {
+  const Projection = context.SpiralEventProjection;
+  const zone = 'Australia/Lord_Howe';
+  const hour = wall('2026-04-05T01:00').getTime();
+  const layout = Projection.repeatedHour(hour, zone);
+  assert.equal(layout.parts[0].endFraction, 2 / 3);
+  assert.equal(layout.parts[1].startWallMs, hour + Time.HOUR / 2);
+  for (const instant of ['2026-04-04T14:15:00Z', '2026-04-04T14:50:00Z', '2026-04-04T15:10:00Z']) {
+    const wallMs = Time.instantToWall(instant, zone).getTime();
+    const mapped = Projection.layoutTime(wallMs, zone, wallMs - Date.parse(instant));
+    assert.ok(Math.abs(Projection.clockTime(mapped, zone).instantMs - Date.parse(instant)) < 1);
+  }
+  assert.equal(Projection.repeatedHour(hour + Time.HOUR, zone), null);
+  const gapHour = wall('2026-03-29T02:00').getTime();
+  assert.equal(Projection.repeatedHour(gapHour, berlin), null);
+  assert.equal(Projection.layoutTime(gapHour + 30 * 60000, berlin, Time.HOUR), gapHour + 30 * 60000);
+});
+
+test('wall-time overlays cover the matching minutes in both repeated sections', () => {
+  const hour = wall('2026-10-25T02:00').getTime();
+  const ranges = context.SpiralEventProjection.layoutRanges(hour + 15 * 60000, hour + 45 * 60000, berlin);
+  assert.deepEqual(Array.from(ranges, range => [(range.startMs - hour) / 60000, (range.endMs - hour) / 60000]),
+    [[7.5, 22.5], [37.5, 52.5]]);
+  const ordinary = context.SpiralEventProjection.layoutRanges(hour + Time.HOUR, hour + 2 * Time.HOUR, berlin);
+  assert.equal(ordinary.length, 1);
+  assert.equal(ordinary[0].startMs, hour + Time.HOUR);
+});
+
+test('repeated hours keep a single regular label with the usual position settings', () => {
+  const app = calendar();
+  app.state.hourNumbersInsideSegment = true;
+  const { day, segment } = app.getSegmentPositionFromId(2);
+  const step = 2 * Math.PI / 24;
+  const start = segment * step;
+  for (const position of [0, 1, 2]) {
+    app.state.hourNumbersPosition = position;
+    app.referenceTime = wall('2026-10-26T00:00');
+    app.hourNumbersInSegments = [];
+    app.collectHourNumberInSegment(start, start + step, () => 100, segment, day, start, start + step, 100, 180);
+    const ordinary = Array.from(app.hourNumbersInSegments, item => item.displayNumber);
+    app.referenceTime = wall('2026-10-25T00:00');
+    app.hourNumbersInSegments = [];
+    app.collectHourNumberInSegment(start, start + step, () => 100, segment, day, start, start + step, 100, 180);
+    assert.equal(app.hourNumbersInSegments.length, 1);
+    assert.deepEqual(Array.from(app.hourNumbersInSegments, item => item.displayNumber), ordinary);
+  }
+  assert.equal(app.hourNumbersInSegments[0].displayNumber, 2);
+  app.state.showEverySixthHour = true;
+  app.hourNumbersInSegments = [];
+  app.collectHourNumberInSegment(start, start + step, () => 100, segment, day, start, start + step, 100, 180);
+  assert.equal(app.hourNumbersInSegments.length, 0);
+});
+
+test('repeated-hour dividers follow visible events and the Segment edges setting in both views', () => {
+  const app = calendar();
+  app.referenceTime = wall('2026-10-25T00:00');
+  const { day, segment } = app.getSegmentPositionFromId(2);
+  const layout = context.SpiralEventProjection.repeatedHour(wall('2026-10-25T02:00').getTime(), berlin);
+  let strokes = 0;
+  app.ctx = { save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() { strokes++; } };
+  const draw = () => { strokes = 0; app.drawRepeatedHourSegments(); return strokes; };
+  for (const circle of [false, true]) {
+    app.repeatedHourSegments = [{ layout, day, segment, startTheta: 0, endTheta: 1,
+      rawStartAngle: 0, rawEndAngle: 1, radiusFunction: theta => 100 + theta,
+      innerRadius: circle ? 100 : null, outerRadius: circle ? 180 : null }];
+    app.state.showSegmentEdges = false;
+    app.events = [];
+    app._eventsVersion++;
+    app.draftEvent = null;
+    assert.equal(draw(), 0, 'empty repeated hour');
+    app.state.showSegmentEdges = true;
+    assert.equal(draw(), 1, 'explicit segment edges');
+    app.state.showSegmentEdges = false;
+    app.events = [app.normalizeRuntimeEvent({ start: '2026-10-25T00:00:00Z', end: '2026-10-25T01:00:00Z', calendar: 'Home' })];
+    app._eventsVersion++;
+    assert.equal(draw(), 1, 'visible event');
+    app.state.visibleCalendars = ['Work'];
+    assert.equal(draw(), 0, 'hidden calendar');
+    app.state.visibleCalendars = ['Home', 'Work'];
+    app.draftEvent = app.events[0];
+    app.draftEvent.segmentId = 2;
+    app.mouseState = { selectedSegmentId: 2 };
+    app.events = [];
+    app._eventsVersion++;
+    assert.equal(draw(), 1, 'visible draft');
+  }
+});
+
+test('night shading preserves both repeated sections without filling gaps between partial overlays', () => {
+  const app = calendar();
+  app.ctx = {};
+  app.mouseState = {};
+  app.state.nightOverlayOpacity = 0.3;
+  const step = 2 * Math.PI / 24;
+  const radiusFunction = () => 100;
+  for (const [zone, hourText] of [[berlin, '2026-10-25T02:00'], ['Australia/Lord_Howe', '2026-04-05T01:00']]) {
+    const hour = wall(hourText).getTime();
+    for (const circle of [false, true]) {
+      const check = (from, to, expected, selectedOffset) => {
+        app.mouseState.selectedSegment = selectedOffset === undefined ? null :
+          { day: 0, segment: 2, clockOffsetMs: selectedOffset };
+        const drawn = [];
+        app.drawSpiralBand = (start, end) => drawn.push([start / step, end / step]);
+        app.fillCircleModeOverlaySegment = span => drawn.push([-span.startTheta / step, -span.endTheta / step]);
+        const ranges = context.SpiralEventProjection.layoutRanges(hour + from * Time.HOUR, hour + to * Time.HOUR, zone);
+        app.nightOverlays = Array.from(ranges, range => {
+          const startFrac = (range.startMs - hour) / Time.HOUR;
+          const endFrac = (range.endMs - hour) / Time.HOUR;
+          const selection = { day: 0, segment: 2,
+            clockOffsetMs: context.SpiralEventProjection.clockTime(range.startMs, zone).offsetMs };
+          return circle ? { ...selection, isCircleMode: true, innerRadius: 100, outerRadius: 180,
+            startTheta: -(1 - endFrac) * step, endTheta: -(1 - startFrac) * step } :
+            { ...selection, isCircleMode: false, radiusFunction, startTheta: 0, endTheta: step,
+              rawStartAngle: 0, rawEndAngle: step, overlayStartFrac: startFrac, overlayEndFrac: endFrac };
+        });
+        app.drawNightOverlays();
+        drawn.sort((a, b) => a[0] - b[0]);
+        assert.equal(drawn.length, expected.length, `${zone}, circle=${circle}`);
+        for (let i = 0; i < expected.length; i++) {
+          assert.ok(Math.abs(drawn[i][0] - expected[i][0]) < 1e-8);
+          assert.ok(Math.abs(drawn[i][1] - expected[i][1]) < 1e-8);
+        }
+      };
+      check(0, 1, [[0, 1]]);
+      if (zone === berlin) {
+        check(0.25, 0.75, [[0.125, 0.375], [0.625, 0.875]]);
+        check(0, 1, [[0, 0.5]], 2 * Time.HOUR);
+        check(0, 1, [[0.5, 1]], Time.HOUR);
+      } else {
+        check(2 / 3, 5 / 6, [[1 / 9, 2 / 9], [4 / 9, 5 / 9]]);
+        check(0, 1, [[0, 1 / 3]], 11 * Time.HOUR);
+        check(0, 1, [[1 / 3, 1]], 10.5 * Time.HOUR);
+      }
+    }
+  }
+});
+
+test('click selection and empty drafts distinguish repeated sections including half-hour changes', () => {
+  const app = calendar();
+  app.referenceTime = wall('2026-10-25T00:00');
+  const first = app.normalizeRuntimeEvent({ start: '2026-10-25T00:00:00Z', end: '2026-10-25T01:00:00Z' });
+  const second = app.normalizeRuntimeEvent({ start: '2026-10-25T01:00:00Z', end: '2026-10-25T02:00:00Z' });
+  app.events = [first, second];
+  const target = app.getEventStartNavigationTarget(first);
+  const step = 2 * Math.PI / 24;
+  const origin = target.day * 2 * Math.PI + target.segment * step;
+  const a = app.annotateSegmentClock({ ...target, angle: origin + step * 0.75, radius: 100 });
+  const b = app.annotateSegmentClock({ ...target, angle: origin + step * 0.25, radius: 100 });
+  assert.equal(a.clockOccurrence, 0);
+  assert.equal(b.clockOccurrence, 1);
+  assert.deepEqual(Array.from(app.getEventsForClockSegment(a), entry => entry.event), [first]);
+  assert.deepEqual(Array.from(app.getEventsForClockSegment(b), entry => entry.event), [second]);
+  app.createEventColorState = () => ({ color: '#123456' });
+  const draft = app.createDraftEventForSegmentId(2, b);
+  assert.equal(draft.start.toISOString(), second.start.toISOString());
+  assert.equal(draft.end - draft.start, Time.HOUR);
+  app.state.locationTimezoneId = 'Australia/Lord_Howe';
+  app.referenceTime = wall('2026-04-05T00:00');
+  const halfHourDraft = app.createDraftEventForSegmentId(1, { clockOffsetMs: 10.5 * Time.HOUR });
+  assert.equal(halfHourDraft.start.toISOString(), '2026-04-04T15:00:00.000Z');
+  assert.equal(Time.formatWall(app.getEventWallDate(halfHourDraft, 'start')), '2026-04-05T01:30');
+});
+
+test('genuine simultaneous events still stack within their own repeated-hour section', () => {
+  const app = calendar();
+  app.referenceTime = wall('2026-10-25T00:00');
+  app.state.rotation = 0;
+  const first = app.normalizeRuntimeEvent({ start: '2026-10-25T00:10:00Z', end: '2026-10-25T00:50:00Z' });
+  const overlap = app.normalizeRuntimeEvent({ start: '2026-10-25T00:20:00Z', end: '2026-10-25T00:40:00Z' });
+  const second = app.normalizeRuntimeEvent({ start: '2026-10-25T01:10:00Z', end: '2026-10-25T01:50:00Z' });
+  app.events = [first, overlap, second];
+  const { eventToLane } = app.computePersistentEventLanesForWindow();
+  assert.notEqual(eventToLane.get(first), eventToLane.get(overlap));
+  assert.equal(app.getMaxOverlapForEventAcrossHours(first), 2);
+  assert.equal(app.getMaxOverlapForEventAcrossHours(second), 1);
+});
+
+test('live rotation and browsing traverse both repeated sections in actual chronological order', () => {
+  const app = calendar();
+  app.referenceTime = wall('2026-10-25T00:00');
+  app.autoTimeAlignState = { enabled: false };
+  let previous = -Infinity;
+  for (const instant of ['2026-10-25T00:15:00Z', '2026-10-25T00:59:00Z', '2026-10-25T01:00:00Z', '2026-10-25T01:15:00Z', '2026-10-25T02:00:00Z']) {
+    app.state.rotation = app.getCurrentTimeRotation(new Date(instant));
+    assert.ok(app.state.rotation > previous);
+    assert.ok(Math.abs(app.getDisplayInstant() - new Date(instant)) < 1);
+    assert.ok(Math.abs(app.getDisplayTime() - Time.instantToWall(instant, berlin)) < 1);
+    previous = app.state.rotation;
+  }
+});
+
+test('dragging into an empty repeated section chooses its time even without an event band', () => {
+  const app = calendar();
+  app.referenceTime = wall('2026-10-25T00:00');
+  const e = app.normalizeRuntimeEvent({ start: '2026-10-25T00:10:00Z', end: '2026-10-25T00:20:00Z' });
+  const target = app.getEventStartNavigationTarget(e);
+  app.mouseState = { isHandleDragging: true, draggingHandle: 'end' };
+  app.handleDragState = { event: e };
+  app.findSegmentAtPoint = () => target;
+  const angle = -(target.day * 2 * Math.PI + (target.segment + 0.25) * 2 * Math.PI / 24) + vm.runInContext('CONFIG.INITIAL_ROTATION_OFFSET', context);
+  app._canvasPointToModelSpace = () => ({ modelX: Math.cos(angle), modelY: Math.sin(angle) });
+  app.syncSelectedSegmentToDraggedHandle = app.ensureLayoutCache = app.drawSpiral = () => {};
+  assert.ok(app.updateDraggingHandleAtCanvasPoint(0, 0));
+  assert.equal(e.end.toISOString(), '2026-10-25T01:30:00.000Z');
 });
 
 test('hit testing selects the rendered occurrence instead of the first entry in the hour', () => {

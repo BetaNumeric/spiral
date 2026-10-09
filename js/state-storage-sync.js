@@ -1196,7 +1196,8 @@ Object.assign(SpiralCalendar.prototype, {
 
   getCurrentTimeRotation(date = new Date()) {
     const wallTime = SpiralTime.instantToWall(date, this.getCalendarTimeZone());
-    const hours = (wallTime.getTime() - this.referenceTime.getTime()) / SpiralTime.HOUR;
+    const layoutMs = SpiralEventProjection.layoutTime(wallTime.getTime(), this.getCalendarTimeZone(), wallTime.getTime() - new Date(date).getTime());
+    const hours = (layoutMs - this.referenceTime.getTime()) / SpiralTime.HOUR;
     return (hours / CONFIG.SEGMENTS_PER_DAY) * 2 * Math.PI;
   },
 
@@ -2157,7 +2158,8 @@ Object.assign(SpiralCalendar.prototype, {
       this.cancelModeTransition();
     }
     const openingFromClosed = this.state.detailViewDay === null;
-    const nextSegment = { day: segment.day, segment: segment.segment };
+    const nextSegment = { ...segment };
+    if (!options.preserveDraft && this.mouseState.selectedSegment?.clockOffsetMs !== nextSegment.clockOffsetMs) this.draftEvent = null;
     const shouldAutoSwitchToCircle = this.state.detailViewAutoCircleMode !== false && !this.state.circleMode;
     const shouldAnimate = options.animateTransition !== false &&
       openingFromClosed &&
@@ -2351,10 +2353,9 @@ Object.assign(SpiralCalendar.prototype, {
     if (totalVisibleSegments <= 0) return null;
 
     const isEnd = handle === 'end';
-    const handleDate = this._normalizeHandleDate(
-      this.getEventWallDate(draggedEvent, isEnd ? 'end' : 'start'),
-      isEnd
-    );
+    const intervals = this.getEventProjection(draggedEvent).intervals;
+    const interval = isEnd ? intervals[intervals.length - 1] : intervals[0];
+    const handleDate = this._normalizeHandleDate(new Date(isEnd ? interval.endMs : interval.startMs), isEnd);
     const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
     const selectedEventSegments = (this.eventSegments || []).filter(es => es && es.event === draggedEvent);
     const renderedMatch = this._findRenderedSliceForHandleTime(
@@ -2374,7 +2375,8 @@ Object.assign(SpiralCalendar.prototype, {
         );
     const nextSegment = {
       day: resolvedSegment.day,
-      segment: resolvedSegment.segment
+      segment: resolvedSegment.segment,
+      clockOffsetMs: interval.offsetMs
     };
     const day = nextSegment.day;
     const segment = nextSegment.segment;
@@ -2387,7 +2389,7 @@ Object.assign(SpiralCalendar.prototype, {
       this.draftEvent.segmentId = this.mouseState.selectedSegmentId;
     }
 
-    const segmentEventEntries = this.getAllEventsForSegment(day, segment) || [];
+    const segmentEventEntries = this.getEventsForClockSegment(nextSegment);
     const endpoint = this.getEventInstant(draggedEvent, handle).getTime() - (handle === 'end' ? 1 : 0);
     const matchingEventIndex = segmentEventEntries.findIndex(entry => entry && entry.event === draggedEvent
       && (draggedEvent.allDay || (entry.displayInterval.startInstantMs <= endpoint && endpoint < entry.displayInterval.endInstantMs)));
@@ -2462,7 +2464,6 @@ Object.assign(SpiralCalendar.prototype, {
     if (!selectedEventSegments.length) return null;
 
     const selectedDay = (this.mouseState && this.mouseState.selectedSegment) ? this.mouseState.selectedSegment.day : 0;
-    const minuteFrac = (d.getUTCMinutes() + d.getUTCSeconds() / 60 + d.getUTCMilliseconds() / 60000) / 60;
     const slicesInHour = [];
 
     for (const es of selectedEventSegments) {
@@ -2477,10 +2478,13 @@ Object.assign(SpiralCalendar.prototype, {
 
     if (!slicesInHour.length) return null;
 
-    const targetTheta = slicesInHour[0].rawStartAngle + (1 - minuteFrac) * segmentAngle;
     let bestSlice = null;
     let bestScore = Infinity;
+    let bestTheta;
     for (const es of slicesInHour) {
+      const hourMs = Math.floor(d.getTime() / SpiralTime.HOUR) * SpiralTime.HOUR;
+      const layoutMs = SpiralEventProjection.layoutTime(d.getTime(), this.getCalendarTimeZone(), es.displayInterval.offsetMs);
+      const targetTheta = es.rawStartAngle + (1 - (layoutMs - hourMs) / SpiralTime.HOUR) * segmentAngle;
       const inSlice = targetTheta >= (es.timeStartTheta - 1e-9) && targetTheta <= (es.timeEndTheta + 1e-9);
       const boundaryDist = inSlice ? 0 : Math.min(
         Math.abs(targetTheta - es.timeStartTheta),
@@ -2491,11 +2495,12 @@ Object.assign(SpiralCalendar.prototype, {
       if (score < bestScore) {
         bestScore = score;
         bestSlice = es;
+        bestTheta = targetTheta;
       }
     }
 
     if (!bestSlice) return null;
-    return { slice: bestSlice, targetTheta };
+    return { slice: bestSlice, targetTheta: bestTheta };
   },
 
   _computeSelectedEventHandlePosition(selectedEvent, context, date, isEnd) {
@@ -2526,7 +2531,9 @@ Object.assign(SpiralCalendar.prototype, {
       );
       const rawStartAngle = day * 2 * Math.PI + segment * segmentAngle;
       const rawEndAngle = rawStartAngle + segmentAngle;
-      const minuteFrac = (d.getUTCMinutes() + d.getUTCSeconds() / 60 + d.getUTCMilliseconds() / 60000) / 60;
+      const hourMs = Math.floor(d.getTime() / SpiralTime.HOUR) * SpiralTime.HOUR;
+      const layoutMs = SpiralEventProjection.layoutTime(d.getTime(), this.getCalendarTimeZone(), context.offsetMs);
+      const minuteFrac = (layoutMs - hourMs) / SpiralTime.HOUR;
       th = rawStartAngle + (1 - minuteFrac) * segmentAngle;
       const visibleStart = Math.max(rawStartAngle, visibilityRange.min);
       const visibleEnd = Math.min(rawEndAngle, visibilityRange.max);
@@ -2592,10 +2599,12 @@ Object.assign(SpiralCalendar.prototype, {
     const context = { visibilityRange, radiusFunction, segmentAngle, totalVisibleSegments, selectedEventSegments };
 
     const intervals = this.getEventProjection(selectedEvent).intervals;
-    const startContext = { ...context, selectedEventSegments: selectedEventSegments.filter(es => es.displayInterval === intervals[0]) };
-    const endContext = { ...context, selectedEventSegments: selectedEventSegments.filter(es => es.displayInterval === intervals[intervals.length - 1]) };
-    const startPos = this._computeSelectedEventHandlePosition(selectedEvent, startContext, this.getEventWallDate(selectedEvent, 'start'), false);
-    const endPos = this._computeSelectedEventHandlePosition(selectedEvent, endContext, this.getEventWallDate(selectedEvent, 'end'), true);
+    const startInterval = intervals[0];
+    const endInterval = intervals[intervals.length - 1];
+    const startContext = { ...context, offsetMs: startInterval.offsetMs, selectedEventSegments: selectedEventSegments.filter(es => es.displayInterval === startInterval) };
+    const endContext = { ...context, offsetMs: endInterval.offsetMs, selectedEventSegments: selectedEventSegments.filter(es => es.displayInterval === endInterval) };
+    const startPos = this._computeSelectedEventHandlePosition(selectedEvent, startContext, new Date(startInterval.startMs), false);
+    const endPos = this._computeSelectedEventHandlePosition(selectedEvent, endContext, new Date(endInterval.endMs), true);
     
     // Draw small circular handles with the event color stroke and white fill
     const eventColor = this.getDisplayColorForEvent(selectedEvent) || '#000';
@@ -2776,14 +2785,19 @@ Object.assign(SpiralCalendar.prototype, {
     return this.getSegmentId(segment.day, segment.segment);
   },
 
-  createDraftEventForSegmentId(segmentId) {
+  createDraftEventForSegmentId(segmentId, selection = {}) {
     if (segmentId === null || segmentId === undefined) return null;
     const segmentDate = this.getSegmentDate(segmentId);
     let segmentStart = new Date(segmentDate);
     segmentStart.setUTCMinutes(0, 0, 0);
     const zone = this.getCalendarTimeZone();
+    const part = SpiralEventProjection.repeatedHour(segmentStart.getTime(), zone)?.parts
+      .find(part => part.offsetMs === selection.clockOffsetMs);
+    if (part) segmentStart = new Date(part.startWallMs);
     segmentStart = SpiralTime.instantToWall(SpiralTime.wallToInstant(segmentStart, zone), zone);
-    const range = this.getDefaultEventRange(segmentStart);
+    const choices = SpiralTime.possibleInstants(segmentStart, zone);
+    const occurrence = part ? choices.findIndex(instant => segmentStart - instant === part.offsetMs) : undefined;
+    const range = this.getDefaultEventRange(segmentStart, { occurrence });
     const colorState = this.createEventColorState({
       calendarName: 'Home',
       eventDate: segmentStart
@@ -2811,7 +2825,7 @@ Object.assign(SpiralCalendar.prototype, {
     const selectedSegmentId = this.getSelectedSegmentId(selectedSegment);
     if (!selectedSegment || selectedSegmentId === null) return null;
 
-    const segmentEventEntries = this.getAllEventsForSegment(selectedSegment.day, selectedSegment.segment) || [];
+    const segmentEventEntries = this.getEventsForClockSegment(selectedSegment);
     const selectedEventCount = segmentEventEntries.length;
     const activeEventIndex = Math.min(
       this.mouseState.selectedEventIndex || 0,
@@ -2820,7 +2834,7 @@ Object.assign(SpiralCalendar.prototype, {
     const activePersistedEvent = segmentEventEntries[activeEventIndex]?.event || null;
 
     if (ensureDraft && !activePersistedEvent && (!this.draftEvent || this.draftEvent.segmentId !== selectedSegmentId)) {
-      this.draftEvent = this.createDraftEventForSegmentId(selectedSegmentId);
+      this.draftEvent = this.createDraftEventForSegmentId(selectedSegmentId, selectedSegment);
     }
 
     const draftEvent = this.draftEvent && this.draftEvent.segmentId === selectedSegmentId

@@ -17,7 +17,7 @@ and in storage. Loading, copying, rendering, and changing zones cannot reinterpr
 that timestamp.
 
 `js/event-projection.js` derives an immutable display projection containing
-numeric wall coordinates and actual timestamps. Both renderers, layout lanes,
+numeric wall coordinates, layout coordinates, and actual timestamps. Both renderers, layout lanes,
 segment hit testing, navigation, and display labels use this shared projection.
 A WeakMap caches derived projections by event timestamps, all-day dates, and
 zone; it contains no source data. Even an in-place Date edit invalidates the
@@ -73,12 +73,28 @@ occurrences. All-day events keep one continuous calendar-date interval.
 Transition lookups are cached by zone and UTC day in a bounded cache.
 
 Lane allocation, overlap components, boundary strokes, both renderers, and band
-hit testing use the projected intervals. Overlapping pieces of the same event
-can occupy separate lanes; they remain one canonical event in storage and the
-list. Handles attach to the first and last actual pieces. Mouse and touch share
-one dragging implementation and use a hit band's offset when choosing between
-occurrences. Without a band hint, editing preserves the endpoint's occurrence.
+hit testing use the projected layout intervals. Repeated times occupy consecutive
+angular sections under one regular hour label. The radial divider appears when
+there is a visible event in that hour or Segment edges is enabled.
+Events remain canonical records in storage and the list.
+Handles attach to the first and last actual pieces. Mouse and touch share one
+dragging implementation and invert the section's time-to-angle mapping to choose
+an occurrence, including empty sections. Text editing preserves the endpoint's occurrence.
 The five-minute handle minimum is measured on the actual timeline.
+
+`repeatedHour` derives each section's wall range, actual range, offset, and angular
+fraction from the IANA transition. Berlin's sections each occupy half the usual
+02:00 wedge. Lord Howe's repeated half-hour gives the affected 01:00 wedge a
+two-thirds first section and one-third second section. Other hour positions and
+the 24-hour day coil stay fixed. `layoutStartMs`/`layoutEndMs` are derived coordinates
+used for drawing and overlap calculations; `startMs`/`endMs` keep their wall meaning
+for editors. `layoutTime` and `clockTime` map in both directions. The live cursor,
+browsing time, navigation, handles, selections, labels, and night overlays use that
+mapping. Transition and repeated-day caches are bounded. All-day events span both
+sections with their fixed calendar dates. Night overlay merging retains both
+sections regardless of their angular order and preserves gaps between partial
+overlays. Selecting one occurrence leaves the other occurrence's night shading
+visible. Zone changes never rewrite event records.
 
 Ambiguous endpoint labels include their UTC offset. Editing a repeated time
 opens a first/second occurrence choice, including offsets and keyboard controls.
@@ -104,8 +120,8 @@ needs a separate occurrence-expansion layer before imports can support it safely
 To check the clock-change cases manually, import
 [`tests/fixtures/clock-changes.ics`](../tests/fixtures/clock-changes.ics). Select
 Europe/Berlin and open the October 25 and March 29 events from the event list.
-The October event has two pieces and offset labels; the March event leaves
-02:00-03:00 blank. Switch to Australia/Lord_Howe and open the April 5 event to
+The October event crosses the radial divider between the first and second 02:00
+sections; the March event leaves 02:00-03:00 blank. Switch to Australia/Lord_Howe and open the April 5 event to
 check the repeated half-hour. Export/reimport and reload to check persistence.
 
 To check creation, select Europe/Berlin and set the Add Event start to

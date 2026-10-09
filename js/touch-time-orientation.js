@@ -70,19 +70,17 @@ Object.assign(SpiralCalendar.prototype, {
     while (th < rawStartAngle) th += 2 * Math.PI;
     while (th > rawEndAngle) th -= 2 * Math.PI;
 
-    let minuteFrac = 1 - (th - rawStartAngle) / segmentAngle;
-    minuteFrac = Math.max(0, Math.min(1, minuteFrac));
-    let minute = Math.round((minuteFrac * 60) / 5) * 5;
+    const hourStartMs = this.getSegmentHourRange(seg.day, seg.segment).startMs;
+    const fraction = Math.max(0, Math.min(1 - 1 / SpiralTime.HOUR, 1 - (th - rawStartAngle) / segmentAngle));
+    const clock = SpiralEventProjection.clockTime(hourStartMs + fraction * SpiralTime.HOUR, this.getCalendarTimeZone());
+    let minute = Math.round(((clock.wallMs - hourStartMs) / 60000) / 5) * 5;
     if (minute >= 60) minute = 55;
     if (minute < 0) minute = 0;
 
-    const hourStartMs = this.getSegmentHourRange(seg.day, seg.segment).startMs;
     const newTime = new Date(hourStartMs + minute * 60 * 1000);
 
     const ev = this.handleDragState.event;
-    const index = this.findEventEntryAtSegmentPoint(seg);
-    const entry = index === null ? null : this.getAllEventsForSegment(seg.day, seg.segment)[index];
-    const preferredOffsetMs = entry?.event === ev ? entry.displayInterval.offsetMs : undefined;
+    const preferredOffsetMs = clock.offsetMs;
     if (!this.setEventHandleTime(ev, this.mouseState.draggingHandle, newTime, { preferredOffsetMs })) return false;
 
     this._detailViewHasChanges = true;
@@ -1876,10 +1874,11 @@ drawTimeDisplay(canvasWidth, canvasHeight) {
     if (!segment) return null;
 
     const { startMs, endMs } = this.getSegmentHourRange(segment.day, segment.segment);
-    const startTime = new Date(startMs);
-    const endTime = new Date(endMs);
+    const part = SpiralEventProjection.repeatedHour(startMs, this.getCalendarTimeZone())?.parts.find(part => part.offsetMs === segment.clockOffsetMs);
+    const startTime = new Date(part ? part.startWallMs : startMs);
+    const endTime = new Date(part ? part.endWallMs : endMs);
 
-    return { startTime, endTime };
+    return { startTime, endTime, suffix: part ? ` (${this.formatEventOffset(part.offsetMs)})` : '' };
   };
   
   // Determine what to display
@@ -1892,7 +1891,7 @@ drawTimeDisplay(canvasWidth, canvasHeight) {
     if (timeSpan) {
       const formatTime = (date) => this.formatUTCHHMM(date);
       
-      timeString = `${formatTime(timeSpan.startTime)} - ${formatTime(timeSpan.endTime)}`;
+      timeString = `${formatTime(timeSpan.startTime)} - ${formatTime(timeSpan.endTime)}${timeSpan.suffix}`;
       
       // Format date
       const weekday = WEEKDAYS_UTC[timeSpan.startTime.getUTCDay()];
@@ -1908,7 +1907,7 @@ drawTimeDisplay(canvasWidth, canvasHeight) {
     if (timeSpan) {
       const formatTime = (date) => this.formatUTCHHMM(date);
       
-      timeString = `${formatTime(timeSpan.startTime)} - ${formatTime(timeSpan.endTime)}`;
+      timeString = `${formatTime(timeSpan.startTime)} - ${formatTime(timeSpan.endTime)}${timeSpan.suffix}`;
       
       // Format date
       const weekday = WEEKDAYS_UTC[timeSpan.startTime.getUTCDay()];
@@ -1926,7 +1925,10 @@ drawTimeDisplay(canvasWidth, canvasHeight) {
     const formatUTCTime = (date) => {
       const base = this.formatUTCHHMM(date);
       const seconds = this.autoTimeAlignState.enabled ? ':' + date.getUTCSeconds().toString().padStart(2, '0') : '';
-      return `${base}${seconds}`;
+      const hour = Math.floor(date.getTime() / SpiralTime.HOUR) * SpiralTime.HOUR;
+      const repeated = SpiralEventProjection.repeatedHour(hour, this.getCalendarTimeZone());
+      const suffix = repeated ? ` (${this.formatEventOffset(date - this.getDisplayInstant())})` : '';
+      return `${base}${seconds}${suffix}`;
     };
     
     const formatUTCDate = (date) => this.formatUTCDateLong(date);
@@ -2238,7 +2240,9 @@ clampRotationToEventWindow() {
     return !!(
       this.mouseState.selectedSegment &&
       this.mouseState.selectedSegment.day === overlay.day &&
-      this.mouseState.selectedSegment.segment === overlay.segment
+      this.mouseState.selectedSegment.segment === overlay.segment &&
+      (overlay.clockOffsetMs === undefined || this.mouseState.selectedSegment.clockOffsetMs === undefined ||
+        overlay.clockOffsetMs === this.mouseState.selectedSegment.clockOffsetMs)
     );
   },
 
@@ -2255,9 +2259,12 @@ clampRotationToEventWindow() {
       const canMerge = current &&
         current.radiusFunction === nextSpan.radiusFunction &&
         (!mergeByColor || current.color === nextSpan.color) &&
-        nextSpan.startTheta <= current.endTheta + mergeTolerance;
+        nextSpan.startTheta <= current.endTheta + mergeTolerance &&
+        nextSpan.endTheta >= current.startTheta - mergeTolerance;
 
       if (canMerge) {
+        // Repeated-hour pieces arrive in clock order, which reverses their angular order.
+        current.startTheta = Math.min(current.startTheta, nextSpan.startTheta);
         current.endTheta = Math.max(current.endTheta, nextSpan.endTheta);
         continue;
       }
@@ -2284,9 +2291,11 @@ clampRotationToEventWindow() {
         Math.abs(current.innerRadius - nextSpan.innerRadius) <= radiusTolerance &&
         Math.abs(current.outerRadius - nextSpan.outerRadius) <= radiusTolerance &&
         (!mergeByColor || current.color === nextSpan.color) &&
-        nextSpan.startTheta >= current.endTheta - mergeTolerance;
+        nextSpan.startTheta >= current.endTheta - mergeTolerance &&
+        nextSpan.endTheta <= current.startTheta + mergeTolerance;
 
       if (canMerge) {
+        current.startTheta = Math.max(current.startTheta, nextSpan.startTheta);
         current.endTheta = Math.min(current.endTheta, nextSpan.endTheta);
         continue;
       }
