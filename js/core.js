@@ -191,18 +191,11 @@ class SpiralCalendar {
       this._eventsVersion = 0;
       this.layoutCache = null; // { windowStartMs, windowEndMs, eventsVersion, eventToLane, eventToComponent, componentLaneCount }
 
-    // Set referenceTime to the first hour of the current day (00:00) in UTC
+    // Anchor the coordinates to the current calendar day, not the UTC date.
       const now = new Date();
-    // Create a pure UTC reference time
-    this.referenceTime = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+    this.referenceTime = SpiralTime.dayStart(SpiralTime.instantToWall(now, this.getCalendarTimeZone()));
 
-    // Set initial rotation so the current hour is at the bottom (using UTC)
-    const timezoneOffsetHours = (typeof this.getTimezoneOffsetHours === 'function')
-      ? this.getTimezoneOffsetHours(now)
-      : (now.getTimezoneOffset() / -60);
-    const currentHour = ((now.getUTCHours() + timezoneOffsetHours + now.getUTCMinutes() / 60) % 24 + 24) % 24;
-      const initialRotation = (currentHour / CONFIG.SEGMENTS_PER_DAY) * 2 * Math.PI;
-      this.state.rotation = initialRotation;
+    this.state.rotation = this.getCurrentTimeRotation(now);
 
 
       // Mouse interaction state

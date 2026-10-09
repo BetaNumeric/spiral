@@ -137,7 +137,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (!Number.isFinite(timeMs)) return null;
       const diffHours = (timeMs - this.referenceTime.getTime()) / (60 * 60 * 1000);
       if (!Number.isFinite(diffHours)) return null;
-      return diffHours >= 0 ? Math.floor(diffHours) : Math.ceil(diffHours);
+      return Math.floor(diffHours);
     },
 
     syncSelectedSegmentToCurrentDays() {
@@ -295,11 +295,13 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     ensureLayoutCache() {
-      const windowStartMs = this.referenceTime.getTime();
-      const windowEndMs = this.referenceTime.getTime() + this.state.days * 24 * 60 * 60 * 1000;
+      const windowStartMs = this.visibleWindowStart().getTime();
+      const windowEndMs = this.visibleWindowEnd().getTime();
+      const calendarsKey = JSON.stringify([...this.state.visibleCalendars].sort());
       const needRebuild = !this.layoutCache ||
         this.layoutCache.windowStartMs !== windowStartMs ||
         this.layoutCache.windowEndMs !== windowEndMs ||
+        this.layoutCache.calendarsKey !== calendarsKey ||
         this.layoutCache.eventsVersion !== this._eventsVersion;
       if (!needRebuild) return;
 
@@ -308,6 +310,7 @@ Object.assign(SpiralCalendar.prototype, {
       this.layoutCache = {
         windowStartMs,
         windowEndMs,
+        calendarsKey,
         eventsVersion: this._eventsVersion,
         eventToLane,
         eventToComponent,
@@ -322,6 +325,7 @@ Object.assign(SpiralCalendar.prototype, {
       // Load settings before setting up event handlers
       this.loadSettingsFromStorage();
       this.applyUrlSettingsOverrides();
+      this.referenceTime = SpiralTime.dayStart(SpiralTime.instantToWall(new Date(), this.getCalendarTimeZone()));
       
       this.setupEventHandlers();
       this.setupCanvas();
@@ -745,7 +749,7 @@ Object.assign(SpiralCalendar.prototype, {
       const { parent, find, unite } = createUnionFind(n);
 
       // Build actual overlap connectivity by iterating each hour segment in window
-      const totalHours = this.state.days * CONFIG.SEGMENTS_PER_DAY;
+      const totalHours = Math.ceil((windowEndMs - windowStartMs) / SpiralTime.HOUR);
       for (let h = 0; h < totalHours; h++) {
         const hourStart = new Date(windowStart.getTime() + h * 60 * 60 * 1000);
         const hourEnd = new Date(hourStart.getTime() + 60 * 60 * 1000);
@@ -884,20 +888,7 @@ Object.assign(SpiralCalendar.prototype, {
 
   getDisplayTime() {
     if (this.autoTimeAlignState.enabled) {
-      // Use UTC time consistently (same logic as drawTimeDisplay)
-      const now = new Date();
-      const tzOffsetHours = (typeof this.getTimezoneOffsetHours === 'function')
-        ? this.getTimezoneOffsetHours(now)
-        : (now.getTimezoneOffset() / -60);
-      const baseUtcMs = Date.UTC(
-        now.getUTCFullYear(),
-        now.getUTCMonth(),
-        now.getUTCDate(),
-        now.getUTCHours(),
-        now.getUTCMinutes(),
-        now.getUTCSeconds()
-      );
-      return new Date(baseUtcMs + tzOffsetHours * 60 * 60 * 1000);
+      return SpiralTime.instantToWall(new Date(), this.getCalendarTimeZone());
     } else {
       // Calculate the time corresponding to the current spiral rotation (using UTC)
       // Same logic as drawTimeDisplay

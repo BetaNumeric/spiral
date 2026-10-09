@@ -33,8 +33,8 @@ const CONFIG = {
 };
 
 const RUNTIME_FEATURE_FLAGS_STORAGE_KEY = 'spiralRuntimeFeatureFlags';
-const DEFAULT_DEV_MODE = true;
-const DEFAULT_STUDY_MODE = true;
+const DEFAULT_DEV_MODE = false;
+const DEFAULT_STUDY_MODE = false;
 
 function parseRuntimeFeatureFlagValue(value) {
   if (value === null || value === undefined) return null;
@@ -140,38 +140,21 @@ function getDeviceTimezoneOffsetHours(date = new Date()) {
 
 //Calculate sunrise and sunset times for a given date and location
 
-// Helper function to parse datetime-local input as UTC
+// Compatibility name: parse clock fields into the renderer's wall coordinates.
 function parseDateTimeLocalAsUTC(dateTimeString) {
-// datetime-local format is YYYY-MM-DDTHH:MM with a 4+ digit year
-// Parse it explicitly so years below 100 are preserved correctly.
-const match = typeof dateTimeString === 'string'
-  ? dateTimeString.trim().match(/^([+-]?\d+)-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/)
-  : null;
-if (!match) return new Date(NaN);
-const [, yearStr, monthStr, dayStr, hourStr, minuteStr, secondStr, millisecondStr] = match;
-const year = Number(yearStr);
-const month = Number(monthStr) - 1;
-const day = Number(dayStr);
-const hour = Number(hourStr);
-const minute = Number(minuteStr);
-const second = Number(secondStr || '0');
-const millisecond = Number((millisecondStr || '0').padEnd(3, '0'));
-if (![year, month, day, hour, minute, second, millisecond].every(Number.isFinite)) {
-  return new Date(NaN);
-}
-const date = new Date(0);
-date.setUTCHours(0, 0, 0, 0);
-date.setUTCFullYear(year, month, day);
-date.setUTCHours(hour, minute, second, millisecond);
-return date;
+  return SpiralTime.parseWall(dateTimeString);
 }
 
-function calculateSunTimes(date, coords = LOCATION_COORDS, timezoneOffsetHours = null) {
+function calculateSunTimes(date, coords = LOCATION_COORDS, timezoneOffsetHours = null, timeZone = null) {
 try {
   const tzOffset = Number.isFinite(timezoneOffsetHours)
     ? timezoneOffsetHours
     : getDeviceTimezoneOffsetHours(date);
-  const times = SunCalc.getTimes(date, coords.lat, coords.lng);
+  const noonWall = new Date(date);
+  noonWall.setUTCHours(12, 0, 0, 0);
+  const localNoonUtc = timeZone ? SpiralTime.wallToInstant(noonWall, timeZone)
+    : new Date(noonWall.getTime() - tzOffset * SpiralTime.HOUR);
+  const times = SunCalc.getTimes(localNoonUtc, coords.lat, coords.lng);
   const hasValidSunrise = times.sunrise instanceof Date && Number.isFinite(times.sunrise.getTime());
   const hasValidSunset = times.sunset instanceof Date && Number.isFinite(times.sunset.getTime());
   const wrap = (h) => ((h % 24) + 24) % 24;
@@ -179,13 +162,6 @@ try {
   if (!hasValidSunrise || !hasValidSunset) {
     // Polar day/night: SunCalc yields invalid sunrise/sunset dates.
     // Sample local noon to determine whether the sun stays above or below the horizon all day.
-    const baseUtcMidnight = new Date(Date.UTC(
-      date.getUTCFullYear(),
-      date.getUTCMonth(),
-      date.getUTCDate(),
-      0, 0, 0, 0
-    ));
-    const localNoonUtc = new Date(baseUtcMidnight.getTime() + (12 - tzOffset) * 60 * 60 * 1000);
     const noonAltitude = SunCalc.getPosition(localNoonUtc, coords.lat, coords.lng).altitude;
     if (Number.isFinite(noonAltitude) && noonAltitude > 0) {
       return { sunrise: 0, sunset: 24 };
@@ -194,8 +170,10 @@ try {
   }
   
   // Convert Date objects to hours
-  const sunriseRaw = times.sunrise.getUTCHours() + tzOffset + times.sunrise.getUTCMinutes() / 60;
-  const sunsetRaw = times.sunset.getUTCHours() + tzOffset + times.sunset.getUTCMinutes() / 60;
+  const sunriseOffset = timeZone ? SpiralTime.offsetHours(times.sunrise, timeZone) : tzOffset;
+  const sunsetOffset = timeZone ? SpiralTime.offsetHours(times.sunset, timeZone) : tzOffset;
+  const sunriseRaw = times.sunrise.getUTCHours() + sunriseOffset + times.sunrise.getUTCMinutes() / 60;
+  const sunsetRaw = times.sunset.getUTCHours() + sunsetOffset + times.sunset.getUTCMinutes() / 60;
   const sunrise = wrap(sunriseRaw);
   const sunset = wrap(sunsetRaw);
   

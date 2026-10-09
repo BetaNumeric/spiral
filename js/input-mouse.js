@@ -298,25 +298,8 @@ Object.assign(SpiralCalendar.prototype, {
           // Compute the UTC hour start datetime for this segment
           const hourStartMs = this.getSegmentHourRange(seg.day, seg.segment).startMs;
           const newTime = new Date(hourStartMs + minute * 60 * 1000);
-          // Apply constraints and update event
           const ev = this.handleDragState.event;
-          if (this.mouseState.draggingHandle === 'start') {
-            // Start must be before end by at least 5 minutes
-            if (newTime >= ev.end) {
-              const adjusted = new Date(ev.end.getTime() - 5 * 60 * 1000);
-              ev.start = adjusted;
-            } else {
-              ev.start = newTime;
-            }
-          } else if (this.mouseState.draggingHandle === 'end') {
-            // End must be after start by at least 5 minutes
-            if (newTime <= ev.start) {
-              const adjusted = new Date(ev.start.getTime() + 5 * 60 * 1000);
-              ev.end = adjusted;
-            } else {
-              ev.end = newTime;
-            }
-          }
+          if (!this.setEventHandleTime(ev, this.mouseState.draggingHandle, newTime)) return;
 
           // Mark as changed and redraw
           this._detailViewHasChanges = true;
@@ -881,6 +864,8 @@ Object.assign(SpiralCalendar.prototype, {
                       calendar: btn.event.calendar || 'Home'
                     })
                   };
+                  try { this.initializeEventTime(newEvent, { rejectGap: true }); }
+                  catch (error) { alert(error.message); return; }
                   this.runWithStudyEventSource('detail_view', () => {
                     this.events.push(newEvent);
                     this._eventsVersion++;

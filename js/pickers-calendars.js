@@ -14,23 +14,15 @@ Object.assign(SpiralCalendar.prototype, {
     if (!(parsedValue instanceof Date) || !Number.isFinite(parsedValue.getTime())) {
       return false;
     }
-
-    if (type === 'start') {
-      event.start = parsedValue;
-      if (parsedValue >= event.end) {
-        const newEnd = new Date(parsedValue);
-        newEnd.setUTCHours(parsedValue.getUTCHours() + 1);
-        event.end = newEnd;
-      }
-    } else {
-      if (parsedValue < event.start) {
-        const adjustedEnd = new Date(event.start);
-        adjustedEnd.setUTCHours(event.start.getUTCHours() + 1);
-        event.end = adjustedEnd;
-      } else {
-        event.end = parsedValue;
-      }
+    if (event.timeModel === 'instant-v1') {
+      try { SpiralTime.wallToInstant(parsedValue, this.getCalendarTimeZone(), { disambiguation: 'reject' }); }
+      catch (error) { alert(error.message); return false; }
     }
+
+    const start = type === 'start' ? parsedValue : event.start;
+    const requestedEnd = type === 'end' ? parsedValue : event.end;
+    const end = requestedEnd <= start ? this.getDefaultEventEnd(start, event) : requestedEnd;
+    if (!this.applyEventTimeRange(event, start, end)) return false;
 
     this.syncEventAutoColor(event);
     const persistentColorPicker = document.getElementById('persistentColorPicker');
@@ -203,13 +195,8 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   openDateTimePicker(event, type, anchorBox = null) {
-    // Convert UTC event time to local time for the input picker
     const eventTime = new Date(type === 'start' ? event.start : event.end);
-    const deviceOffsetHours = (typeof getDeviceTimezoneOffsetHours === 'function')
-      ? getDeviceTimezoneOffsetHours(eventTime)
-      : (eventTime.getTimezoneOffset() / -60);
-    const localTime = new Date(eventTime.getTime() - (deviceOffsetHours * 60 * 60 * 1000));
-    const localValue = formatDateTimeLocalForInput(localTime);
+    const localValue = SpiralTime.formatWall(eventTime);
     if (!this.supportsNativeDateTimeLocalValue(localValue)) {
       this.openExtendedDateTimeEditor(event, type, localValue, anchorBox);
       return;
@@ -323,7 +310,7 @@ Object.assign(SpiralCalendar.prototype, {
     temp.style.height = '2px';
 
     // Seed with current input value if present, else now (rounded to minutes)
-    const seed = inputEl.value ? inputEl.value : formatDateTimeLocalForInput(new Date());
+    const seed = inputEl.value || SpiralTime.formatWall(SpiralTime.instantToWall(new Date(), this.getCalendarTimeZone()));
     temp.value = seed;
 
     document.body.appendChild(temp);

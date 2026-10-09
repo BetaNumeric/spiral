@@ -12,7 +12,7 @@ Object.assign(SpiralCalendar.prototype, {
   serializeEventsForStorage() {
     return JSON.stringify(this.events.map(event => {
       this.ensureEventColorMetadata(event);
-      return { ...event, start: event.start.toISOString(), end: event.end.toISOString() };
+      return this.serializeEventTime(event);
     }));
   },
 
@@ -61,6 +61,7 @@ Object.assign(SpiralCalendar.prototype, {
     try {
       const events = storage.load().map(event => {
         const loaded = { ...event, start: new Date(event.start), end: new Date(event.end) };
+        this.projectEventTime(loaded);
         if (!loaded.calendar) loaded.calendar = 'Home';
         if (!loaded.persistentUID) loaded.persistentUID = generateEventUID(loaded);
         if (!loaded.lastModified) loaded.lastModified = Date.now();
@@ -138,7 +139,7 @@ Object.assign(SpiralCalendar.prototype, {
     try {
       const raw = storedCopy
         ? this.getEventStorage().getStorage().getItem(SpiralEventStorage.KEY)
-        : JSON.stringify(this.events, null, 2);
+        : JSON.stringify(JSON.parse(this.serializeEventsForStorage()), null, 2);
       const url = URL.createObjectURL(new Blob([raw ?? '[]'], { type: 'application/json' }));
       const link = document.createElement('a');
       link.href = url;

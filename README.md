@@ -47,12 +47,29 @@ window saves events. If two windows edit an older copy, Spiral blocks the stale
 save and offers a download of the unsaved events before reloading the saved copy.
 Failed saves show a notice with retry and download actions; unreadable stored data
 is preserved rather than replaced with an empty calendar. The existing JSON event
-format and timestamps are unchanged. Reload older open windows after an app update
+format and timestamps of older events are preserved. Reload older open windows after an app update
 so they also use these protections.
 
+New events and calendar imports use `timeModel: "instant-v1"`: their JSON start
+and end values are real UTC instants, converted to the selected calendar time
+zone for display. Changing the display zone does not change these saved instants.
+Older events without that marker retain their existing behavior because their
+original time-zone meaning cannot be recovered reliably. No automatic date
+migration is performed. Reload all open windows after updating to version 1.42.21
+before editing events, so every window understands the new records.
+
+Calendar imports honor UTC dates, IANA `TZID` values, floating times in the
+selected zone, all-day dates with exclusive end dates, and day/week/time
+durations. Unsupported recurring schedules, custom time-zone definitions,
+cancellations, and intervals that run backwards through a repeated clock hour
+are rejected before any events are imported. Nonexistent clock times entered
+manually during a daylight-saving change are reported instead of silently saved.
+The conversion boundary and its current limits are documented in
+[docs/time-model.md](docs/time-model.md).
+
 Storage regression checks use Node's built-in test runner:
-`node --test tests/event-storage.test.mjs`. In environments that prohibit spawning
-test processes, use `node --test --test-isolation=none tests/event-storage.test.mjs`.
+`node --test tests/*.test.mjs`. In environments that prohibit spawning test
+processes, use `node --test --test-isolation=none tests/*.test.mjs`.
 
 ## **Event List Timeline**
 

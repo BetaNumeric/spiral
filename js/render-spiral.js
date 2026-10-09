@@ -1225,7 +1225,7 @@ Object.assign(SpiralCalendar.prototype, {
       const startInput = document.createElement('input');
       startInput.id = 'persistentStartDateTime';
       startInput.type = 'datetime-local';
-      startInput.value = formatDateTimeLocalForInput(new Date(event.start));
+      startInput.value = SpiralTime.formatWall(new Date(event.start));
       
       const inputWidth = circleRadius * 1.2; // Scale with circle size
       const inputHeight = baseFontSize * 1.2;
@@ -1253,7 +1253,7 @@ Object.assign(SpiralCalendar.prototype, {
       const endInput = document.createElement('input');
       endInput.id = 'persistentEndDateTime';
       endInput.type = 'datetime-local';
-      endInput.value = formatDateTimeLocalForInput(new Date(event.end));
+      endInput.value = SpiralTime.formatWall(new Date(event.end));
       
       const endInputTop = dateTimeY + inputHeight * 0.6;
       
@@ -1309,16 +1309,13 @@ Object.assign(SpiralCalendar.prototype, {
       const newEnd = parseDateTimeLocalAsUTC(endInput.value);
           
           // Prevent end date from being earlier than start date
-          if (newEnd < newStart) {
+          if (newEnd <= newStart) {
             // Auto-adjust end time to be 1 hour after start time
-            const adjustedEnd = new Date(newStart);
-          adjustedEnd.setUTCHours(newStart.getUTCHours() + 1);
-            endInput.value = formatDateTimeLocalForInput(adjustedEnd);
-            event.start = newStart;
-            event.end = adjustedEnd;
+            const adjustedEnd = this.getDefaultEventEnd(newStart, event);
+            endInput.value = SpiralTime.formatWall(adjustedEnd);
+            if (!this.applyEventTimeRange(event, newStart, adjustedEnd)) return;
           } else {
-            event.start = newStart;
-            event.end = newEnd;
+            if (!this.applyEventTimeRange(event, newStart, newEnd)) return;
           }
 
           this.syncEventAutoColor(event);
@@ -1364,7 +1361,7 @@ Object.assign(SpiralCalendar.prototype, {
         const startDate = parseDateTimeLocalAsUTC(startInput.value);
           const endDate = new Date(startDate);
         endDate.setUTCHours(startDate.getUTCHours() + 1); // Add 1 hour
-          endInput.value = formatDateTimeLocalForInput(endDate);
+          endInput.value = SpiralTime.formatWall(endDate);
           updateEvent(); // Update the event with new end time
         }
       });
@@ -1388,7 +1385,7 @@ Object.assign(SpiralCalendar.prototype, {
       
       // Format current start time for input
       const startDate = new Date(event.start);
-      startInput.value = formatDateTimeLocalForInput(startDate);
+      startInput.value = SpiralTime.formatWall(startDate);
       
       const inputWidth = 180;
       const inputHeight = baseFontSize * 1.5;
@@ -1418,7 +1415,7 @@ Object.assign(SpiralCalendar.prototype, {
       endInput.type = 'datetime-local';
       
       const endDate = new Date(event.end);
-      endInput.value = formatDateTimeLocalForInput(endDate);
+      endInput.value = SpiralTime.formatWall(endDate);
       
       const endInputTop = dateTimeY + inputHeight / 4;
       
@@ -1451,8 +1448,12 @@ Object.assign(SpiralCalendar.prototype, {
       // Handle save function
       const saveDateTimes = () => {
         if (startInput.value && endInput.value) {
-        event.start = parseDateTimeLocalAsUTC(startInput.value);
-        event.end = parseDateTimeLocalAsUTC(endInput.value);
+        const start = parseDateTimeLocalAsUTC(startInput.value);
+        const end = parseDateTimeLocalAsUTC(endInput.value);
+        if (!this.applyEventTimeRange(event, start, end)) {
+          alert('Choose valid dates with the end after the start.');
+          return;
+        }
         event.lastModified = Date.now();
         this._eventsVersion++;
         this.ensureLayoutCache();

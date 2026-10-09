@@ -80,19 +80,7 @@ Object.assign(SpiralCalendar.prototype, {
     const newTime = new Date(hourStartMs + minute * 60 * 1000);
 
     const ev = this.handleDragState.event;
-    if (this.mouseState.draggingHandle === 'start') {
-      if (newTime >= ev.end) {
-        ev.start = new Date(ev.end.getTime() - 5 * 60 * 1000);
-      } else {
-        ev.start = newTime;
-      }
-    } else if (this.mouseState.draggingHandle === 'end') {
-      if (newTime <= ev.start) {
-        ev.end = new Date(ev.start.getTime() + 5 * 60 * 1000);
-      } else {
-        ev.end = newTime;
-      }
-    }
+    if (!this.setEventHandleTime(ev, this.mouseState.draggingHandle, newTime)) return false;
 
     this._detailViewHasChanges = true;
     this._eventsVersion++;
@@ -1736,38 +1724,8 @@ setNightOverlayEnabled(enabled) {
 },
 
 getTimeZoneOffsetHoursForZone(date = new Date(), timeZone = null) {
-  try {
-    const tz = (typeof timeZone === 'string' && timeZone.trim()) ? timeZone.trim() : null;
-    if (!tz || typeof Intl === 'undefined' || !Intl.DateTimeFormat) return null;
-    const d = date instanceof Date ? date : new Date(date);
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hourCycle: 'h23',
-      hour12: false
-    }).formatToParts(d);
-    const read = (type) => {
-      const part = parts.find((p) => p.type === type);
-      return part ? parseInt(part.value, 10) : NaN;
-    };
-    const year = read('year');
-    const month = read('month');
-    const day = read('day');
-    const hour = read('hour');
-    const minute = read('minute');
-    const second = read('second');
-    if (![year, month, day, hour, minute, second].every(Number.isFinite)) return null;
-    const asUtcMs = Date.UTC(year, month - 1, day, hour, minute, second);
-    const offsetHours = (asUtcMs - d.getTime()) / (60 * 60 * 1000);
-    return Number.isFinite(offsetHours) ? offsetHours : null;
-  } catch (_) {
-    return null;
-  }
+  try { return timeZone ? SpiralTime.offsetHours(date, timeZone) : null; }
+  catch (_) { return null; }
 },
 
 getTimezoneOffsetHours(date = new Date()) {
@@ -1780,7 +1738,14 @@ getTimezoneOffsetHours(date = new Date()) {
 },
 
 setUseLocationTimezone(enabled) {
+  const previous = this.state.useLocationTimezone;
   this.state.useLocationTimezone = !!enabled;
+  try { this.reprojectEventTimes(); }
+  catch (error) {
+    this.state.useLocationTimezone = previous;
+    alert(error.message);
+    return false;
+  }
   this._sunTimesCache = null;
   if (this.autoTimeAlignState.enabled) {
     this.updateRotationToCurrentTime();
@@ -1794,7 +1759,14 @@ setLocationTimeZoneId(timeZoneId) {
   const normalized = (typeof timeZoneId === 'string' && timeZoneId.trim())
     ? timeZoneId.trim()
     : null;
+  const previous = this.state.locationTimezoneId;
   this.state.locationTimezoneId = normalized;
+  try { this.reprojectEventTimes(); }
+  catch (error) {
+    this.state.locationTimezoneId = previous;
+    alert(error.message);
+    return false;
+  }
   this._sunTimesCache = null;
   if (this.state.useLocationTimezone && this.autoTimeAlignState.enabled) {
     this.updateRotationToCurrentTime();
@@ -1945,28 +1917,7 @@ drawTimeDisplay(canvasWidth, canvasHeight) {
     }
   } else {
     // Show normal time display (current time or spiral time)
-    if (this.autoTimeAlignState.enabled) {
-      // Use UTC time consistently
-      const now = new Date();
-      const tzOffsetHours = (typeof this.getTimezoneOffsetHours === 'function')
-        ? this.getTimezoneOffsetHours(now)
-        : (now.getTimezoneOffset() / -60);
-      const baseUtcMs = Date.UTC(
-        now.getUTCFullYear(),
-        now.getUTCMonth(),
-        now.getUTCDate(),
-        now.getUTCHours(),
-        now.getUTCMinutes(),
-        now.getUTCSeconds()
-      );
-      displayTime = new Date(baseUtcMs + tzOffsetHours * 60 * 60 * 1000);
-    } else {
-      // Calculate the time corresponding to the current spiral rotation (using UTC)
-      const rotationInHours = (this.state.rotation / (2 * Math.PI)) * CONFIG.SEGMENTS_PER_DAY;
-      // Create UTC time based on reference time
-      const utcTime = this.referenceTime.getTime() + rotationInHours * 60 * 60 * 1000;
-      displayTime = new Date(utcTime);
-    }
+    displayTime = this.getDisplayTime();
     
     // Format time and date manually using UTC methods to avoid timezone issues
     const formatUTCTime = (date) => {

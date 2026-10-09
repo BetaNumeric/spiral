@@ -257,8 +257,8 @@ Object.assign(SpiralCalendar.prototype, {
   describeEventForStudy(event) {
     if (!event) return null;
 
-    const start = event.start instanceof Date ? event.start : new Date(event.start);
-    const end = event.end instanceof Date ? event.end : new Date(event.end);
+    const start = this.getEventInstant(event, 'start');
+    const end = this.getEventInstant(event, 'end');
     const title = event.title || 'Untitled Event';
     const description = event.description || '';
 
@@ -270,6 +270,7 @@ Object.assign(SpiralCalendar.prototype, {
       descriptionHash: this.hashStudyText(description),
       start: start.toISOString(),
       end: end.toISOString(),
+      ...(event.timeModel ? { timeModel: event.timeModel } : {}),
       color: event.color || null,
       calendar: event.calendar || 'Home',
       addedToCalendar: !!event.addedToCalendar

@@ -43,7 +43,7 @@ Object.assign(SpiralCalendar.prototype, {
       temp.style.width = '2px';
       temp.style.height = '2px';
       temp.style.pointerEvents = 'auto';
-      temp.value = targetInputEl.value || formatDateTimeLocalForInput(new Date());
+      temp.value = targetInputEl.value || SpiralTime.formatWall(SpiralTime.instantToWall(new Date(), this.getCalendarTimeZone()));
 
       document.body.appendChild(temp);
 
@@ -1002,8 +1002,7 @@ Object.assign(SpiralCalendar.prototype, {
             icsContent += 'BEGIN:VEVENT\r\n';
             icsContent += `UID:${generateEventUID(event)}\r\n`;
             icsContent += `DTSTAMP:${formatIcsDateUTC(new Date())}\r\n`;
-            icsContent += `DTSTART:${formatIcsDateUTC(event.start)}\r\n`;
-            icsContent += `DTEND:${formatIcsDateUTC(event.end)}\r\n`;
+            icsContent += this.formatEventIcsDates(event);
             icsContent += `SUMMARY:${escapeIcsText(event.title)}\r\n`;
             if (event.description) {
               icsContent += `DESCRIPTION:${escapeIcsText(event.description)}\r\n`;
@@ -1083,8 +1082,7 @@ Object.assign(SpiralCalendar.prototype, {
             icsContent += 'BEGIN:VEVENT\r\n';
             icsContent += `UID:${generateEventUID(event)}\r\n`;
             icsContent += `DTSTAMP:${formatIcsDateUTC(new Date())}\r\n`;
-            icsContent += `DTSTART:${formatIcsDateUTC(event.start)}\r\n`;
-            icsContent += `DTEND:${formatIcsDateUTC(event.end)}\r\n`;
+            icsContent += this.formatEventIcsDates(event);
             icsContent += `SUMMARY:${escapeIcsText(event.title)}\r\n`;
             if (event.description) {
               icsContent += `DESCRIPTION:${escapeIcsText(event.description)}\r\n`;
@@ -1122,8 +1120,8 @@ Object.assign(SpiralCalendar.prototype, {
 
           // Open calendar app - don't mark as added since user might just view
           dialog.querySelector('#openCalendar').onclick = () => {
-            const startDate = new Date(event.start).toISOString();
-            const endDate = new Date(event.end).toISOString();
+            const startDate = this.getEventInstant(event, 'start').toISOString();
+            const endDate = this.getEventInstant(event, 'end').toISOString();
             
               // For non-iOS, try to open Google Calendar
             const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(event.title)}&dates=${startDate.replace(/[-:]/g, '').split('.')[0]}Z/${endDate.replace(/[-:]/g, '').split('.')[0]}Z&details=${encodeURIComponent(event.description || '')}`;
@@ -1137,8 +1135,8 @@ Object.assign(SpiralCalendar.prototype, {
             const googleCalendarBtn = dialog.querySelector('#openGoogleCalendar');
             if (googleCalendarBtn) {
               googleCalendarBtn.onclick = () => {
-              const startDate = new Date(event.start).toISOString();
-              const endDate = new Date(event.end).toISOString();
+              const startDate = this.getEventInstant(event, 'start').toISOString();
+              const endDate = this.getEventInstant(event, 'end').toISOString();
                 
               const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(event.title)}&dates=${startDate.replace(/[-:]/g, '').split('.')[0]}Z/${endDate.replace(/[-:]/g, '').split('.')[0]}Z&details=${encodeURIComponent(event.description || '')}`;
             window.open(googleCalendarUrl, '_blank');
@@ -1446,7 +1444,7 @@ Object.assign(SpiralCalendar.prototype, {
         if (!dayParts) return li;
         const { year, month, day } = dayParts;
         const dateObj = buildUTCDate(year, month, day);
-        const today = new Date();
+        const today = SpiralTime.instantToWall(new Date(), this.getCalendarTimeZone());
         const todayKey = makeEventDayKey(today);
         const isToday = dayKey === todayKey;
         
@@ -1862,8 +1860,7 @@ Object.assign(SpiralCalendar.prototype, {
         icsContent += 'BEGIN:VEVENT\r\n';
         icsContent += `UID:${generateEventUID(event)}\r\n`;
         icsContent += `DTSTAMP:${formatIcsDateUTC(new Date())}\r\n`;
-        icsContent += `DTSTART:${formatIcsDateUTC(event.start)}\r\n`;
-        icsContent += `DTEND:${formatIcsDateUTC(event.end)}\r\n`;
+        icsContent += this.formatEventIcsDates(event);
         icsContent += `SUMMARY:${escapeIcsText(event.title)}\r\n`;
         if (event.description) {
           icsContent += `DESCRIPTION:${escapeIcsText(event.description)}\r\n`;
@@ -1892,7 +1889,7 @@ Object.assign(SpiralCalendar.prototype, {
 
     // Function to export as JSON
     const exportToJSON = () => {
-      const data = JSON.stringify(this.events, null, 2);
+      const data = JSON.stringify(JSON.parse(this.serializeEventsForStorage()), null, 2);
       const blob = new Blob([data], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1970,135 +1967,7 @@ Object.assign(SpiralCalendar.prototype, {
 
 
 
-    // Helper function to unescape ICS text
-    const unescapeICS = (text) => {
-      return text
-        .replace(/\\n/g, '\n')
-        .replace(/\\r/g, '\r')
-        .replace(/\\,/g, ',')
-        .replace(/\\;/g, ';')
-        .replace(/\\\\/g, '\\');
-    };
-
-    // Helper function to parse ICS date
-    const parseICSDate = (dateStr) => {
-      // Handle both date-only and date-time formats
-      if (dateStr.length === 8) {
-        // Date only: YYYYMMDD
-        const year = parseInt(dateStr.substring(0, 4));
-        const month = parseInt(dateStr.substring(4, 6)) - 1;
-        const day = parseInt(dateStr.substring(6, 8));
-        return new Date(Date.UTC(year, month, day));
-      } else {
-        // Date-time: YYYYMMDDTHHMMSSZ or YYYYMMDDTHHMMSS
-        const year = parseInt(dateStr.substring(0, 4));
-        const month = parseInt(dateStr.substring(4, 6)) - 1;
-        const day = parseInt(dateStr.substring(6, 8));
-        const hour = parseInt(dateStr.substring(9, 11));
-        const minute = parseInt(dateStr.substring(11, 13));
-        const second = parseInt(dateStr.substring(13, 15));
-        
-        if (dateStr.endsWith('Z')) {
-          return new Date(Date.UTC(year, month, day, hour, minute, second));
-        } else {
-          // Assume local time if no timezone indicator
-          return new Date(year, month, day, hour, minute, second);
-        }
-      }
-    };
-
-    // Function to parse ICS content
-    const parseICSContent = (content) => {
-      const events = [];
-      const lines = content.split(/\r?\n/);
-      let currentEvent = null;
-      let inEvent = false;
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        
-        if (line === 'BEGIN:VEVENT') {
-          inEvent = true;
-          currentEvent = {};
-        } else if (line === 'END:VEVENT') {
-          inEvent = false;
-          if (currentEvent && currentEvent.start && currentEvent.end) {
-            // Set default calendar if not provided
-            if (!currentEvent.calendar) {
-              currentEvent.calendar = 'Home';
-            }
-            events.push(currentEvent);
-          }
-          currentEvent = null;
-        } else if (inEvent && currentEvent) {
-          const colonIndex = line.indexOf(':');
-          if (colonIndex > 0) {
-            const key = line.substring(0, colonIndex);
-            const propertyKey = key.split(';')[0].toUpperCase();
-            let value = line.substring(colonIndex + 1);
-            
-            // Handle line folding (continued lines)
-            while (i + 1 < lines.length && (lines[i + 1].startsWith(' ') || lines[i + 1].startsWith('\t'))) {
-              i++;
-              value += lines[i].substring(1);
-            }
-            
-            switch (propertyKey) {
-              case 'UID':
-                currentEvent.persistentUID = value.trim();
-                break;
-              case 'SUMMARY':
-                currentEvent.title = unescapeICS(value);
-                break;
-              case 'DESCRIPTION':
-                currentEvent.description = unescapeICS(value);
-                break;
-              case 'DTSTART':
-                currentEvent.start = parseICSDate(value);
-                break;
-              case 'DTEND':
-                currentEvent.end = parseICSDate(value);
-                break;
-              case 'DURATION':
-                // Handle duration if no DTEND
-                if (currentEvent.start && !currentEvent.end) {
-                  const duration = value;
-                  // Simple duration parsing (PT1H = 1 hour, PT30M = 30 minutes)
-                  let hours = 0, minutes = 0;
-                  const hourMatch = duration.match(/(\d+)H/);
-                  const minuteMatch = duration.match(/(\d+)M/);
-                  if (hourMatch) hours = parseInt(hourMatch[1]);
-                  if (minuteMatch) minutes = parseInt(minuteMatch[1]);
-                  currentEvent.end = new Date(currentEvent.start.getTime() + (hours * 60 + minutes) * 60 * 1000);
-                }
-                break;
-              case 'COLOR':
-              case 'X-SPIRAL-COLOR':
-                // Accept hex, rgb(), or hsl(); if hsl, convert to hex for consistency
-                {
-                  currentEvent.colorIsCustom = true;
-                  const raw = value.trim();
-                  if (/^hsl/i.test(raw)) {
-                    try {
-                      currentEvent.color = this.hslToHex(raw);
-                    } catch (_) {
-                      currentEvent.color = raw;
-                    }
-                  } else {
-                    currentEvent.color = raw;
-                  }
-                }
-                break;
-              case 'X-SPIRAL-CALENDAR':
-                currentEvent.calendar = unescapeICS(value);
-                break;
-            }
-          }
-        }
-      }
-      
-      return events;
-    };
+    const parseICSContent = content => SpiralICalendar.parse(content, this.getCalendarTimeZone());
     const toValidDate = (value) => {
       return parseEventDateValue(value);
     };
@@ -2166,13 +2035,15 @@ Object.assign(SpiralCalendar.prototype, {
       if (!normalized.persistentUID) {
         normalized.persistentUID = generateEventUID(normalized);
       }
-
+      this.projectEventTime(normalized);
       return normalized;
     };
     const getEventMergeSignature = (event) => {
-      const startMs = event && event.start instanceof Date ? event.start.getTime() : new Date(event.start).getTime();
-      const endMs = event && event.end instanceof Date ? event.end.getTime() : new Date(event.end).getTime();
+      const startMs = this.getEventInstant(event, 'start').getTime();
+      const endMs = this.getEventInstant(event, 'end').getTime();
       return [
+        event.timeModel || '',
+        !!event.allDay,
         event && event.calendar ? event.calendar : 'Home',
         event && event.title ? event.title : '',
         event && event.description ? event.description : '',
@@ -2182,12 +2053,16 @@ Object.assign(SpiralCalendar.prototype, {
     };
     const isSameEventContent = (a, b) => {
       return (
+        (a.timeModel || '') === (b.timeModel || '') &&
+        !!a.allDay === !!b.allDay &&
+        (a.startDate || '') === (b.startDate || '') &&
+        (a.endDate || '') === (b.endDate || '') &&
         (a.title || '') === (b.title || '') &&
         (a.description || '') === (b.description || '') &&
         (a.calendar || 'Home') === (b.calendar || 'Home') &&
         normalizeHexColor(a.color || '') === normalizeHexColor(b.color || '') &&
-        new Date(a.start).getTime() === new Date(b.start).getTime() &&
-        new Date(a.end).getTime() === new Date(b.end).getTime()
+        this.getEventInstant(a, 'start').getTime() === this.getEventInstant(b, 'start').getTime() &&
+        this.getEventInstant(a, 'end').getTime() === this.getEventInstant(b, 'end').getTime()
       );
     };
     const mergeImportedEvents = (incomingEvents) => {
@@ -2237,6 +2112,12 @@ Object.assign(SpiralCalendar.prototype, {
           : null;
 
         Object.assign(existing, incoming);
+        if (!incoming.allDay) {
+          delete existing.allDay;
+          delete existing.startDate;
+          delete existing.endDate;
+        }
+        this.copyEventTimeProjection(incoming, existing);
         existing.persistentUID = preservedPersistentUID;
         existing.addedToCalendar = preservedAddedToCalendar;
         existing.lastAddedToCalendar = preservedLastAddedToCalendar;
@@ -2404,7 +2285,7 @@ Object.assign(SpiralCalendar.prototype, {
     const randClear = document.getElementById('randClear');
     const randGenerate = document.getElementById('randGenerate');
 
-    const toInputValue = (date) => formatDateTimeLocalForInput(date);
+    const toInputValue = (date) => SpiralTime.formatWall(date);
     const getVisibleStart = () => this.visibleWindowStart();
     const getVisibleEnd = () => new Date(this.visibleWindowEnd().getTime() + 24 * 60 * 60 * 1000 - 1);
 
@@ -3029,6 +2910,7 @@ Object.assign(SpiralCalendar.prototype, {
             calendar: 'Random'
             })
           };
+        this.initializeEventTime(ev);
         this.events.push(ev);
         this._eventsVersion++;
         }
@@ -3142,14 +3024,14 @@ Object.assign(SpiralCalendar.prototype, {
       }
 
       renderEventList();
-      const now = new Date();
+      const now = SpiralTime.instantToWall(new Date(), this.getCalendarTimeZone());
       const nextHour = new Date(now);
-      nextHour.setHours(now.getHours() + 1, 0, 0, 0); // Set to next full hour in local time
-      const nextHourString = formatDateTimeLocalForInput(nextHour);
+      nextHour.setUTCHours(now.getUTCHours() + 1, 0, 0, 0);
+      const validNextHour = SpiralTime.instantToWall(SpiralTime.wallToInstant(nextHour, this.getCalendarTimeZone()), this.getCalendarTimeZone());
+      const nextHourString = SpiralTime.formatWall(validNextHour);
       eventStart.value = nextHourString;
-      const endTime = new Date(nextHour);
-      endTime.setHours(nextHour.getHours() + 1); // Add 1 hour in local time
-      eventEnd.value = formatDateTimeLocalForInput(endTime);
+      const endTime = this.getDefaultEventEnd(validNextHour);
+      eventEnd.value = SpiralTime.formatWall(endTime);
       if (typeof syncEventBoxes === 'function') syncEventBoxes();
       applyAddEventPaletteSuggestion({ resetSeed: true, resetManual: true, forceAuto: true });
       eventTitle.value = '';
@@ -3258,6 +3140,10 @@ Object.assign(SpiralCalendar.prototype, {
       if (startDate && endDate) {
         const parsedStartDate = parseDateTimeLocalAsUTC(startDate);
         const parsedEndDate = parseDateTimeLocalAsUTC(endDate);
+        if (!Number.isFinite(parsedStartDate.getTime()) || !Number.isFinite(parsedEndDate.getTime()) || parsedEndDate <= parsedStartDate) {
+          alert('Choose valid dates with the end after the start.');
+          return;
+        }
         const colorState = this.createEventColorState({
           calendarName: chosenCalendar,
           eventDate: parsedStartDate,
@@ -3282,6 +3168,8 @@ Object.assign(SpiralCalendar.prototype, {
             calendar: chosenCalendar
           })
         };
+        try { this.initializeEventTime(event, { rejectGap: true }); }
+        catch (error) { alert(error.message); return; }
         this.runWithStudyEventSource('add_panel', () => {
           this.events.push(event);
           this._eventsVersion++;
@@ -3371,14 +3259,8 @@ Object.assign(SpiralCalendar.prototype, {
     eventStart.addEventListener('change', (e) => {
       const startValue = e.target.value;
       if (!startValue) return;
-        const [datePart, timePart] = startValue.split('T');
-        const [year, month, day] = datePart.split('-').map(Number);
-        const [hour, minute] = timePart.split(':').map(Number);
-        const endHour = (hour + 1) % 24;
-        const endDay = hour + 1 >= 24 ? day + 1 : day;
-        const endDateStr = `${year}-${month.toString().padStart(2, '0')}-${endDay.toString().padStart(2, '0')}`;
-        const endTimeStr = `${endHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-      eventEnd.value = `${endDateStr}T${endTimeStr}`;
+      const start = SpiralTime.parseWall(startValue);
+      eventEnd.value = SpiralTime.formatWall(this.getDefaultEventEnd(start));
       if (typeof syncEventBoxes === 'function') syncEventBoxes();
       applyAddEventPaletteSuggestion();
     });
@@ -3391,15 +3273,8 @@ Object.assign(SpiralCalendar.prototype, {
       let endDate = parseDateTimeLocalAsUTC(endValue);
       if (endDate <= startDate) {
         // Auto-adjust end time to be 1 hour after start time
-        endDate = new Date(startDate);
-        endDate.setUTCHours(startDate.getUTCHours() + 1);
-        // Format for input
-        const year = endDate.getFullYear();
-        const month = String(endDate.getUTCMonth() + 1).padStart(2, '0');
-        const day = String(endDate.getUTCDate()).padStart(2, '0');
-        const hours = String(endDate.getUTCHours()).padStart(2, '0');
-        const minutes = String(endDate.getUTCMinutes()).padStart(2, '0');
-        eventEnd.value = `${year}-${month}-${day}T${hours}:${minutes}`;
+        endDate = this.getDefaultEventEnd(startDate);
+        eventEnd.value = SpiralTime.formatWall(endDate);
       }
       if (typeof syncEventBoxes === 'function') syncEventBoxes();
       });

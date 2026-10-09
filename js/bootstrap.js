@@ -404,6 +404,7 @@ if (useLocationTimezoneToggle) {
   useLocationTimezoneToggle.addEventListener('change', (e) => {
     if (typeof spiralCalendar.setUseLocationTimezone === 'function') {
       spiralCalendar.setUseLocationTimezone(e.target.checked);
+      e.target.checked = !!spiralCalendar.state.useLocationTimezone;
     } else {
       spiralCalendar.state.useLocationTimezone = !!e.target.checked;
       spiralCalendar.requestSettingsSave();

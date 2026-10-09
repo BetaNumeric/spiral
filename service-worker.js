@@ -13,11 +13,14 @@ const ASSETS = [
   './a2hs.js',
   './js/app-version.js',
   './js/config-utils.js',
+  './js/time-model.js',
+  './js/icalendar.js',
   './js/suncalc.min.js',
   './js/settings-config.js',
   './js/event-storage.js',
   './js/core.js',
   './js/core-methods.js',
+  './js/event-time.js',
   './js/ui-handlers.js',
   './js/ui-event-panel.js',
   './js/input-mouse.js',
@@ -35,6 +38,27 @@ const ASSETS = [
   './icons/icon_32.gif',
   './icons/icon_192.png',
   './icons/icon_512.png',
+  './icons/add_to_calendar.png',
+  './icons/add_to_calendar_white.png',
+  './icons/added_to_calendar.png',
+  './icons/added_to_calendar_white.png',
+  './icons/enter.png',
+  './icons/enter_white.png',
+  './icons/location.png',
+  './icons/location_white.png',
+  './icons/mute.png',
+  './icons/mute_white.png',
+  './icons/search.png',
+  './icons/search_white.png',
+  './icons/settings.png',
+  './icons/share.png',
+  './icons/share_white.png',
+  './icons/speaker.png',
+  './icons/speaker_white.png',
+  './icons/update_calendar.png',
+  './icons/update_calendar_white.png',
+  './icons/wait.png',
+  './icons/wait_white.png',
   './sounds/click.mp3',
   './sounds/click.wav',
   './sounds/click0.mp3',
@@ -50,7 +74,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => Promise.all(
-      keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
+      keys.filter((k) => k.startsWith(APP_CACHE_PREFIX) && k !== CACHE_NAME).map((k) => caches.delete(k))
     )).then(() => self.clients.claim())
   );
 });

@@ -204,8 +204,41 @@ test('blocked storage access never attempts to replace unreadable data', async (
 });
 
 vm.runInContext('class SpiralCalendar {}', context);
+for (const file of ['time-model', 'event-time']) {
+  vm.runInContext(fs.readFileSync(new URL(`../js/${file}.js`, import.meta.url), 'utf8'), context);
+}
 vm.runInContext(fs.readFileSync(new URL('../js/event-storage-ui.js', import.meta.url), 'utf8'), context);
 const calendarPrototype = vm.runInContext('SpiralCalendar.prototype', context);
+
+test('versioned events load as wall coordinates and save their actual instants without drift', async () => {
+  const saved = { ...event('canonical'), timeModel: 'instant-v1' };
+  const { f, calendar } = calendarFixture(JSON.stringify([saved]));
+  calendar.state.useLocationTimezone = true;
+  calendar.state.locationTimezoneId = 'Europe/Berlin';
+  assert.equal(calendar.loadEventsFromStorage(), true);
+  assert.equal(calendar.events[0].start.toISOString(), '2026-10-08T11:00:00.000Z');
+  assert.equal(calendar.hasUnsavedEventChanges(), false);
+  assert.equal(await calendar.saveEventsToStorage(), true);
+  assert.equal(JSON.parse(f.raw)[0].start, saved.start);
+  calendar.applyEventTimeRange(calendar.events[0], context.SpiralTime.parseWall('2026-10-08T12:00'), context.SpiralTime.parseWall('2026-10-08T13:00'));
+  assert.equal(await calendar.saveEventsToStorage(), true);
+  assert.equal(JSON.parse(f.raw)[0].start, '2026-10-08T10:00:00.000Z');
+  assert.equal(calendar.hasUnsavedEventChanges(), false);
+});
+
+test('a stored projection that cannot be rendered keeps the current memory and original stored bytes', () => {
+  const saved = { ...event('repeated hour'), timeModel: 'instant-v1',
+    start: '2026-10-25T00:45:00.000Z', end: '2026-10-25T01:15:00.000Z' };
+  const raw = JSON.stringify([saved]);
+  const { f, calendar } = calendarFixture(raw);
+  calendar.state.useLocationTimezone = true;
+  calendar.state.locationTimezoneId = 'Europe/Berlin';
+  calendar.events = [{ title: 'Keep current memory' }];
+  assert.equal(calendar.loadEventsFromStorage(), false);
+  assert.equal(f.raw, raw);
+  assert.equal(calendar.events[0].title, 'Keep current memory');
+  assert.equal(calendar.getEventStorage().error.kind, 'load');
+});
 
 function calendarFixture(initial = snapshot('original')) {
   const f = fixture(initial);

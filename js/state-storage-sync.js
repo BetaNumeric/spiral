@@ -160,8 +160,7 @@ Object.assign(SpiralCalendar.prototype, {
             };
             
             icsContent += `DTSTAMP:${formatIcsDateUTC(new Date())}\r\n`;
-            icsContent += `DTSTART:${formatIcsDateUTC(ev.start)}\r\n`;
-            icsContent += `DTEND:${formatIcsDateUTC(ev.end)}\r\n`;
+            icsContent += this.formatEventIcsDates(ev);
             icsContent += `SUMMARY:${escapeIcsText(ev.title)}\r\n`;
             if (ev.description) {
               icsContent += `DESCRIPTION:${escapeIcsText(ev.description)}\r\n`;
@@ -221,8 +220,7 @@ Object.assign(SpiralCalendar.prototype, {
               };
               
               icsContent += `DTSTAMP:${formatIcsDateUTC(new Date())}\r\n`;
-              icsContent += `DTSTART:${formatIcsDateUTC(ev.start)}\r\n`;
-              icsContent += `DTEND:${formatIcsDateUTC(ev.end)}\r\n`;
+              icsContent += this.formatEventIcsDates(ev);
               icsContent += `SUMMARY:${escapeIcsText(ev.title)}\r\n`;
               if (ev.description) {
                 icsContent += `DESCRIPTION:${escapeIcsText(ev.description)}\r\n`;
@@ -1234,12 +1232,9 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   getCurrentTimeRotation(date = new Date()) {
-    // Ensure we're using UTC time consistently
-    const tzOffsetHours = (typeof this.getTimezoneOffsetHours === 'function')
-      ? this.getTimezoneOffsetHours(date)
-      : (date.getTimezoneOffset() / -60);
-    const currentHour = ((date.getUTCHours() + tzOffsetHours + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600) % 24 + 24) % 24;
-    return (currentHour / CONFIG.SEGMENTS_PER_DAY) * 2 * Math.PI;
+    const wallTime = SpiralTime.instantToWall(date, this.getCalendarTimeZone());
+    const hours = (wallTime.getTime() - this.referenceTime.getTime()) / SpiralTime.HOUR;
+    return (hours / CONFIG.SEGMENTS_PER_DAY) * 2 * Math.PI;
   },
 
   animateResetToCurrentTime(options = {}) {
@@ -2817,8 +2812,7 @@ Object.assign(SpiralCalendar.prototype, {
     const segmentDate = this.getSegmentDate(segmentId);
     const segmentStart = new Date(segmentDate);
     segmentStart.setUTCMinutes(0, 0, 0);
-    const segmentEnd = new Date(segmentStart);
-    segmentEnd.setUTCHours(segmentStart.getUTCHours() + 1);
+    const segmentEnd = this.getDefaultEventEnd(segmentStart);
     const colorState = this.createEventColorState({
       calendarName: 'Home',
       eventDate: segmentStart
@@ -2829,6 +2823,7 @@ Object.assign(SpiralCalendar.prototype, {
       description: '',
       start: new Date(segmentStart),
       end: new Date(segmentEnd),
+      timeModel: 'instant-v1',
       ...colorState,
       calendar: 'Home',
       isDraft: true,
@@ -3171,8 +3166,8 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
   ensureSunTimesCacheForWindow() {
-  const windowStart = new Date(this.referenceTime.getTime());
-  const windowEnd = new Date(this.referenceTime.getTime() + (this.state.days + 1) * 24 * 60 * 60 * 1000 - 1);
+  const windowStart = SpiralTime.dayStart(this.visibleWindowStart());
+  const windowEnd = SpiralTime.dayStart(new Date(this.visibleWindowEnd().getTime() - 1));
   const coordsKey = `${LOCATION_COORDS.lat},${LOCATION_COORDS.lng}`;
   const timezoneKey = (this.state.useLocationTimezone && this.state.locationTimezoneId)
     ? `location:${this.state.locationTimezoneId}`
@@ -3184,15 +3179,15 @@ Object.assign(SpiralCalendar.prototype, {
     return;
   }
   const byDateKey = new Map();
-  const startUTC = new Date(Date.UTC(windowStart.getUTCFullYear(), windowStart.getUTCMonth(), windowStart.getUTCDate(), 0, 0, 0, 0));
-  const endUTC = new Date(Date.UTC(windowEnd.getUTCFullYear(), windowEnd.getUTCMonth(), windowEnd.getUTCDate(), 0, 0, 0, 0));
+  const startUTC = SpiralTime.dayStart(windowStart);
+  const endUTC = SpiralTime.dayStart(windowEnd);
   for (let d = new Date(startUTC); d.getTime() <= endUTC.getTime(); d = new Date(d.getTime() + 24 * 60 * 60 * 1000)) {
     const key = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
     try {
       const tzOffset = (typeof this.getTimezoneOffsetHours === 'function')
         ? this.getTimezoneOffsetHours(d)
         : (d.getTimezoneOffset() / -60);
-      byDateKey.set(key, calculateSunTimes(d, LOCATION_COORDS, tzOffset));
+      byDateKey.set(key, calculateSunTimes(d, LOCATION_COORDS, tzOffset, this.getCalendarTimeZone()));
     } catch (e) {
       byDateKey.set(key, { sunrise: 6, sunset: 18 });
     }
@@ -3202,7 +3197,7 @@ Object.assign(SpiralCalendar.prototype, {
 
   getSunTimesForDate(date) {
   this.ensureSunTimesCacheForWindow();
-  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
+  const d = SpiralTime.dayStart(date);
   const key = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
   if (this._sunTimesCache && this._sunTimesCache.byDateKey && this._sunTimesCache.byDateKey.has(key)) {
     return this._sunTimesCache.byDateKey.get(key);
@@ -3210,14 +3205,27 @@ Object.assign(SpiralCalendar.prototype, {
   const tzOffset = (typeof this.getTimezoneOffsetHours === 'function')
     ? this.getTimezoneOffsetHours(date)
     : (date.getTimezoneOffset() / -60);
-  return calculateSunTimes(date, LOCATION_COORDS, tzOffset);
+  return calculateSunTimes(date, LOCATION_COORDS, tzOffset, this.getCalendarTimeZone());
   },
 
   visibleWindowStart() {
-  return new Date(this.referenceTime.getTime());
+    return new Date(this.getVisibleTimeWindow().startMs);
   },
 
   visibleWindowEnd() {
-  return new Date(this.referenceTime.getTime() + this.state.days * 24 * 60 * 60 * 1000);
+    return new Date(this.getVisibleTimeWindow().endMs);
+  },
+
+  getVisibleTimeWindow() {
+    const range = this.getRenderVisibilityRange(this.state.days * 2 * Math.PI);
+    const hoursPerRadian = CONFIG.SEGMENTS_PER_DAY / (2 * Math.PI);
+    const origin = this.getTotalVisibleSegments();
+    // Include partially visible hours; the cache stays stable within an hour.
+    const firstHour = Math.floor(origin - range.max * hoursPerRadian + 1e-9);
+    const lastHour = Math.ceil(origin - range.min * hoursPerRadian - 1e-9);
+    return {
+      startMs: this.referenceTime.getTime() + firstHour * SpiralTime.HOUR,
+      endMs: this.referenceTime.getTime() + lastHour * SpiralTime.HOUR
+    };
   }
 });
