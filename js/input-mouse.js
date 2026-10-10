@@ -583,6 +583,12 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     handleClick(event) {
+      // Touch-generated clicks may be MouseEvents without a pointerType.
+      const pointerType = event.pointerType ||
+        (event.sourceCapabilities?.firesTouchEvents ? 'touch' : this._canvasPointerType);
+      this._canvasPointerType = null;
+      const isTouch = pointerType === 'touch';
+
       // Don't handle click if we just finished dragging
       if (this.mouseState.wasDragging) {
         this.mouseState.wasDragging = false;
@@ -835,7 +841,8 @@ Object.assign(SpiralCalendar.prototype, {
       const segment = this.findSegmentAtPoint(canvasX, canvasY);
 
       if (segment) {
-        const hitIndex = this.findEventEntryAtSegmentPoint(segment);
+        // Fingers select the hour as a whole; mouse and pen can target a band.
+        const hitIndex = isTouch ? null : this.findEventEntryAtSegmentPoint(segment);
         // Check if this is the same segment that's already selected
         const isSameSegment = this.mouseState.selectedSegment && 
                              this.mouseState.selectedSegment.day === segment.day && 
@@ -846,6 +853,7 @@ Object.assign(SpiralCalendar.prototype, {
           // Clicked the same segment again
           if (this.state.detailViewDay !== null) {
             if (hitIndex !== null && hitIndex !== this.mouseState.selectedEventIndex) {
+              this.finishActiveDetailTextEditor({ redraw: false });
               this.mouseState.selectedEventIndex = hitIndex;
               this.drawSpiral();
               return;
@@ -853,10 +861,11 @@ Object.assign(SpiralCalendar.prototype, {
             const detailEventState = this.getDetailViewEventState();
             const selectedEventCount = detailEventState ? detailEventState.selectedEventCount : 0;
             const activeEvent = detailEventState ? detailEventState.activePersistedEvent : null;
-            if (selectedEventCount > 1 && this.cycleDetailViewEvent(1)) {
-              // Cycle to the next event
-              this.drawSpiral(); // Redraw to update the detail view
-              return; // Keep detail view open
+            if (selectedEventCount > 1) {
+              if (isTouch && this.cycleDetailViewEvent(1)) {
+                this.drawSpiral();
+              }
+              return; // Precise clicks keep the hit event selected; taps cycle.
             } else if (selectedEventCount === 1 && activeEvent) {
               // Single event: open color picker for that event, keep detail view open
               this.openColorPicker(activeEvent, { clientX: event.clientX, clientY: event.clientY });

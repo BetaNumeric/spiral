@@ -1128,6 +1128,9 @@ Object.assign(SpiralCalendar.prototype, {
       this.handleMouseMove(e);
       });
       this.canvas.addEventListener('mouseleave', () => this.handleMouseLeave());
+      this.canvas.addEventListener('pointerdown', (e) => {
+        this._canvasPointerType = e.pointerType;
+      });
       this.canvas.addEventListener('click', (e) => this.handleClick(e));
       this.canvas.addEventListener('dblclick', (e) => this.handleDoubleClick(e));
       this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));

@@ -43,10 +43,11 @@ or calendar; changes to an existing event are saved automatically. New drafts
 are saved only when you choose **Add Event**. **Home** and **Work** are the default
 calendars, and you can add your own.
 
-To change an event's color, select it and tap its colored ring or selected segment.
+To change an event's color, select it and tap its colored ring.
 Drag the start or end handle to change its duration directly on the spiral.
-Overlapping events stack; tap the selected segment again or use the chevrons
-in the details to cycle through them. **+ New** creates another event, and
+Overlapping events stack. A mouse or pen click selects the event under the pointer.
+Touch taps select the hour; repeated taps cycle through its events. The chevrons
+in the details let you cycle with either input. **+ New** creates another event, and
 **Delete** removes the selected event.
 
 When editing text, **Enter** saves a title, **Ctrl+Enter** saves a description,

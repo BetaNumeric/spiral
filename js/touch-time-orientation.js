@@ -696,6 +696,7 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   handleTouchStart(e) {
+    this._canvasPointerType = 'touch';
     if (typeof this.isDetailViewOpeningTransitionActive === 'function' &&
         this.isDetailViewOpeningTransitionActive()) {
       if (typeof this.completeModeTransitionImmediately === 'function') {
@@ -829,7 +830,10 @@ Object.assign(SpiralCalendar.prototype, {
               event: selectedEvent,
               originalStart: new Date(selectedEvent.start),
               originalEnd: new Date(selectedEvent.end),
-              touchIdentifier: e.touches[0].identifier
+              touchIdentifier: e.touches[0].identifier,
+              touchStartX: e.touches[0].clientX,
+              touchStartY: e.touches[0].clientY,
+              touchMoved: false
             };
 
             // Ensure spiral mode during handle drag (temporarily).
@@ -907,6 +911,15 @@ Object.assign(SpiralCalendar.prototype, {
       const trackedId = this.handleDragState.touchIdentifier;
       const activeTouch = Array.from(e.touches).find((touch) => touch.identifier === trackedId) || e.touches[0];
       if (!activeTouch) return;
+      if (!this.handleDragState.touchMoved) {
+        const distance = Math.hypot(activeTouch.clientX - this.handleDragState.touchStartX,
+          activeTouch.clientY - this.handleDragState.touchStartY);
+        if (distance < 6) {
+          e.preventDefault();
+          return;
+        }
+        this.handleDragState.touchMoved = true;
+      }
       const { canvasX, canvasY } = this._touchToCanvasPoint(activeTouch);
       this.updateDraggingHandleAtCanvasPoint(canvasX, canvasY);
       e.preventDefault();
@@ -1333,11 +1346,22 @@ Object.assign(SpiralCalendar.prototype, {
 
     // Finalize event time handle dragging.
     if (this.mouseState.isHandleDragging) {
-      const trackedId = this.handleDragState ? this.handleDragState.touchIdentifier : null;
+      const drag = this.handleDragState;
+      const trackedId = drag ? drag.touchIdentifier : null;
       const stillTrackedTouchActive = trackedId !== null && Array.from(e.touches || []).some((touch) => touch.identifier === trackedId);
       if (stillTrackedTouchActive) return;
 
+      const touch = Array.from(e.changedTouches || []).find(touch => touch.identifier === trackedId);
+      const isTap = e.type === 'touchend' && drag && !drag.touchMoved && touch &&
+        Math.hypot(touch.clientX - drag.touchStartX, touch.clientY - drag.touchStartY) < 6 &&
+        drag.event.start.getTime() === drag.originalStart.getTime() &&
+        drag.event.end.getTime() === drag.originalEnd.getTime();
       this.finishEventHandleDrag();
+      if (isTap) {
+        // A stationary finger near a handle is still a tap, not a resize.
+        this.mouseState.wasDragging = false;
+        this.handleClick({ clientX: touch.clientX, clientY: touch.clientY, pointerType: 'touch' });
+      }
       if (e.cancelable) e.preventDefault();
       return;
     }
