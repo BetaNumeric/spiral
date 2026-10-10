@@ -54,6 +54,8 @@ instants, a permanent UID (`persistentUID`), and a nonnegative increasing
 UIDs. Runtime Dates retain the same actual timestamps as storage; both renderers
 use shared immutable display projections. Changing the display zone changes only the view. Content edits
 increase the revision; saving again or sharing an unchanged event does not.
+The two canvas views share event layout, clipping, night-overlay calculations,
+and selection geometry in `js/render-geometry.js`.
 All calendar exports use the same serializer and retain these identities.
 Imports match by UID, keep distinct events with identical content, and skip
 older revisions. Invalid records and duplicate UIDs reject the entire file.

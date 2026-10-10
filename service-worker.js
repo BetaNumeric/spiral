@@ -23,6 +23,7 @@ const ASSETS = [
   './js/event-storage.js',
   './js/core.js',
   './js/core-methods.js',
+  './js/render-geometry.js',
   './js/event-time.js',
   './js/event-transfer.js',
   './js/ui-handlers.js',

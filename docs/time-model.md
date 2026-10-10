@@ -82,6 +82,15 @@ dragging implementation and invert the section's time-to-angle mapping to choose
 an occurrence, including empty sections. Text editing preserves the endpoint's occurrence.
 The five-minute handle minimum is measured on the actual timeline.
 
+`js/render-geometry.js` owns the shared time-to-angle mapping, clipping, radial
+bounds, overlap groups, and event slice collection. Both renderers consume the
+same logical slices, including stacked gap filling and persistent lane widths.
+Circle mode supplies fixed ring radii; spiral mode supplies its radius function.
+The painters retain their separate canvas paths and edge-cap behavior. Selection
+and handle dragging use the same angle conversion and radial bounds as drawing.
+Night overlap calculation and repeated-hour dividers also live in this module,
+which is included in the offline cache.
+
 `repeatedHour` derives each section's wall range, actual range, offset, and angular
 fraction from the IANA transition. Berlin's sections each occupy half the usual
 02:00 wedge. Lord Howe's repeated half-hour gives the affected 01:00 wedge a

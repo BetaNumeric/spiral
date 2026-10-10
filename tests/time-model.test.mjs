@@ -6,7 +6,7 @@ import { webcrypto } from 'node:crypto';
 
 const context = vm.createContext({ console, Date, Intl, WeakMap, Map, Set, crypto: webcrypto, alert() {},
   CONFIG: { SEGMENTS_PER_DAY: 24 }, SpiralCalendar: class {} });
-for (const file of ['config-utils', 'time-model', 'event-model', 'icalendar', 'core-methods', 'state-storage-sync', 'event-projection', 'event-time', 'pickers-calendars', 'touch-time-orientation', 'render-circle', 'render-spiral']) {
+for (const file of ['config-utils', 'time-model', 'event-model', 'icalendar', 'core-methods', 'render-geometry', 'state-storage-sync', 'event-projection', 'event-time', 'pickers-calendars', 'touch-time-orientation', 'render-circle', 'render-spiral']) {
   vm.runInContext(fs.readFileSync(new URL(`../js/${file}.js`, import.meta.url), 'utf8'), context);
 }
 context.formatIcsDateUTC = value => new Date(value).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
@@ -605,25 +605,22 @@ test('night shading preserves both repeated sections without filling gaps betwee
   const step = 2 * Math.PI / 24;
   const radiusFunction = () => 100;
   for (const [zone, hourText] of [[berlin, '2026-10-25T02:00'], ['Australia/Lord_Howe', '2026-04-05T01:00']]) {
-    const hour = wall(hourText).getTime();
+    app.state.locationTimezoneId = zone;
+    app.referenceTime = wall(hourText.slice(0, 10) + 'T00:00');
+    const hour = wall(hourText).getUTCHours();
+    const { day, segment } = app.getSegmentPositionFromId(hour);
     for (const circle of [false, true]) {
       const check = (from, to, expected, selectedOffset) => {
         app.mouseState.selectedSegment = selectedOffset === undefined ? null :
-          { day: 0, segment: 2, clockOffsetMs: selectedOffset };
+          { day, segment, clockOffsetMs: selectedOffset };
         const drawn = [];
         app.drawSpiralBand = (start, end) => drawn.push([start / step, end / step]);
         app.fillCircleModeOverlaySegment = span => drawn.push([-span.startTheta / step, -span.endTheta / step]);
-        const ranges = context.SpiralEventProjection.layoutRanges(hour + from * Time.HOUR, hour + to * Time.HOUR, zone);
-        app.nightOverlays = Array.from(ranges, range => {
-          const startFrac = (range.startMs - hour) / Time.HOUR;
-          const endFrac = (range.endMs - hour) / Time.HOUR;
-          const selection = { day: 0, segment: 2,
-            clockOffsetMs: context.SpiralEventProjection.clockTime(range.startMs, zone).offsetMs };
-          return circle ? { ...selection, isCircleMode: true, innerRadius: 100, outerRadius: 180,
-            startTheta: -(1 - endFrac) * step, endTheta: -(1 - startFrac) * step } :
-            { ...selection, isCircleMode: false, radiusFunction, startTheta: 0, endTheta: step,
-              rawStartAngle: 0, rawEndAngle: step, overlayStartFrac: startFrac, overlayEndFrac: endFrac };
-        });
+        app.nightOverlays = [];
+        app.state.showNightOverlay = true;
+        app.collectNightOverlaysForSegment({ day, segment, startTheta: 0, endTheta: step, rawStartAngle: 0, rawEndAngle: step,
+          radiusFunction, innerRadius: circle ? 100 : null, outerRadius: circle ? 180 : null },
+          { sunset: hour + from, sunrise: hour + to });
         app.drawNightOverlays();
         drawn.sort((a, b) => a[0] - b[0]);
         assert.equal(drawn.length, expected.length, `${zone}, circle=${circle}`);

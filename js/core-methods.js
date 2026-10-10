@@ -499,19 +499,6 @@ Object.assign(SpiralCalendar.prototype, {
       return d;
     },
 
-    annotateSegmentClock(segment) {
-      if (!segment || !Number.isFinite(segment.angle)) return segment;
-      const { startMs } = this.getSegmentHourRange(segment.day, segment.segment);
-      const layout = SpiralEventProjection.repeatedHour(startMs, this.getCalendarTimeZone());
-      if (!layout) return segment;
-      const step = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
-      const origin = segment.day * 2 * Math.PI + segment.segment * step;
-      const angle = origin + ((segment.angle - origin) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
-      const fraction = Math.max(0, Math.min(1 - 1 / SpiralTime.HOUR, 1 - (angle - origin) / step));
-      const clock = SpiralEventProjection.clockTime(startMs + fraction * SpiralTime.HOUR, this.getCalendarTimeZone());
-      return { ...segment, clockOffsetMs: clock.offsetMs, clockOccurrence: clock.occurrence };
-    },
-
     getEventsForClockSegment(segment) {
       const entries = this.getAllEventsForSegment(segment.day, segment.segment);
       const { startMs } = this.getSegmentHourRange(segment.day, segment.segment);
@@ -521,14 +508,6 @@ Object.assign(SpiralCalendar.prototype, {
       const from = startMs + part.startFraction * SpiralTime.HOUR;
       const to = startMs + part.endFraction * SpiralTime.HOUR;
       return entries.filter(entry => entry.startLayoutMs < to && entry.endLayoutMs > from);
-    },
-
-    getClockSegmentThetaRange(selection, rawStart, rawEnd) {
-      if (!selection) return { startTheta: rawStart, endTheta: rawEnd };
-      const hour = this.getSegmentHourRange(selection.day, selection.segment).startMs;
-      const part = SpiralEventProjection.repeatedHour(hour, this.getCalendarTimeZone())?.parts.find(part => part.offsetMs === selection.clockOffsetMs);
-      return part ? { startTheta: rawStart + (1 - part.endFraction) * (rawEnd - rawStart),
-        endTheta: rawStart + (1 - part.startFraction) * (rawEnd - rawStart) } : { startTheta: rawStart, endTheta: rawEnd };
     },
 
     getMaxOverlapForEventAcrossHours(targetEvent) {
@@ -717,35 +696,6 @@ Object.assign(SpiralCalendar.prototype, {
         startMinute: events[eventIndex].startMinute,
         endMinute: events[eventIndex].endMinute
       };
-    },
-
-    findEventEntryAtSegmentPoint(segment) {
-      if (!Number.isFinite(segment.angle) || !Number.isFinite(segment.radius)) return null;
-      const entries = this.getEventsForClockSegment(segment);
-      for (let index = this.eventSegments.length - 1; index >= 0; index--) {
-        const slice = this.eventSegments[index];
-        const origin = slice.rawStartAngle ?? slice.timeStartTheta;
-        const angle = slice.isCircleMode
-          ? origin + ((segment.angle - origin) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI)
-          : segment.angle;
-        if (slice.day !== segment.day || slice.segment !== segment.segment
-          || angle < slice.timeStartTheta || angle > slice.timeEndTheta) continue;
-        let inner;
-        let outer;
-        if (slice.isCircleMode) {
-          inner = slice.innerRadius;
-          outer = slice.outerRadius;
-        } else {
-          const base = slice.originalRadiusFunction(segment.angle);
-          const height = slice.originalRadiusFunction(segment.angle + 2 * Math.PI) - base;
-          inner = base + (slice.eventSliceStart ?? 0) * height;
-          outer = base + (slice.eventSliceEnd ?? 1) * height;
-        }
-        if (segment.radius < inner || segment.radius > outer) continue;
-        const hit = entries.findIndex(entry => entry.event === slice.event && entry.displayInterval === slice.displayInterval);
-        if (hit >= 0) return hit;
-      }
-      return null;
     },
 
     generateColors() {

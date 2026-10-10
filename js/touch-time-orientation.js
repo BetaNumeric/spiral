@@ -71,7 +71,7 @@ Object.assign(SpiralCalendar.prototype, {
     while (th > rawEndAngle) th -= 2 * Math.PI;
 
     const hourStartMs = this.getSegmentHourRange(seg.day, seg.segment).startMs;
-    const fraction = Math.max(0, Math.min(1 - 1 / SpiralTime.HOUR, 1 - (th - rawStartAngle) / segmentAngle));
+    const fraction = Math.min(1 - 1 / SpiralTime.HOUR, SpiralGeometry.fractionAtAngle(rawStartAngle, rawEndAngle, th));
     const clock = SpiralEventProjection.clockTime(hourStartMs + fraction * SpiralTime.HOUR, this.getCalendarTimeZone());
     let minute = Math.round(((clock.wallMs - hourStartMs) / 60000) / 5) * 5;
     if (minute >= 60) minute = 55;
@@ -2397,15 +2397,12 @@ clampRotationToEventWindow() {
       this.nightOverlays,
       function buildNightSpan(overlay) {
         if (overlay.isCircleMode || this.shouldSkipOverlaySegment(overlay)) return null;
-        const segmentAngleSize = overlay.rawEndAngle - overlay.rawStartAngle;
-        const timeStartTheta = overlay.rawStartAngle + (1 - overlay.overlayEndFrac) * segmentAngleSize;
-        const timeEndTheta = overlay.rawStartAngle + (1 - overlay.overlayStartFrac) * segmentAngleSize;
-        const arcStart = Math.max(timeStartTheta, overlay.startTheta);
-        const arcEnd = Math.min(timeEndTheta, overlay.endTheta);
-        if (!(arcEnd > arcStart)) return null;
+        const range = SpiralGeometry.rangeAtFractions(overlay.rawStartAngle, overlay.rawEndAngle,
+          overlay.overlayStartFrac, overlay.overlayEndFrac, overlay.startTheta, overlay.endTheta);
+        if (!range) return null;
         return {
-          startTheta: arcStart,
-          endTheta: arcEnd,
+          startTheta: range.startTheta,
+          endTheta: range.endTheta,
           radiusFunction: overlay.radiusFunction,
           color: nightOverlayColor
         };

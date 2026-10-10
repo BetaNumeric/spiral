@@ -1,52 +1,5 @@
 // Spiral Rendering
 Object.assign(SpiralCalendar.prototype, {
-  collectRepeatedHourSegment(day, segment, startTheta, endTheta, rawStartAngle, rawEndAngle, radiusFunction, innerRadius = null, outerRadius = null) {
-    const hourMs = this.getSegmentHourRange(day, segment).startMs;
-    const layout = SpiralEventProjection.repeatedHour(hourMs, this.getCalendarTimeZone());
-    if (layout) this.repeatedHourSegments.push({ layout, day, segment, startTheta, endTheta, rawStartAngle, rawEndAngle, radiusFunction, innerRadius, outerRadius });
-  },
-
-  drawRepeatedHourSegments() {
-    this.ctx.save();
-    this.ctx.strokeStyle = '#666';
-    this.ctx.lineWidth = 1;
-    for (const entry of this.repeatedHourSegments) {
-      if (!this.state.showSegmentEdges && this.getAllEventsForSegment(entry.day, entry.segment).length === 0) continue;
-      const { layout, startTheta, endTheta, rawStartAngle, rawEndAngle, radiusFunction } = entry;
-      const span = rawEndAngle - rawStartAngle;
-      const bounds = theta => entry.innerRadius === null
-        ? [radiusFunction(theta), radiusFunction(theta + 2 * Math.PI)] : [entry.innerRadius, entry.outerRadius];
-      for (const part of layout.parts.slice(0, -1)) {
-        const theta = rawStartAngle + (1 - part.endFraction) * span;
-        if (theta < startTheta || theta > endTheta) continue;
-        const [inner, outer] = bounds(theta);
-        const angle = -theta + CONFIG.INITIAL_ROTATION_OFFSET;
-        this.ctx.beginPath();
-        this.ctx.moveTo(inner * Math.cos(angle), inner * Math.sin(angle));
-        this.ctx.lineTo(outer * Math.cos(angle), outer * Math.sin(angle));
-        this.ctx.stroke();
-      }
-    }
-    this.ctx.restore();
-  },
-
-  createVisibleEventBoundaryLookup() {
-      const ranges = this.getVisibleEvents().flatMap(event => this.getEventProjection(event).intervals
-        .map(interval => ({ event, interval })));
-      const isEventOverlappedAtLayout = (targetEvent, wallMs) => ranges.some(({ event, interval }) =>
-        event !== targetEvent && interval.layoutStartMs <= wallMs && wallMs < interval.layoutEndMs);
-      const isEventTouchingAtStartLayout = (targetEvent, wallMs) => ranges.some(({ event, interval }) =>
-        event !== targetEvent && interval.layoutEndMs === wallMs);
-      const isEventTouchingAtEndLayout = (targetEvent, wallMs) => ranges.some(({ event, interval }) =>
-        event !== targetEvent && interval.layoutStartMs === wallMs);
-
-      return {
-        isEventOverlappedAtLayout,
-        isEventTouchingAtStartLayout,
-        isEventTouchingAtEndLayout
-      };
-    },
-
   drawSegment(startTheta, endTheta, radiusFunction, color, isMidnightSegment = false, isAfterMidnightSegment = false, isHovered = false, drawLeadingEdge = false, isSelected = false, rawStartAngle = null, rawEndAngle = null, isFirstDayOfMonth = false, day = null, segment = null, drawStroke = true, isEventSubSegment = false, isNoonSegment = false, isSixAMSegment = false, isSixPMSegment = false) {
       const segmentAngle = 2 * Math.PI / CONFIG.SEGMENTS_PER_DAY;
       const radialFillOverlap = (!isEventSubSegment && drawStroke && !this.state.showArcLines)
@@ -413,11 +366,8 @@ Object.assign(SpiralCalendar.prototype, {
         const th = thetas[i];
         const inner = radiusFunction(th);
         const outer = radiusFunction(th + 2 * Math.PI);
-        const h = outer - inner;
-        const rInner = inner + eventSliceStart * h;
-        const rOuter = inner + eventSliceEnd * h;
-        const edgeInner = inner + edgeSliceStart * h;
-        const edgeOuter = inner + edgeSliceEnd * h;
+        const { inner: rInner, outer: rOuter } = SpiralGeometry.radialRange(inner, outer, eventSliceStart, eventSliceEnd);
+        const { inner: edgeInner, outer: edgeOuter } = SpiralGeometry.radialRange(inner, outer, edgeSliceStart, edgeSliceEnd);
         const ang = -th + CONFIG.INITIAL_ROTATION_OFFSET;
         samples.push({ th, ang, rInner, rOuter, edgeInner, edgeOuter });
       }
@@ -1638,11 +1588,7 @@ Object.assign(SpiralCalendar.prototype, {
       const startupRevealedHourSegmentKeys = (startup && Array.isArray(startup.revealedHourSegmentKeys))
         ? startup.revealedHourSegmentKeys
         : null;
-      const {
-        isEventOverlappedAtLayout,
-        isEventTouchingAtStartLayout,
-        isEventTouchingAtEndLayout
-      } = this.createVisibleEventBoundaryLookup();
+      const eventBoundaryLookup = this.createVisibleEventBoundaryLookup();
       
       // Clear and prepare canvas
       this.ctx.clearRect(0, 0, canvasWidth, canvasHeight);
@@ -2025,8 +1971,6 @@ Object.assign(SpiralCalendar.prototype, {
           
           const segmentId = this.getSegmentId(day, segment);
           const colorIndex = ((segmentId % this.cache.colors.length) + this.cache.colors.length) % this.cache.colors.length;
-          const segmentHourStartMs = this.getSegmentStartMs(segmentId);
-          const segmentHourEndMs = segmentHourStartMs + 60 * 60 * 1000;
           color = this.cache.colors[colorIndex];
 
           // Check if this is a midnight segment (segment 23 of each day) or the segment after midnight (segment 0 of next day)
@@ -2066,64 +2010,10 @@ Object.assign(SpiralCalendar.prototype, {
           }
         }
           
-          // --- NIGHT OVERLAY LOGIC FOR SPIRAL MODE ---
-          if (day !== null && segment !== null && this.state.showNightOverlay) {
-            const dailyData = getDailyData(segmentId);
-            
-            // Reconstruct logic for segStart and segEnd from segmentId.
-            // segmentId is exact integer offsets of hours from referenceTime.
-            // Since referenceTime is exactly at 00:00 UTC, segStart is just the positive modulo
-            let segStart = ((segmentId % 24) + 24) % 24;
-            let segEnd = segStart + 1;
-            
-            // Calculate sunrise/sunset times for this segment's date using cache
-            const sunTimes = dailyData.sunTimes;
-            let nightStart = sunTimes.sunset;
-            let nightEnd = sunTimes.sunrise;
-            if (nightEnd <= nightStart) nightEnd += 24;
-            
-            let segStartNorm = segStart;
-            let segEndNorm = segEnd;
-            if (segEndNorm < nightStart) {
-              segStartNorm += 24;
-              segEndNorm += 24;
-            }
-            
-            // Calculate overlap
-            const overlapStart = Math.max(segStartNorm, nightStart);
-            const overlapEnd = Math.min(segEndNorm, nightEnd);
-            const nightMinutes = Math.max(0, overlapEnd - overlapStart);
-            const segmentMinutes = segEnd - segStart;
-            const nightFraction = nightMinutes / segmentMinutes;
-            
-            if (nightFraction > 0) {
-              const overlayStartFrac = Math.max(0, (overlapStart - segStartNorm) / (segEnd - segStart));
-              const overlayEndFrac = Math.min(1, (overlapEnd - segStartNorm) / (segEnd - segStart));
-              
-              if (overlayEndFrac > overlayStartFrac) {
-                const ranges = SpiralEventProjection.layoutRanges(segmentHourStartMs + overlayStartFrac * SpiralTime.HOUR,
-                  segmentHourStartMs + overlayEndFrac * SpiralTime.HOUR, this.getCalendarTimeZone());
-                for (const range of ranges) {
-                  // Store night overlay data for drawing after events
-                  this.nightOverlays.push({
-                    startTheta: startTheta,
-                    endTheta: endTheta,
-                    radiusFunction: radiusFunction,
-                    overlayStartFrac: (range.startMs - segmentHourStartMs) / SpiralTime.HOUR,
-                    overlayEndFrac: (range.endMs - segmentHourStartMs) / SpiralTime.HOUR,
-                    rawStartAngle: rawStartAngle,
-                    rawEndAngle: rawEndAngle,
-                    segmentAngle: segmentAngle,
-                    clockOffsetMs: SpiralEventProjection.clockTime(range.startMs, this.getCalendarTimeZone()).offsetMs,
-                    day: day,
-                    segment: segment,
-                    isCircleMode: false
-                  });
-                }
-              }
-            }
+          if (this.state.showNightOverlay) {
+            this.collectNightOverlaysForSegment({ day, segment, startTheta, endTheta, rawStartAngle, rawEndAngle, radiusFunction }, getDailyData(segmentId).sunTimes);
           }
-          
+
           // --- DAY OVERLAY LOGIC FOR SPIRAL MODE ---
           if (day !== null && this.state.showDayOverlay) {
             // Use cached day overlay color
@@ -2271,240 +2161,8 @@ Object.assign(SpiralCalendar.prototype, {
             }
           }
           
-        // Store event data for drawing after main segments
-          const allEvents = this.getAllEventsForSegment(day, segment);
-          if (allEvents.length > 0) {
-            // Use cached layout for speed
-            this.ensureLayoutCache();
-            const { eventToLane, eventToComponent, componentLaneCount } = this.layoutCache;
-            // Compute lane assignment inside the hour for non-overlapping sharing within same lane
-            const { lanes: hourLanes } = this.computeEventLanes(allEvents);
+          this.collectEventSegments({ day, segment, startTheta, endTheta, rawStartAngle, rawEndAngle, radiusFunction }, eventBoundaryLookup);
 
-            // Build local overlap groups within the hour: only overlapping events share space
-            // Inline fast union-find to avoid object/closure reallocations per segment
-            const n = allEvents.length;
-            const parent = new Int32Array(n);
-            for (let i = 0; i < n; i++) parent[i] = i;
-            
-            const find = (i) => {
-              let root = i;
-              while (root !== parent[root]) root = parent[root];
-              // Path compression
-              let curr = i;
-              while (curr !== root) {
-                const nxt = parent[curr];
-                parent[curr] = root;
-                curr = nxt;
-              }
-              return root;
-            };
-
-            for (let i = 0; i < n; i++) {
-              const a = allEvents[i];
-              for (let j = i + 1; j < n; j++) {
-                const b = allEvents[j];
-                if (!(a.endMinute <= b.startMinute || b.endMinute <= a.startMinute)) {
-                  const rootI = find(i);
-                  const rootJ = find(j);
-                  if (rootI !== rootJ) parent[rootI] = rootJ;
-                }
-              }
-            }
-            const groups = new Map();
-            for (let i = 0; i < n; i++) {
-              const r = find(i);
-              let list = groups.get(r);
-              if (!list) {
-                list = [];
-                groups.set(r, list);
-              }
-              list.push(i);
-            }
-
-            if (this.state.overlayStackMode) {
-              // Stacked overlap mode with gap filling by sub-splitting on change points
-              for (const idxList of groups.values()) {
-                // Stable order bottom->top by descending coverage within hour, then lane, then start time
-                const ordered = idxList.map(i => {
-                  const ev = allEvents[i];
-                  const laneFromPersistent = eventToLane.get(ev.displayInterval);
-                  const lane = (laneFromPersistent !== undefined) ? laneFromPersistent : (hourLanes[i] ?? 0);
-                  return { idx: i, lane, startUtcMs: ev.startUtcMs || 0, startMin: ev.startMinute };
-                }).sort((a, b) => {
-                  if (a.lane !== b.lane) return a.lane - b.lane; // stable bottom->top by lane
-                  if (a.startUtcMs !== b.startUtcMs) return a.startUtcMs - b.startUtcMs;
-                  return a.startMin - b.startMin;
-                });
-
-                // Build change boundaries (in minutes within hour)
-                const boundarySet = new Set([0, 60]);
-                for (const i of idxList) {
-                  const ev = allEvents[i];
-                  boundarySet.add(Math.max(0, Math.min(60, ev.startMinute)));
-                  boundarySet.add(Math.max(0, Math.min(60, ev.endMinute)));
-                }
-                const boundaries = Array.from(boundarySet).sort((a, b) => a - b);
-
-                for (let s = 0; s < boundaries.length - 1; s++) {
-                  const aMin = boundaries[s];
-                  const bMin = boundaries[s + 1];
-                  if (bMin <= aMin) continue;
-                  // Active events in this sub-interval
-                  const active = ordered.filter(({ idx }) => {
-                    const ev = allEvents[idx];
-                    return ev.startMinute < bMin && ev.endMinute > aMin;
-                  });
-                  if (active.length === 0) continue;
-                  const m = active.length;
-                  for (let rank = 0; rank < m; rank++) {
-                    const i = active[rank].idx;
-                    const eventData = allEvents[i];
-                    const subStart = aMin / 60;
-                    const subEnd = bMin / 60;
-                    const subStartLayoutMs = segmentHourStartMs + aMin * 60 * 1000;
-                    const subEndLayoutMs = segmentHourStartMs + bMin * 60 * 1000;
-                    const coverChronologicalStartHourJoin = aMin === 0 && eventData.startLayoutMs < segmentHourStartMs;
-                    const coverChronologicalEndHourJoin = bMin === 60 && eventData.endLayoutMs > segmentHourEndMs;
-                    const continuesAcrossSubStart = eventData.startLayoutMs < subStartLayoutMs;
-                    const continuesAcrossSubEnd = eventData.endLayoutMs > subEndLayoutMs;
-                    const hasActualEventStartHere = eventData.startLayoutMs >= subStartLayoutMs && eventData.startLayoutMs < subEndLayoutMs;
-                    const hasActualEventEndHere = eventData.endLayoutMs > subStartLayoutMs && eventData.endLayoutMs <= subEndLayoutMs;
-                    const eventSliceStart = (rank === 0) ? 0 : (rank / m);
-                    const eventSliceEnd = 1;
-                    const segmentAngleSize = rawEndAngle - rawStartAngle;
-                    let timeStartTheta = rawStartAngle + (1 - subEnd) * segmentAngleSize;
-                    let timeEndTheta = rawStartAngle + (1 - subStart) * segmentAngleSize;
-                    timeStartTheta = Math.max(timeStartTheta, startTheta);
-                    timeEndTheta = Math.min(timeEndTheta, endTheta);
-                    if (timeEndTheta > timeStartTheta) {
-                      this.eventSegments.push({
-                        timeStartTheta,
-                        timeEndTheta,
-                        eventSliceStart,
-                        eventSliceEnd,
-                        edgeSliceStart: rank / m,
-                        edgeSliceEnd: (rank + 1) / m,
-                        dividerStroke: active.length > 1 && eventSliceStart > 0,
-                        coverStartEdge: coverChronologicalEndHourJoin || (!hasActualEventEndHere && continuesAcrossSubEnd),
-                        coverEndEdge: coverChronologicalStartHourJoin || (!hasActualEventStartHere && continuesAcrossSubStart),
-                        drawStartEdge: hasActualEventEndHere && (
-                          this.state.showAllEventBoundaryStrokes ||
-                          (active.length > 1 && isEventOverlappedAtLayout(eventData.event, subEndLayoutMs - 1)) ||
-                          isEventTouchingAtEndLayout(eventData.event, subEndLayoutMs)
-                        ),
-                        drawEndEdge: hasActualEventStartHere && (
-                          this.state.showAllEventBoundaryStrokes ||
-                          (active.length > 1 && isEventOverlappedAtLayout(eventData.event, subStartLayoutMs + 1)) ||
-                          isEventTouchingAtStartLayout(eventData.event, subStartLayoutMs)
-                        ),
-                        originalRadiusFunction: radiusFunction,
-                        color: eventData.color,
-                        event: eventData.event,
-                        displayInterval: eventData.displayInterval,
-                        rawStartAngle,
-                        rawEndAngle,
-                        day,
-                        segment
-                      });
-                    }
-                  }
-                }
-              }
-            } else {
-              // Uniform-thickness within overlap groups mode (current)
-              // Optionally make thickness uniform across the full duration of each event
-              // by using the maximum overlap this specific event encounters across all its hours
-              const getLaneCountForEvent = (evData) => {
-                if (!CONFIG.UNIFORM_EVENT_THICKNESS) {
-                  // Fallback to per-hour lane count
-                  const { numLanes } = this.computeEventLanes(allEvents);
-                  return Math.max(1, numLanes);
-                }
-                const componentId = eventToComponent ? eventToComponent.get(evData.displayInterval) : undefined;
-                const componentCount = componentId !== undefined && componentLaneCount
-                  ? componentLaneCount.get(componentId)
-                  : null;
-                if (Number.isFinite(componentCount) && componentCount > 0) {
-                  return componentCount;
-                }
-                return this.getMaxOverlapForEventAcrossHours(evData.event);
-              };
-
-              // Precompute slice positions per event index based on group-local needs
-              const eventSliceStartArr = new Array(n).fill(0);
-              const eventSliceEndArr = new Array(n).fill(1);
-              for (const idxList of groups.values()) {
-                let groupRequiredCount = 1;
-                for (const i of idxList) {
-                  groupRequiredCount = Math.max(groupRequiredCount, getLaneCountForEvent(allEvents[i]));
-                }
-                const persistentLanes = idxList.map(i => {
-                  const pl = eventToLane.get(allEvents[i].displayInterval);
-                  return (pl !== undefined) ? pl : (hourLanes[i] ?? 0);
-                });
-                const maxPersistentLane = persistentLanes.reduce((maxLane, lane) => Math.max(maxLane, lane), 0);
-                const groupLaneCount = Math.max(groupRequiredCount, maxPersistentLane + 1);
-                for (let k = 0; k < idxList.length; k++) {
-                  const i = idxList[k];
-                  const persistentLane = persistentLanes[k];
-                  const sliceH = 1 / groupLaneCount;
-                  eventSliceStartArr[i] = persistentLane * sliceH;
-                  eventSliceEndArr[i] = (persistentLane + 1) * sliceH;
-                }
-              }
-
-            for (let i = 0; i < allEvents.length; i++) {
-              const eventData = allEvents[i];
-              const minuteStart = eventData.startMinute / 60;
-              const minuteEnd = eventData.endMinute / 60;
-                const eventStartLayoutMs = segmentHourStartMs + eventData.startMinute * 60 * 1000;
-                const eventEndLayoutMs = segmentHourStartMs + eventData.endMinute * 60 * 1000;
-                const coverChronologicalStartHourJoin = eventData.startMinute === 0 && eventData.startLayoutMs < segmentHourStartMs;
-                const coverChronologicalEndHourJoin = eventData.endMinute === 60 && eventData.endLayoutMs > segmentHourEndMs;
-                const hasActualEventStartHere = eventData.startLayoutMs >= eventStartLayoutMs && eventData.startLayoutMs < eventEndLayoutMs;
-                const hasActualEventEndHere = eventData.endLayoutMs > eventStartLayoutMs && eventData.endLayoutMs <= eventEndLayoutMs;
-                const eventSliceStart = eventSliceStartArr[i];
-                const eventSliceEnd = eventSliceEndArr[i];
-            const segmentAngleSize = rawEndAngle - rawStartAngle;
-            let timeStartTheta = rawStartAngle + (1 - minuteEnd) * segmentAngleSize;
-            let timeEndTheta = rawStartAngle + (1 - minuteStart) * segmentAngleSize;
-            timeStartTheta = Math.max(timeStartTheta, startTheta);
-            timeEndTheta = Math.min(timeEndTheta, endTheta);
-            if (timeEndTheta > timeStartTheta) {
-              this.eventSegments.push({
-                    timeStartTheta,
-                    timeEndTheta,
-                    eventSliceStart,
-                    eventSliceEnd,
-                edgeSliceStart: eventSliceStart,
-                edgeSliceEnd: eventSliceEnd,
-                dividerStroke: eventSliceStart > 0,
-                coverStartEdge: coverChronologicalEndHourJoin,
-                coverEndEdge: coverChronologicalStartHourJoin,
-                drawStartEdge: hasActualEventEndHere && (
-                  this.state.showAllEventBoundaryStrokes ||
-                  ((eventSliceStart > 0 || eventSliceEnd < 1) && isEventOverlappedAtLayout(eventData.event, eventEndLayoutMs - 1)) ||
-                  isEventTouchingAtEndLayout(eventData.event, eventEndLayoutMs)
-                ),
-                drawEndEdge: hasActualEventStartHere && (
-                  this.state.showAllEventBoundaryStrokes ||
-                  ((eventSliceStart > 0 || eventSliceEnd < 1) && isEventOverlappedAtLayout(eventData.event, eventStartLayoutMs + 1)) ||
-                  isEventTouchingAtStartLayout(eventData.event, eventStartLayoutMs)
-                ),
-                originalRadiusFunction: radiusFunction,
-                color: eventData.color,
-                event: eventData.event,
-                displayInterval: eventData.displayInterval,
-                    rawStartAngle,
-                    rawEndAngle,
-                    day,
-                    segment
-                  });
-                }
-            }
-            }
-          }
-          
           // After drawing the first visible segment, set flag to false
           if (isFirstVisibleSegment) {
             isFirstVisibleSegment = false;
