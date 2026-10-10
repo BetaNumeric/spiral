@@ -143,7 +143,7 @@ function initA2HSBanner() {
     e.preventDefault();
     __deferredA2HSPrompt = e;
     const { installBtn, openBtn, banner } = getA2HSBannerElements();
-    showA2HSBanner({ showInstallButton: true, showOpenButton: false, text: 'Install for best experience' });
+    showA2HSBanner({ showInstallButton: true, showOpenButton: false, text: 'Install Spiral' });
     if (installBtn) {
       installBtn.onclick = async () => {
         if (!__deferredA2HSPrompt) return;
@@ -158,7 +158,7 @@ function initA2HSBanner() {
   // Handle iOS Safari (no beforeinstallprompt)
   if (isIOS) {
     const { installBtn, iosOverlay, iosCloseBtn } = getA2HSBannerElements();
-    showA2HSBanner({ showInstallButton: true, showOpenButton: false, text: 'Install for best experience' });
+    showA2HSBanner({ showInstallButton: true, showOpenButton: false, text: 'Install Spiral' });
     if (installBtn) {
       installBtn.textContent = 'How to Install';
       installBtn.onclick = () => {

@@ -1,142 +1,157 @@
-# Time model boundary
+# Event times and calendar imports
 
-`js/time-model.js` owns strict calendar input parsing, wall-clock formatting,
-IANA-zone conversion and daylight-saving disambiguation. Its Date values have two
-distinct meanings:
+Spiral stores timed events as actual instants and displays them in the selected
+time zone. Changing the zone changes the view, not the saved event. All-day events
+retain fixed calendar dates. This guide defines those contracts and the calendar
+formats Spiral accepts.
 
-- An instant is a real timestamp, suitable for storage and external calendars.
-- A wall coordinate uses UTC fields to encode the date and clock time drawn by
-  the existing 24-hour canvas. It is never exported as an instant directly for
-  an event.
+## Accepted calendar input
+
+| Input | Interpretation |
+| --- | --- |
+| JSON timestamps | ISO instants with an explicit UTC offset |
+| ICS UTC timestamps | Actual UTC instants |
+| ICS timestamps with an IANA `TZID` | Local time in the named zone |
+| ICS floating timestamps | Local time in the selected display zone |
+| ICS all-day dates | Fixed calendar dates with an exclusive end date |
+| ICS day, week, or time durations | Calendar or elapsed duration as specified by the input |
+
+Imports merge events by permanent UID, skip older revisions, and preserve
+distinct events with identical content. Invalid records or duplicate UIDs reject
+the entire file. Missing JSON IDs receive secure random UUIDs; missing revisions
+start at zero.
+
+Recurrence rules, recurrence exceptions, custom non-IANA zones, and cancellations
+are rejected because their semantics cannot be retained. Supporting recurrence
+requires a separate occurrence-expansion layer.
+
+## Instants, clock coordinates, and dates
+
+`js/time-model.js` handles strict parsing, wall-clock formatting, IANA-zone
+conversion, and daylight-saving disambiguation. Its Date values have two distinct
+meanings:
+
+- An **instant** is a real timestamp used for events, storage, and external calendars.
+- A **wall coordinate** uses UTC fields to encode the displayed date and clock
+  time. It must be converted before it can become an event instant.
 
 `js/event-time.js` keeps runtime event `start` and `end` Dates as actual UTC
-instants, with `timeModel: "instant-v1"`. Storage, JSON downloads, calendar
-sharing, and study descriptors use the same timestamps. A Berlin 09:00 event
-on October 8, 2026 has `start` equal to `2026-10-08T07:00:00.000Z` in memory
-and in storage. Loading, copying, rendering, and changing zones cannot reinterpret
-that timestamp.
+instants with `timeModel: "instant-v1"`. A Berlin 09:00 event on October 8, 2026
+has `start` equal to `2026-10-08T07:00:00.000Z` in memory and storage. JSON,
+calendar sharing, and study descriptors use the same timestamps. Loading,
+copying, and rendering cannot reinterpret them.
 
-`js/event-projection.js` derives an immutable display projection containing
-numeric wall coordinates, layout coordinates, and actual timestamps. Both renderers, layout lanes,
-segment hit testing, navigation, and display labels use this shared projection.
-A WeakMap caches derived projections by event timestamps, all-day dates, and
-zone; it contains no source data. Even an in-place Date edit invalidates the
-cached result. `getEventWallDate` returns a fresh Date for UI boundaries so
-mutating a display value cannot change the event or its projection.
+All-day events additionally retain `allDay`, `startDate`, and `endDate`. Their
+dates stay fixed across zone changes, and the exclusive end exports as
+`DTEND;VALUE=DATE`. Editing a clock time converts an all-day event to a timed one.
+Timed durations measure elapsed time; all-day durations count calendar dates.
 
-`normalizeRuntimeEvent` validates already canonical events.
-`initializeEventFromWallTimes` is the explicit creation boundary for temporary
-wall inputs from forms, drafts, and the random generator. Editing and mouse/touch
-handles resolve wall input into actual timestamps before committing changes.
-Within a repeated hour they preserve the endpoint's current occurrence when
-valid. Serialization reads actual timestamps directly without consulting a
-projection. Timed list ordering and active-event detection use actual instants;
-day headings and all-day activity use displayed calendar dates.
+## Creation and editing
 
-`js/event-model.js` owns the persisted schema and identity/revision validation.
-Records have a permanent `persistentUID` and a `sequence` from 0 to 2147483647.
-The revision tracker compares canonical content at each edit, advances revisions
-before queuing writes, and retains that baseline after a failed save so retrying
-cannot increment the revision again. Sharing status and derived palette colors
-are not content revisions. Duplicate UIDs reject a whole store/import. Event
-transfer merges only matching UIDs and skips older incoming revisions; it never
-uses content as an identity. All ICS download paths share `js/event-transfer.js`,
-including UTF-8 line folding, UID, SEQUENCE and LAST-MODIFIED.
+`normalizeRuntimeEvent` validates canonical events. `initializeEventFromWallTimes`
+converts temporary wall inputs from forms, drafts, and the random generator into
+instants. Editors and mouse/touch handles resolve wall input before committing.
+Serialization reads actual timestamps directly, without using display projections.
 
-The current store is `spiralCalendarEventsV2`. Earlier prototype data is left
-under its old key and is not read. There is no legacy interpretation branch or
-migration. JSON imports use actual ISO instants with explicit offsets; missing
-IDs are assigned secure random UUIDs and missing revisions start at zero.
+Manual entry rejects nonexistent local times. Imported clock times resolve gaps
+using the pre-gap offset and repeated times using the first occurrence, following
+[RFC 5545](https://www.rfc-editor.org/rfc/rfc5545.html#section-3.3.5). Untouched
+imported instants keep their occurrence. A handle dragged into a gap moves forward
+to the next valid clock time when committed.
 
-All-day imports additionally retain `allDay`, `startDate` and `endDate`. These
-calendar dates stay fixed when changing zones. The end is exclusive and exports
-as `DTEND;VALUE=DATE`. Editing a clock time converts the event into a timed event.
+Repeated-time editors offer first and second occurrences with UTC offsets.
+Text edits and handle drags preserve the endpoint's current occurrence when valid.
+The Add Event panel binds each occurrence choice to its wall value and zone,
+preventing a different date or zone from reusing it. Invalid ranges remain editable
+and disable Add Event; a manually selected end occurrence is never adjusted silently.
 
-The live clock is anchored to the selected calendar date at startup. Rotation
+Both creation paths suggest one elapsed hour by adding to the actual start
+instant. A canvas draft keeps that suggestion when its start changes until its
+end is edited or a duration handle is dragged. This is temporary view state.
+An end before the actual start leaves the event unchanged. Positive intervals
+with equal or reversed wall endpoints are valid during a repeated hour. The
+five-minute handle minimum is measured on the actual timeline.
+
+## Display projections and clock changes
+
+`js/event-projection.js` derives immutable numeric wall coordinates, layout
+coordinates, and actual timestamps. Both renderers, lane allocation, hit testing,
+navigation, and labels use this projection. A WeakMap caches it by timestamps,
+all-day dates, and zone; even an in-place Date edit invalidates the result.
+`getEventWallDate` returns a fresh Date so UI code cannot mutate the source event.
+
+Each day retains a 24-hour coil. Timed projections split at actual IANA offset
+transitions without assuming a one-hour change. Each interval carries its actual
+and wall endpoints, offset, and index. Interval ends use the preceding piece's
+offset: spring-forward gaps stay blank and fall-back retains both occurrences.
+All-day events span a continuous calendar-date interval.
+
+Repeated times occupy consecutive angular sections under one regular hour label.
+Berlin's repeated 02:00 uses two equal halves. Lord Howe's repeated half-hour
+divides the affected 01:00 wedge into a two-thirds first section and a one-third
+second section. Other hours remain fixed. The radial divider appears when a
+visible event occupies the hour or Segment edges is enabled. Simultaneous events
+stack within their own section.
+
+`repeatedHour` derives the wall range, actual range, offset, and angular fraction.
+`layoutStartMs`/`layoutEndMs` are drawing and overlap coordinates;
+`startMs`/`endMs` retain their wall meaning for editors. `layoutTime` and `clockTime`
+map in both directions. The cursor, navigation, handles, selections, labels, and
+night overlays use this mapping. Transition and repeated-day caches are bounded.
+
+`js/render-geometry.js` supplies shared angle conversion, clipping, radial bounds,
+overlap groups, and event slices. Both renderers use the same slices, including
+stacked gap filling and persistent lane widths. Circle mode supplies fixed ring
+radii; spiral mode supplies a radius function. Each painter keeps its own paths
+and edge caps. Selection and dragging share the drawing geometry, including
+empty repeated-hour sections. Handles attach to the first and last actual pieces.
+
+Night shading includes both repeated sections, preserves gaps in partial overlays,
+and keeps the other occurrence shaded when one is selected. All-day events span
+both sections. Event records remain canonical in storage and in the list.
+
+## Event identity and persistence
+
+`js/event-model.js` validates records with a permanent `persistentUID` and a
+`sequence` from 0 to 2147483647. Content edits advance the revision before writes
+are queued. The tracker retains its baseline after a failed save, so retrying does
+not increment it again. Sharing status and derived palette colors are not revisions.
+
+The event store is `spiralCalendarEventsV2`, with no legacy interpretation or
+migration. Transfer code never uses matching content as identity. All ICS download
+paths share `js/event-transfer.js`, including UTF-8 line folding, UID, SEQUENCE,
+and LAST-MODIFIED.
+
+## Clock and list navigation
+
+At startup, the live clock is anchored to the selected calendar date. Rotation
 measures wall hours from that fixed origin, including elapsed days. Midnight,
-time-zone offsets and returning after suspension therefore use the same cursor
-date as the footer. Layout and sun-time caches follow the rendered interval,
-including partially visible hours and calendar filters.
+zone offsets, and resuming after suspension therefore share the footer's cursor
+date. Layout and sun-time caches follow the rendered interval, including partially
+visible hours and calendar filters.
 
-Manual entry rejects nonexistent local times. Imported dates resolve gaps using
-the pre-gap offset and repeated times using the first occurrence, as specified
-by [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545.html#section-3.3.5).
-Untouched imported instants keep their precise occurrence. Handle drags through
-a gap resolve forward to the next valid clock time when committed.
+Timed list ordering and active-event detection use actual instants; day headings
+and all-day activity use displayed calendar dates. While browsing, a selected
+clock piece disambiguates the list's display instant when it contains the cursor.
+The live clock always uses the actual current timestamp.
 
-The renderer keeps one 24-hour coil per day. Timed projections split at actual
-IANA offset transitions, discovered without assuming a one-hour change. Each
-immutable interval carries its actual start/end, wall start/end, offset, and
-index. Interval ends use the offset of the preceding piece, so spring-forward
-intervals leave skipped clock time blank and fall-back intervals retain both
-occurrences. All-day events keep one continuous calendar-date interval.
-Transition lookups are cached by zone and UTC day in a bounded cache.
+## Manual checks
 
-Lane allocation, overlap components, boundary strokes, both renderers, and band
-hit testing use the projected layout intervals. Repeated times occupy consecutive
-angular sections under one regular hour label. The radial divider appears when
-there is a visible event in that hour or Segment edges is enabled.
-Events remain canonical records in storage and the list.
-Handles attach to the first and last actual pieces. Mouse and touch share one
-dragging implementation and invert the section's time-to-angle mapping to choose
-an occurrence, including empty sections. Text editing preserves the endpoint's occurrence.
-The five-minute handle minimum is measured on the actual timeline.
+Import [`clock-changes.ics`](../tests/fixtures/clock-changes.ics) and check these
+events from the list in both spiral and circle views:
 
-`js/render-geometry.js` owns the shared time-to-angle mapping, clipping, radial
-bounds, overlap groups, and event slice collection. Both renderers consume the
-same logical slices, including stacked gap filling and persistent lane widths.
-Circle mode supplies fixed ring radii; spiral mode supplies its radius function.
-The painters retain their separate canvas paths and edge-cap behavior. Selection
-and handle dragging use the same angle conversion and radial bounds as drawing.
-Night overlap calculation and repeated-hour dividers also live in this module,
-which is included in the offline cache.
+| Zone and date | Expected display |
+| --- | --- |
+| Europe/Berlin, October 25, 2026 | Event crosses the divider between the first and second 02:00 sections |
+| Europe/Berlin, March 29, 2026 | Event leaves 02:00-03:00 blank |
+| Australia/Lord_Howe, April 5, 2026 | Repeated half-hour occupies its own section |
 
-`repeatedHour` derives each section's wall range, actual range, offset, and angular
-fraction from the IANA transition. Berlin's sections each occupy half the usual
-02:00 wedge. Lord Howe's repeated half-hour gives the affected 01:00 wedge a
-two-thirds first section and one-third second section. Other hour positions and
-the 24-hour day coil stay fixed. `layoutStartMs`/`layoutEndMs` are derived coordinates
-used for drawing and overlap calculations; `startMs`/`endMs` keep their wall meaning
-for editors. `layoutTime` and `clockTime` map in both directions. The live cursor,
-browsing time, navigation, handles, selections, labels, and night overlays use that
-mapping. Transition and repeated-day caches are bounded. All-day events span both
-sections with their fixed calendar dates. Night overlay merging retains both
-sections regardless of their angular order and preserves gaps between partial
-overlays. Selecting one occurrence leaves the other occurrence's night shading
-visible. Zone changes never rewrite event records.
+Export, reimport, and reload to check persistence. For creation in Europe/Berlin:
 
-Ambiguous endpoint labels include their UTC offset. Editing a repeated time
-opens a first/second occurrence choice, including offsets and keyboard controls.
-The Add Event panel provides the same choices inline during creation. Its
-choices are bound to the wall value and zone so a different date or zone cannot
-reuse a stale occurrence. Invalid ranges remain editable and disable Add Event;
-the panel never silently changes a manually selected end occurrence.
-Both creation paths suggest exactly one elapsed hour by adding to the actual
-start instant. A canvas draft keeps that suggestion when its start is edited,
-until its end is edited or a duration handle is dragged. This is temporary view
-state and is not serialized. Detail views and the add panel display elapsed
-duration for timed events; all-day durations count the fixed calendar dates.
-Choosing an end before the actual start leaves the event unchanged. Positive
-intervals with equal or reversed wall endpoints are supported. While browsing,
-a selected clock piece disambiguates the list's display instant when it contains
-the cursor; the live clock always uses the actual current timestamp.
-
-ICS imports and stored events can now cross backward through a repeated hour.
-The importer still rejects recurrence rules, recurrence exceptions, custom
-non-IANA zones and cancellations rather than losing their semantics. Recurrence
-needs a separate occurrence-expansion layer before imports can support it safely.
-
-To check the clock-change cases manually, import
-[`tests/fixtures/clock-changes.ics`](../tests/fixtures/clock-changes.ics). Select
-Europe/Berlin and open the October 25 and March 29 events from the event list.
-The October event crosses the radial divider between the first and second 02:00
-sections; the March event leaves 02:00-03:00 blank. Switch to Australia/Lord_Howe and open the April 5 event to
-check the repeated half-hour. Export/reimport and reload to check persistence.
-
-To check creation, select Europe/Berlin and set the Add Event start to
-October 25, 2026 at 02:00. First occurrence suggests an end at the second 02:00;
-switching the start to Second occurrence suggests 03:00. Both show one hour.
-Choose an end in the first occurrence before a second-occurrence start to check
-the visible error and disabled Add Event button. Create a canvas draft in the
-02:00 segment and use its start-time editor to select either occurrence. On
-March 29, a 01:30 start suggests 03:30, while a manually entered 02:30 is rejected.
+1. Set the start to October 25, 2026 at 02:00. First occurrence suggests an end
+   at the second 02:00; Second occurrence suggests 03:00. Both show one hour.
+2. Select a first-occurrence end before a second-occurrence start. The panel
+   should show an error and disable Add Event.
+3. Create a canvas draft in the 02:00 segment. Use its start-time editor to
+   select either occurrence.
+4. On March 29, a 01:30 start suggests 03:30. Manually entering 02:30 is rejected.

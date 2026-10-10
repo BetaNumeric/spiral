@@ -1135,13 +1135,13 @@
           </label>
           
           <label class="settings-range-control">
-            <span class="settings-range-caption">Length min (min)</span>
+            <span class="settings-range-caption">Shortest (min)</span>
             <input type="range" id="randMinRange" class="settings-range-track" min="5" max="720" step="5" value="60">
             <span id="randMinVal" class="settings-range-value">60</span>
           </label>
 
           <label class="settings-range-control">
-            <span class="settings-range-caption">Length max (min)</span>
+            <span class="settings-range-caption">Longest (min)</span>
             <input type="range" id="randMaxRange" class="settings-range-track" min="5" max="720" step="5" value="240">
             <span id="randMaxVal" class="settings-range-value">240</span>
           </label>
@@ -1376,7 +1376,7 @@
           </div>
           <label style="display:flex; align-items:center; gap:0.5em;">
             <input type="checkbox" id="hourNumbersOutward" checked/>
-            <span>Stick numbers to outside</span>
+            <span>Place numbers outside</span>
           </label>
           <label style="display:flex; align-items:center; gap:0.5em;">
             <input type="checkbox" id="hourNumbersInsideSegment"/>
@@ -1423,7 +1423,7 @@
             </label>
             <label style="display:flex; align-items:center; gap:0.5em; margin:0;">
               <input type="checkbox" id="dayLabelUseShortNames" checked/>
-              <span>Use short weekday</span>
+              <span>Abbreviate weekday</span>
             </label>
           </div>
           <label style="display:flex; align-items:center; gap:0.5em;">
@@ -1441,7 +1441,7 @@
             </label>
             <label style="display:flex; align-items:center; gap:0.5em; margin:0;">
               <input type="checkbox" id="dayLabelUseShortMonth" checked/>
-              <span>Use short month</span>
+              <span>Abbreviate month</span>
             </label>
           </div>
           <label style="display:flex; align-items:center; gap:0.5em;">
@@ -1531,7 +1531,7 @@
           </div>
           <label style="display:flex; align-items:center; gap:0.45em; margin-top: 0.8em; font-size: 0.9em;">
             <input type="checkbox" id="useLocationTimezoneToggle">
-            <span>Location timezone</span>
+            <span>Use location time zone</span>
           </label>
           <div id="locationTimezoneInfo" style="margin-top: 0.5em; font-size: 0.8em; color: #888; min-height: 1.2em;">Device</div>
           <div id="locationCurrentInfo" style="margin-top: 0.1em; font-size: 0.78em; color: #888; min-height: 1.2em;">53.0793, 8.8017</div>
@@ -1591,13 +1591,13 @@
     <!-- iOS Add to Home Screen instructions overlay -->
     <div id="ios-install-overlay" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 50; align-items: center; justify-content: center;">
       <div class="ios-install-content" style="background: white; padding: 1.5em; border-radius: 0.5em; max-width: 90vw; text-align: left; color: #333;">
-        <h2 style="font-weight:bold; margin-bottom:0.5em; text-align:center;">Install</h2>
+        <h2 style="font-weight:bold; margin-bottom:0.5em; text-align:center;">Install Spiral</h2>
         <ol style="margin: 0.5em 0; padding-left: 1.2em;">
-          <li style="margin-bottom: 8px;">Tap <strong>Share</strong> <img src="icons/share.png" alt="Share" style="width: 16px; height: 16px; vertical-align: middle; margin: 0 0px;"> button at bottom of Safari</li>
-          <li style="margin-bottom: 8px;">Scroll down and tap <strong>"Add to Home Screen"</strong></li>
-          <li>Tap <strong>"Add"</strong> in top right</li>
+          <li style="margin-bottom: 8px;">Tap Safari's <strong>Share</strong> button <img src="icons/share.png" alt="Share" style="width: 16px; height: 16px; vertical-align: middle; margin: 0 0px;"></li>
+          <li style="margin-bottom: 8px;">Choose <strong>Add to Home Screen</strong></li>
+          <li>Tap <strong>Add</strong></li>
         </ol>
-        <p style="font-size: 13px; color: var(--button-locked-text); margin: 8px 0;">The app will appear on your home screen like a native app!</p>
+        <p style="font-size: 13px; color: var(--button-locked-text); margin: 8px 0;">Open Spiral from your home screen.</p>
         <div style="text-align:center; margin-top:1em;">
           <button id="ios-close-btn" style="padding:0.5em 1.5em; background:#888888; color:#000000; border:none; border-radius:0.3em; cursor:pointer; font-size:1em;">Got it!</button>
         </div>
