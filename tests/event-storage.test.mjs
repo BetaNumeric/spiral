@@ -208,7 +208,7 @@ test('blocked storage access never attempts to replace unreadable data', async (
 });
 
 vm.runInContext('class SpiralCalendar {}', context);
-for (const file of ['event-projection', 'event-time']) {
+for (const file of ['event-projection', 'event-time', 'event-editing']) {
   vm.runInContext(fs.readFileSync(new URL(`../js/${file}.js`, import.meta.url), 'utf8'), context);
 }
 vm.runInContext(fs.readFileSync(new URL('../js/event-storage-ui.js', import.meta.url), 'utf8'), context);
@@ -300,6 +300,28 @@ function calendarFixture(initial = snapshot('original')) {
   });
   return { f, calendar };
 }
+
+test('shared editing retains failed saves and retries without increasing the revision twice', async () => {
+  const { f, calendar } = calendarFixture();
+  calendar.loadEventsFromStorage();
+  const originalRaw = f.raw;
+  const event = calendar.events[0];
+  const save = calendar.saveEventsToStorage.bind(calendar);
+  let pending;
+  calendar.saveEventsToStorage = () => (pending = save());
+  f.failWrites = true;
+  assert.equal(calendar.editEvent(event, { title: 'Unsaved edit' }), true);
+  assert.equal(await pending, false);
+  assert.equal(f.raw, originalRaw);
+  assert.equal(calendar.events[0], event);
+  assert.equal(calendar.hasUnsavedEventChanges(), true);
+  const sequence = event.sequence;
+  f.failWrites = false;
+  assert.equal(await calendar.persistEditedEvent(event), true);
+  assert.equal(event.sequence, sequence);
+  assert.equal(JSON.parse(f.raw)[0].title, 'Unsaved edit');
+  assert.equal(calendar.hasUnsavedEventChanges(), false);
+});
 
 test('a failed calendar load preserves both the current events and the original stored bytes', async () => {
   const { f, calendar } = calendarFixture();

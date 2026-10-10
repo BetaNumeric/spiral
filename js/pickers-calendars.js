@@ -83,48 +83,27 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   applyEventDateTimeInputValue(event, type, rawValue, { occurrence } = {}) {
-    if (!event || typeof rawValue !== 'string' || !rawValue.trim()) return false;
+    if (!this.isActiveEvent(event) || typeof rawValue !== 'string' || !rawValue.trim()) return false;
     const parsedValue = parseDateTimeLocalAsUTC(rawValue.trim());
-    if (!(parsedValue instanceof Date) || !Number.isFinite(parsedValue.getTime())) {
-      return false;
-    }
-    let chosen;
-    try { chosen = this.resolveEventWallTime(event, type, parsedValue, { occurrence }); }
-    catch (error) { alert(error.message); return false; }
-
-    if (event.isDraft && event.autoEnd && type === 'start') {
-      const candidate = { ...event, start: chosen, end: new Date(chosen.getTime() + SpiralTime.HOUR) };
-      this.getEventProjection(candidate);
-      Object.assign(event, candidate);
-    } else {
-      const start = type === 'start' ? parsedValue : this.getEventWallDate(event, 'start');
-      const requestedEnd = type === 'end' ? parsedValue : this.getEventWallDate(event, 'end');
-      const options = type === 'start' ? { startOccurrence: occurrence } : { endOccurrence: occurrence };
-      let end;
-      try { end = this.getAdjustedEventWallEnd(event, start, requestedEnd, options); }
-      catch (error) { alert(error.message); return false; }
-      if (!this.applyEventTimeRange(event, start, end, options)) return false;
-    }
-    if (event.isDraft && type === 'end') event.autoEnd = false;
-
-    this.syncEventAutoColor(event);
-    const persistentColorPicker = document.getElementById('persistentColorPicker');
-    if (persistentColorPicker) {
-      persistentColorPicker.value = this.getColorPickerColorForEvent(event);
-    }
-
-    event.lastModified = Date.now();
-    this._eventsVersion++;
-    this._detailViewHasChanges = true;
-    this.ensureLayoutCache();
-    
-    if (event.isDraft && this.draftEvent && this.draftEvent.segmentId === event.segmentId) {
-      this.draftEvent = event;
-    }
-    this.drawSpiral();
-    this.saveEventsToStorage();
-    setTimeout(() => renderEventList(), 0);
+    if (!Number.isFinite(parsedValue.getTime())) return false;
+    const applied = this.editEvent(event, candidate => {
+      const chosen = this.resolveEventWallTime(candidate, type, parsedValue, { occurrence });
+      if (candidate.isDraft && candidate.autoEnd && type === 'start') {
+        candidate.start = chosen;
+        candidate.end = new Date(chosen.getTime() + SpiralTime.HOUR);
+      } else {
+        const start = type === 'start' ? parsedValue : this.getEventWallDate(candidate, 'start');
+        const requestedEnd = type === 'end' ? parsedValue : this.getEventWallDate(candidate, 'end');
+        const options = type === 'start' ? { startOccurrence: occurrence } : { endOccurrence: occurrence };
+        const end = this.getAdjustedEventWallEnd(candidate, start, requestedEnd, options);
+        if (!this.applyEventTimeRange(candidate, start, end, options)) return false;
+      }
+      if (candidate.isDraft && type === 'end') candidate.autoEnd = false;
+      this.syncEventAutoColor(candidate);
+    }, { redraw: false });
+    if (!applied) return false;
     this._ensureSelectedSegmentContainsEventOrJump(event);
+    this.drawSpiral();
     return true;
   },
 
@@ -466,22 +445,10 @@ Object.assign(SpiralCalendar.prototype, {
     }
     
     const handleChange = () => {
-      this.setEventCustomColor(calendarEvent, input.value);
-      calendarEvent.lastModified = Date.now();
-      // Mark that changes have been made
-      this._detailViewHasChanges = true;
-      // If this is a draft event, make sure it's still the active one
-      if (calendarEvent.isDraft && this.draftEvent && this.draftEvent.segmentId === calendarEvent.segmentId) {
-        this.draftEvent = calendarEvent; // Update the stored draft event
-      }
-      this.drawSpiral();
-      // Save events to localStorage
-      this.saveEventsToStorage();
-      if (input.parentNode) {
-        input.remove();
-      }
+      this.editEvent(calendarEvent, candidate => this.setEventCustomColor(candidate, input.value));
+      if (input.parentNode) input.remove();
     };
-    
+
     const handleCancel = () => {
       if (input.parentNode) {
         input.remove();
@@ -1171,21 +1138,10 @@ Object.assign(SpiralCalendar.prototype, {
           // Use callback for new event calendar selection
           onCalendarSelected(calendarName);
         } else {
-          // Direct event modification for existing events
-          event.calendar = calendarName;
-          const updatedColor = this.syncEventAutoColor(event);
-          // Update persistent color picker UI if present
-          const persistentColorPicker = document.getElementById('persistentColorPicker');
-          if (persistentColorPicker) {
-            persistentColorPicker.value = this.getColorPickerColorForEvent(event);
-          }
-          event.lastModified = Date.now();
-          // Mark that changes have been made
-          this._detailViewHasChanges = true;
-          this.saveEventsToStorage();
-          this.drawSpiral();
-          // Update event list to show new icon state (with delay to ensure properties are saved)
-          setTimeout(() => renderEventList(), 0);
+          this.editEvent(event, candidate => {
+            candidate.calendar = calendarName;
+            this.syncEventAutoColor(candidate);
+          });
         }
         dropdown.remove();
         if (backdrop.parentNode) backdrop.remove();
@@ -1221,27 +1177,10 @@ Object.assign(SpiralCalendar.prototype, {
           // Use callback for new event calendar selection
           onCalendarSelected(newCalendarName);
         } else {
-          // Direct event modification for existing events
-          event.calendar = newCalendarName;
-          const updatedColor = this.syncEventAutoColor(event);
-          const persistentColorPicker = document.getElementById('persistentColorPicker');
-          if (persistentColorPicker) {
-            persistentColorPicker.value = this.getColorPickerColorForEvent(event);
-          }
-
-          event.lastModified = Date.now();
-          // Mark that changes have been made
-          this._detailViewHasChanges = true;
-          
-          // If this is a draft event, make sure it's still the active one
-          if (this.draftEvent && this.draftEvent === event) {
-            this.draftEvent.calendar = newCalendarName;
-          }
-          
-          this.saveEventsToStorage();
-          this.drawSpiral();
-          // Update event list to show new icon state (with delay to ensure properties are saved)
-          setTimeout(() => renderEventList(), 0);
+          this.editEvent(event, candidate => {
+            candidate.calendar = newCalendarName;
+            this.syncEventAutoColor(candidate);
+          });
         }
       });
     });

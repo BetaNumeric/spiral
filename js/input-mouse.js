@@ -634,18 +634,6 @@ Object.assign(SpiralCalendar.prototype, {
         return; // Don't process other clicks
       }
     }
-      // Remove persistent inputs if clicking outside detail circle
-      const removePersistentInputs = () => {
-        const persistentStartInput = document.getElementById('persistentStartDateTime');
-        const persistentEndInput = document.getElementById('persistentEndDateTime');
-        const persistentColorPicker = document.getElementById('persistentColorPicker');
-        if (persistentStartInput) persistentStartInput.remove();
-        if (persistentEndInput) persistentEndInput.remove();
-        if (persistentColorPicker) persistentColorPicker.remove();
-        this.persistentInputsState.currentEventId = null;
-        this.persistentInputsState.inputsCreated = false;
-      };
-      
       // Check if click is within the detail circle area
       if (this.state.detailViewDay !== null) {
         const detailMetrics = this.getDetailViewMetrics();
@@ -749,6 +737,7 @@ Object.assign(SpiralCalendar.prototype, {
                 mouseY >= addBtn.y && mouseY <= addBtn.y + addBtn.height) {
               // "+ New" or "Done" button clicked
               this.playFeedback(); // Add click sound
+              this.finishActiveDetailTextEditor({ redraw: false });
               if (this._detailViewHasChanges) {
                 // "Done" button clicked - close the detail view
                 this.closeDetailView();
@@ -791,38 +780,10 @@ Object.assign(SpiralCalendar.prototype, {
               if (btn.isAddButton) {
                 // Add Event button clicked - convert draft event to real event
                 if (btn.event && btn.event.isDraft) {
-                  // Convert draft event to real event
-                  const newEvent = {
-                    title: btn.event.title || 'Untitled Event',
-                    description: btn.event.description || '',
-                    start: new Date(btn.event.start),
-                    end: new Date(btn.event.end),
-                    color: btn.event.color,
-                    colorSeed: btn.event.colorSeed,
-                    colorIsCustom: !!btn.event.colorIsCustom,
-                    calendar: btn.event.calendar || 'Home',
-                    addedToCalendar: false,
-                    lastModified: Date.now(),
-                    lastAddedToCalendar: null,
-                    persistentUID: generateEventUID({
-                      title: btn.event.title || 'Untitled Event',
-                      description: btn.event.description || '',
-                      start: new Date(btn.event.start),
-                      end: new Date(btn.event.end),
-                      calendar: btn.event.calendar || 'Home'
-                    })
-                  };
-                  try { this.normalizeRuntimeEvent(newEvent); }
-                  catch (error) { alert(error.message); return; }
-                  this.runWithStudyEventSource('detail_view', () => {
-                    this.events.push(newEvent);
-                    this._eventsVersion++;
-                    this.saveEventsToStorage();
-                  });
+                  const added = this.runWithStudyEventSource('detail_view', () => this.addDraftEvent(btn.event));
+                  if (!added) return;
                   this._detailViewHasChanges = true;
-                  this.requestEventListRender();
-                  this.draftEvent = null; // Clear draft event
-                  
+
                 // Reset auto-activated settings
                   this.resetAutoActivatedSettings();
                 // Force redraw to update the interface
@@ -849,15 +810,8 @@ Object.assign(SpiralCalendar.prototype, {
                 // Delete button clicked
                 this.playFeedback(); // Add click sound
                 if (confirm(`Delete event "${btn.event.title}"? This action cannot be undone.`)) {
-                const eventIndex = this.events.indexOf(btn.event);
-                if (eventIndex > -1) {
-                  this.runWithStudyEventSource('detail_view', () => {
-                    this.events.splice(eventIndex, 1);
-                    this._eventsVersion++;
-                    this.saveEventsToStorage();
-                  });
+                if (this.runWithStudyEventSource('detail_view', () => this.deleteCalendarEvent(btn.event))) {
                   this._detailViewHasChanges = true;
-                  this.requestEventListRender();
                   this.deleteButtonInfo = null;
                   this.addButtonInfo = null;
                   this.titleClickArea = null;
@@ -876,9 +830,6 @@ Object.assign(SpiralCalendar.prototype, {
           // Click is inside the detail circle but not on any interactive element - do nothing
           return;
         }
-      } else {
-        // Not in detail view, always remove persistent inputs
-        removePersistentInputs();
       }
       
       const segment = this.findSegmentAtPoint(canvasX, canvasY);
@@ -1141,8 +1092,6 @@ Object.assign(SpiralCalendar.prototype, {
             if (document.activeElement && typeof document.activeElement.blur === 'function') {
               document.activeElement.blur();
             }
-            // Mark changes so "+ New" → "Done"
-            this._detailViewHasChanges = true;
             // Redraw to reflect mode change instantly
             this.refreshCanvasCursor();
             this.drawSpiral();
@@ -1207,22 +1156,7 @@ Object.assign(SpiralCalendar.prototype, {
 
       // Finalize event time handle dragging
       if (this.mouseState.isHandleDragging) {
-        this.mouseState.wasDragging = true; // Prevent handleClick from firing
-        this.mouseState.isHandleDragging = false;
-        this.mouseState.draggingHandle = null;
-        this.handleDragState = null;
-        // Restore circle mode if it was enabled before dragging
-        if (this._originalCircleModeDuringHandleDrag) {
-          this.state.circleMode = true;
-          this._originalCircleModeDuringHandleDrag = false;
-        }
-        // Persist event changes
-        if (typeof this.saveEventsToStorage === 'function') {
-          this.saveEventsToStorage();
-        }
-        this.requestEventListRender();
-        this.refreshCanvasCursor();
-        this.drawSpiral();
+        this.finishEventHandleDrag();
         return;
       }
       // Finalize desktop time display drag/tap

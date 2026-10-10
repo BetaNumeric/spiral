@@ -457,15 +457,8 @@ Object.assign(SpiralCalendar.prototype, {
           const btn = this.deleteButtonInfo;
           this.playFeedback(); // Add click sound
           if (confirm(`Delete event "${btn.event.title}"? This action cannot be undone.`)) {
-            const eventIndex = this.events.indexOf(btn.event);
-            if (eventIndex > -1) {
-              this.runWithStudyEventSource('detail_view', () => {
-                this.events.splice(eventIndex, 1);
-                this._eventsVersion++;
-                this.saveEventsToStorage();
-              });
+            if (this.runWithStudyEventSource('detail_view', () => this.deleteCalendarEvent(btn.event))) {
               this._detailViewHasChanges = true;
-              this.requestEventListRender();
               this.deleteButtonInfo = null;
               this.addButtonInfo = null;
               this.titleClickArea = null;

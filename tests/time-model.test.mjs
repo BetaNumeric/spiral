@@ -6,7 +6,7 @@ import { webcrypto } from 'node:crypto';
 
 const context = vm.createContext({ console, Date, Intl, WeakMap, Map, Set, crypto: webcrypto, alert() {},
   CONFIG: { SEGMENTS_PER_DAY: 24 }, SpiralCalendar: class {} });
-for (const file of ['config-utils', 'time-model', 'event-model', 'icalendar', 'core-methods', 'render-geometry', 'state-storage-sync', 'event-projection', 'event-time', 'pickers-calendars', 'touch-time-orientation', 'render-circle', 'render-spiral']) {
+for (const file of ['config-utils', 'time-model', 'event-model', 'icalendar', 'core-methods', 'render-geometry', 'state-storage-sync', 'detail-view-state', 'event-editors', 'event-projection', 'event-time', 'event-editing', 'pickers-calendars', 'touch-time-orientation', 'render-circle', 'render-spiral']) {
   vm.runInContext(fs.readFileSync(new URL(`../js/${file}.js`, import.meta.url), 'utf8'), context);
 }
 context.formatIcsDateUTC = value => new Date(value).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
@@ -249,6 +249,7 @@ test('duration labels measure actual time and all-day labels count calendar date
 test('the picker rejects a nonexistent end before applying its automatic range correction', () => {
   const app = calendar();
   const e = app.initializeEventFromWallTimes(event('2026-03-29T03:00', '2026-03-29T04:00'));
+  app.events = [e];
   const before = JSON.stringify(app.serializeEventTime(e));
   assert.equal(app.applyEventDateTimeInputValue(e, 'end', '2026-03-29T02:30'), false);
   assert.equal(JSON.stringify(app.serializeEventTime(e)), before);
@@ -701,6 +702,7 @@ test('dragging into an empty repeated section chooses its time even without an e
   const app = calendar();
   app.referenceTime = wall('2026-10-25T00:00');
   const e = app.normalizeRuntimeEvent({ start: '2026-10-25T00:10:00Z', end: '2026-10-25T00:20:00Z' });
+  app.events = [e];
   const target = app.getEventStartNavigationTarget(e);
   app.mouseState = { isHandleDragging: true, draggingHandle: 'end' };
   app.handleDragState = { event: e };

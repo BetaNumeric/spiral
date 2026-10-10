@@ -6,7 +6,7 @@ import { webcrypto } from 'node:crypto';
 
 const context = vm.createContext({ console, Date, Intl, WeakMap, Map, Set, crypto: webcrypto,
   SpiralCalendar: class {} });
-for (const file of ['config-utils', 'time-model', 'event-model', 'event-projection', 'core-methods', 'state-storage-sync', 'event-time', 'render-geometry']) {
+for (const file of ['config-utils', 'time-model', 'event-model', 'event-projection', 'core-methods', 'state-storage-sync', 'detail-view-state', 'event-editors', 'event-time', 'event-editing', 'render-geometry']) {
   vm.runInContext(fs.readFileSync(new URL(`../js/${file}.js`, import.meta.url), 'utf8'), context);
 }
 const Time = context.SpiralTime;

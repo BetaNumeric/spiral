@@ -1110,14 +1110,7 @@ Object.assign(SpiralCalendar.prototype, {
         removeBtn.onclick = (e) => {
           e.stopPropagation();
         if (confirm(`Delete event "${ev.title}"? This action cannot be undone.`)) {
-          const idx = this.events.indexOf(ev);
-          if (idx !== -1) {
-            this.runWithStudyEventSource('event_list', () => {
-              this.events.splice(idx, 1);
-              this._eventsVersion++;
-              // Save events to localStorage
-              this.saveEventsToStorage();
-            });
+          if (this.runWithStudyEventSource('event_list', () => this.deleteCalendarEvent(ev))) {
             this.drawSpiral();
             renderEventList();
           }
@@ -2876,12 +2869,8 @@ Object.assign(SpiralCalendar.prototype, {
         };
         try { this.initializeEventFromWallTimes(event, { rejectGap: true, startOccurrence: getOccurrence('start'), endOccurrence: getOccurrence('end') }); }
         catch (error) { alert(error.message); return; }
-        this.runWithStudyEventSource('add_panel', () => {
-          this.events.push(event);
-          this._eventsVersion++;
-          // Save events to localStorage
-          this.saveEventsToStorage();
-        });
+        const added = this.runWithStudyEventSource('add_panel', () => this.addCalendarEvent(event));
+        if (!added) return;
         this.drawSpiral();
         // Reset fields
         eventTitle.value = '';

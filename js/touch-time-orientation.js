@@ -81,10 +81,9 @@ Object.assign(SpiralCalendar.prototype, {
 
     const ev = this.handleDragState.event;
     const preferredOffsetMs = clock.offsetMs;
-    if (!this.setEventHandleTime(ev, this.mouseState.draggingHandle, newTime, { preferredOffsetMs })) return false;
-
-    this._detailViewHasChanges = true;
-    this._eventsVersion++;
+    if (!this.editEvent(ev, candidate =>
+      this.setEventHandleTime(candidate, this.mouseState.draggingHandle, newTime, { preferredOffsetMs }),
+      { persist: false, redraw: false })) return false;
     if (typeof this.syncSelectedSegmentToDraggedHandle === 'function') {
       this.syncSelectedSegmentToDraggedHandle(ev);
     }
@@ -847,7 +846,7 @@ Object.assign(SpiralCalendar.prototype, {
             if (document.activeElement && typeof document.activeElement.blur === 'function') {
               document.activeElement.blur();
             }
-            this._detailViewHasChanges = true;
+
             this.drawSpiral();
             e.preventDefault();
             return;
@@ -1338,28 +1337,7 @@ Object.assign(SpiralCalendar.prototype, {
       const stillTrackedTouchActive = trackedId !== null && Array.from(e.touches || []).some((touch) => touch.identifier === trackedId);
       if (stillTrackedTouchActive) return;
 
-      this.mouseState.wasDragging = true; // Prevent synthetic click from firing
-      this.mouseState.isHandleDragging = false;
-      this.mouseState.draggingHandle = null;
-      this.mouseState.hoveredHandle = null;
-      this.handleDragState = null;
-
-      if (this._originalCircleModeDuringHandleDrag) {
-        this.state.circleMode = true;
-        this._originalCircleModeDuringHandleDrag = false;
-      }
-
-      if (typeof this.saveEventsToStorage === 'function') {
-        this.saveEventsToStorage();
-      }
-      this.requestEventListRender();
-
-      if (typeof this.refreshCanvasCursor === 'function') {
-        this.refreshCanvasCursor();
-      } else {
-        this.canvas.style.cursor = 'default';
-      }
-      this.drawSpiral();
+      this.finishEventHandleDrag();
       if (e.cancelable) e.preventDefault();
       return;
     }

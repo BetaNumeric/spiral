@@ -223,12 +223,6 @@ class SpiralCalendar {
         lastMouseY: 0
       };
 
-      // Track persistent inputs state
-      this.persistentInputsState = {
-        currentEventId: null,
-        inputsCreated: false
-      };
-      
       // Track editing state to prevent repositioning during edits
       this.editingState = {
         isEditingTitle: false,

@@ -56,6 +56,12 @@ use shared immutable display projections. Changing the display zone changes only
 increase the revision; saving again or sharing an unchanged event does not.
 The two canvas views share event layout, clipping, night-overlay calculations,
 and selection geometry in `js/render-geometry.js`.
+Detail editors and single-event additions and deletions use `js/event-editing.js`
+to validate changes and refresh event caches. Detail selection and drafts live in
+`js/detail-view-state.js`; DOM text editors live in `js/event-editors.js`.
+Draft edits stay local until Add. Enter saves a title, Ctrl+Enter saves a
+description, and Escape cancels text editing. Blur saves changed text; switching
+events or closing the detail view finishes the active editor.
 All calendar exports use the same serializer and retain these identities.
 Imports match by UID, keep distinct events with identical content, and skip
 older revisions. Invalid records and duplicate UIDs reject the entire file.
