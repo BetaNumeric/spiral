@@ -1,6 +1,7 @@
 // Runtime event Dates always represent actual instants. Only projections encode wall coordinates.
 Object.assign(SpiralCalendar.prototype, {
   getCalendarTimeZone() {
+    if (this._renderTimeZone) return this._renderTimeZone;
     const zone = this.state?.useLocationTimezone && this.state.locationTimezoneId;
     return zone && SpiralTime.validTimeZone(zone) ? zone : SpiralTime.deviceTimeZone();
   },
@@ -19,10 +20,9 @@ Object.assign(SpiralCalendar.prototype, {
     return SpiralTime.wallToInstant(wall, this.getCalendarTimeZone());
   },
 
-  getEventProjection(event) {
+  getEventProjection(event, zone = this.getCalendarTimeZone()) {
     const cache = this._eventDisplayProjections || (this._eventDisplayProjections = new WeakMap());
     const previous = cache.get(event);
-    const zone = this.getCalendarTimeZone();
     const startMs = new Date(event.start).getTime();
     const endMs = new Date(event.end).getTime();
     if (previous && previous.zone === zone && previous.startInstantMs === startMs && previous.endInstantMs === endMs
@@ -40,8 +40,9 @@ Object.assign(SpiralCalendar.prototype, {
   normalizeRuntimeEvent(event) {
     const record = SpiralEventModel.normalize(event);
     const normalized = { ...record, start: new Date(record.start), end: new Date(record.end) };
-    this.getEventProjection(normalized);
+    const projection = this.getEventProjection(normalized);
     Object.assign(event, normalized);
+    this._eventDisplayProjections.set(event, projection);
     return event;
   },
 

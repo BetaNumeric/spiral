@@ -608,91 +608,84 @@ Object.assign(SpiralCalendar.prototype, {
   drawEventSegments() {
     this._pendingSpiralOverlapEdges = [];
     this._pendingSpiralOverlapEdgeKeys = new Set();
-    for (const eventSegment of this.eventSegments) {
-      if (eventSegment.isCircleMode) {
-        // Circle mode event fill; seam and divider edges are drawn separately.
-        this.drawCircleSegment(
-          eventSegment.innerRadius,
-          eventSegment.outerRadius,
-          -eventSegment.timeStartTheta,
-          -eventSegment.timeEndTheta,
-          eventSegment.color,
-          false, false, false, false,
-          eventSegment.timeStartTheta,
-          eventSegment.timeEndTheta,
-          false,
-          false,
-          true, // isEventSubSegment = true
-          false, false, false, // isNoonSegment, isSixAMSegment, isSixPMSegment
-          null, null, // day, segment
-          null,
-          null,
-          true
-        );
-        const startAngle = -eventSegment.timeStartTheta + CONFIG.INITIAL_ROTATION_OFFSET;
-        const endAngle = -eventSegment.timeEndTheta + CONFIG.INITIAL_ROTATION_OFFSET;
-        if (this.state.showEventBoundaryStrokes && this.state.showAllEventBoundaryStrokes && !this.state.showArcLines) {
-          this.ctx.save();
-          this.ctx.strokeStyle = '#000';
-          this.ctx.lineWidth = CONFIG.STROKE_WIDTH;
-          this.ctx.beginPath();
-          this.ctx.arc(0, 0, eventSegment.innerRadius, startAngle, endAngle, true);
-          this.ctx.stroke();
-          this.ctx.beginPath();
-          this.ctx.arc(0, 0, eventSegment.outerRadius, startAngle, endAngle, true);
-          this.ctx.stroke();
-          this.ctx.restore();
+    if (this.eventSegments.length === 0) return;
+    this._eventSpiralSamples = new Map();
+    // Event pieces share one Canvas scope; individual strokes set their own styles.
+    this.ctx.save();
+    const lineCap = this.ctx.lineCap;
+    try {
+      for (const eventSegment of this.eventSegments) {
+        if (eventSegment.isCircleMode) {
+          this.drawEventCircleSubsegment(eventSegment, lineCap);
+        } else {
+          this.drawEventSpiralSubsegment(eventSegment, lineCap);
         }
-        if (eventSegment.coverStartEdge) {
-          this.drawCircleRadialEdge(startAngle, eventSegment.edgeInnerRadius, eventSegment.edgeOuterRadius, eventSegment.color, CONFIG.EVENT_EDGE_STROKE_WIDTH);
-        }
-        if (eventSegment.coverEndEdge) {
-          this.drawCircleRadialEdge(endAngle, eventSegment.edgeInnerRadius, eventSegment.edgeOuterRadius, eventSegment.color, CONFIG.EVENT_EDGE_STROKE_WIDTH);
-        }
-        if (this.state.showEventBoundaryStrokes && eventSegment.drawStartEdge) {
-          this.queuePendingSpiralOverlapEdge(
-            eventSegment.edgeInnerRadius * Math.cos(startAngle),
-            eventSegment.edgeInnerRadius * Math.sin(startAngle),
-            eventSegment.edgeOuterRadius * Math.cos(startAngle),
-            eventSegment.edgeOuterRadius * Math.sin(startAngle)
-          );
-        }
-        if (this.state.showEventBoundaryStrokes && eventSegment.drawEndEdge) {
-          this.queuePendingSpiralOverlapEdge(
-            eventSegment.edgeInnerRadius * Math.cos(endAngle),
-            eventSegment.edgeInnerRadius * Math.sin(endAngle),
-            eventSegment.edgeOuterRadius * Math.cos(endAngle),
-            eventSegment.edgeOuterRadius * Math.sin(endAngle)
-          );
-        }
-        if (this.state.showEventBoundaryStrokes && eventSegment.dividerStroke) {
-          this.ctx.save();
-          this.ctx.strokeStyle = '#000';
-          this.ctx.lineWidth = CONFIG.STROKE_WIDTH;
-          this.ctx.lineCap = 'square';
-          this.ctx.beginPath();
-          this.ctx.arc(0, 0, eventSegment.innerRadius, startAngle, endAngle, true);
-          this.ctx.stroke();
-          this.ctx.restore();
-        }
-      } else {
-        // Spiral mode event: custom draw to avoid outer-arc switching glitches
-        this.drawEventSpiralSubsegment(eventSegment);
-        }
-    }
-    this.drawPendingSpiralOverlapEdges();
-    },
-
-    drawCircleRadialEdge(angle, innerRadius, outerRadius, color, lineWidth) {
-      this.ctx.save();
-      this.ctx.strokeStyle = color;
-      this.ctx.lineWidth = lineWidth;
-      this.ctx.beginPath();
-      this.ctx.moveTo(innerRadius * Math.cos(angle), innerRadius * Math.sin(angle));
-      this.ctx.lineTo(outerRadius * Math.cos(angle), outerRadius * Math.sin(angle));
-      this.ctx.stroke();
+      }
+      this.drawPendingSpiralOverlapEdges();
+    } finally {
       this.ctx.restore();
-    },
+      this._eventSpiralSamples = null;
+    }
+  },
+
+  drawEventCircleSubsegment(eventSegment, lineCap = this.ctx.lineCap) {
+    this.ctx.lineCap = lineCap;
+    const startAngle = -eventSegment.timeStartTheta + CONFIG.INITIAL_ROTATION_OFFSET;
+    const endAngle = -eventSegment.timeEndTheta + CONFIG.INITIAL_ROTATION_OFFSET;
+    this.traceCircleBandPath(eventSegment.innerRadius, eventSegment.outerRadius, startAngle, endAngle);
+    this.ctx.fillStyle = eventSegment.color;
+    this.ctx.fill();
+    if (this.state.showEventBoundaryStrokes && this.state.showAllEventBoundaryStrokes && !this.state.showArcLines) {
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = CONFIG.STROKE_WIDTH;
+      this.ctx.beginPath();
+      this.ctx.arc(0, 0, eventSegment.innerRadius, startAngle, endAngle, true);
+      this.ctx.stroke();
+      this.ctx.beginPath();
+      this.ctx.arc(0, 0, eventSegment.outerRadius, startAngle, endAngle, true);
+      this.ctx.stroke();
+    }
+    if (eventSegment.coverStartEdge) {
+      this.drawCircleRadialEdge(startAngle, eventSegment.edgeInnerRadius, eventSegment.edgeOuterRadius, eventSegment.color, CONFIG.EVENT_EDGE_STROKE_WIDTH, lineCap);
+    }
+    if (eventSegment.coverEndEdge) {
+      this.drawCircleRadialEdge(endAngle, eventSegment.edgeInnerRadius, eventSegment.edgeOuterRadius, eventSegment.color, CONFIG.EVENT_EDGE_STROKE_WIDTH, lineCap);
+    }
+    if (this.state.showEventBoundaryStrokes && eventSegment.drawStartEdge) {
+      this.queuePendingSpiralOverlapEdge(
+        eventSegment.edgeInnerRadius * Math.cos(startAngle),
+        eventSegment.edgeInnerRadius * Math.sin(startAngle),
+        eventSegment.edgeOuterRadius * Math.cos(startAngle),
+        eventSegment.edgeOuterRadius * Math.sin(startAngle)
+      );
+    }
+    if (this.state.showEventBoundaryStrokes && eventSegment.drawEndEdge) {
+      this.queuePendingSpiralOverlapEdge(
+        eventSegment.edgeInnerRadius * Math.cos(endAngle),
+        eventSegment.edgeInnerRadius * Math.sin(endAngle),
+        eventSegment.edgeOuterRadius * Math.cos(endAngle),
+        eventSegment.edgeOuterRadius * Math.sin(endAngle)
+      );
+    }
+    if (this.state.showEventBoundaryStrokes && eventSegment.dividerStroke) {
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = CONFIG.STROKE_WIDTH;
+      this.ctx.lineCap = 'square';
+      this.ctx.beginPath();
+      this.ctx.arc(0, 0, eventSegment.innerRadius, startAngle, endAngle, true);
+      this.ctx.stroke();
+    }
+  },
+
+  drawCircleRadialEdge(angle, innerRadius, outerRadius, color, lineWidth, lineCap = this.ctx.lineCap) {
+    this.ctx.strokeStyle = color;
+    this.ctx.lineWidth = lineWidth;
+    this.ctx.lineCap = lineCap;
+    this.ctx.beginPath();
+    this.ctx.moveTo(innerRadius * Math.cos(angle), innerRadius * Math.sin(angle));
+    this.ctx.lineTo(outerRadius * Math.cos(angle), outerRadius * Math.sin(angle));
+    this.ctx.stroke();
+  },
 
     drawMidnightLines() {
       this.ctx.save();
@@ -1922,13 +1915,8 @@ Object.assign(SpiralCalendar.prototype, {
       }
     },
 
-  drawCircleSegment(innerRadius, outerRadius, startTheta, endTheta, color, isMidnightSegment, isAfterMidnightSegment, isHovered, isSelected, rawStartAngle = null, rawEndAngle = null, isFirstDayOfMonth = false, drawStroke = true, isEventSubSegment = false, isNoonSegment = false, isSixAMSegment = false, isSixPMSegment = false, day = null, segment = null, eventStrokeColor = null, eventStrokeWidth = null, suppressEventEdges = false) {
-      this.ctx.save();
+  traceCircleBandPath(innerRadius, outerRadius, startAngle, endAngle) {
       this.ctx.beginPath();
-      
-      // Draw the ring segment path
-      const startAngle = startTheta + CONFIG.INITIAL_ROTATION_OFFSET;
-      const endAngle = endTheta + CONFIG.INITIAL_ROTATION_OFFSET;
       
       // Outer arc
       this.ctx.arc(0, 0, outerRadius, startAngle, endAngle, true);
@@ -1940,6 +1928,13 @@ Object.assign(SpiralCalendar.prototype, {
       this.ctx.lineTo(outerRadius * Math.cos(startAngle), outerRadius * Math.sin(startAngle));
       
       this.ctx.closePath();
+  },
+
+  drawCircleSegment(innerRadius, outerRadius, startTheta, endTheta, color, isMidnightSegment, isAfterMidnightSegment, isHovered, isSelected, rawStartAngle = null, rawEndAngle = null, isFirstDayOfMonth = false, drawStroke = true, isEventSubSegment = false, isNoonSegment = false, isSixAMSegment = false, isSixPMSegment = false, day = null, segment = null, eventStrokeColor = null, eventStrokeWidth = null, suppressEventEdges = false) {
+      this.ctx.save();
+      const startAngle = startTheta + CONFIG.INITIAL_ROTATION_OFFSET;
+      const endAngle = endTheta + CONFIG.INITIAL_ROTATION_OFFSET;
+      this.traceCircleBandPath(innerRadius, outerRadius, startAngle, endAngle);
       this.ctx.fillStyle = color;
       this.ctx.fill();
     

@@ -8,7 +8,7 @@ const alerts = [];
 const context = vm.createContext({ console, Date, Intl, WeakMap, Map, Set, crypto: webcrypto,
   alert: message => alerts.push(message), CONFIG: { SEGMENTS_PER_DAY: 24 }, SpiralCalendar: class {} });
 for (const file of ['config-utils', 'time-model', 'event-model', 'event-projection', 'core-methods',
-  'event-time', 'event-editing', 'event-editors', 'detail-view-state']) {
+  'event-time', 'event-index', 'event-editing', 'event-editors', 'detail-view-state']) {
   vm.runInContext(fs.readFileSync(new URL(`../js/${file}.js`, import.meta.url), 'utf8'), context);
 }
 

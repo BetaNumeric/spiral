@@ -30,33 +30,21 @@
   }
 
   function overlapGroups(events) {
-    const parent = new Int32Array(events.length);
-    for (let i = 0; i < parent.length; i++) parent[i] = i;
-    const find = i => {
-      let root = i;
-      while (root !== parent[root]) root = parent[root];
-      while (i !== root) {
-        const next = parent[i];
-        parent[i] = root;
-        i = next;
+    const ordered = events.map((event, index) => ({ index, start: event.startMinute, end: event.endMinute }))
+      .sort((a, b) => a.start - b.start || a.index - b.index);
+    const groups = [];
+    let group = null, end = -Infinity;
+    for (const entry of ordered) {
+      if (!group || entry.start >= end) {
+        group = [];
+        groups.push(group);
+        end = -Infinity;
       }
-      return root;
-    };
-    for (let i = 0; i < events.length; i++) {
-      for (let j = i + 1; j < events.length; j++) {
-        if (events[i].startMinute < events[j].endMinute && events[j].startMinute < events[i].endMinute) {
-          const a = find(i), b = find(j);
-          if (a !== b) parent[a] = b;
-        }
-      }
+      group.push(entry.index);
+      end = Math.max(end, entry.end);
     }
-    const groups = new Map();
-    for (let i = 0; i < events.length; i++) {
-      const root = find(i);
-      if (!groups.has(root)) groups.set(root, []);
-      groups.get(root).push(i);
-    }
-    return groups.values();
+    for (const indices of groups) indices.sort((a, b) => a - b);
+    return groups.sort((a, b) => a[0] - b[0]);
   }
 
   global.SpiralGeometry = Object.freeze({ angleAtFraction, fractionAtAngle, unwrapAngle,
@@ -93,20 +81,7 @@
     },
 
     createVisibleEventBoundaryLookup() {
-      const ranges = this.getVisibleEvents().flatMap(event => this.getEventProjection(event).intervals
-        .map(interval => ({ event, interval })));
-      const isEventOverlappedAtLayout = (targetEvent, wallMs) => ranges.some(({ event, interval }) =>
-        event !== targetEvent && interval.layoutStartMs <= wallMs && wallMs < interval.layoutEndMs);
-      const isEventTouchingAtStartLayout = (targetEvent, wallMs) => ranges.some(({ event, interval }) =>
-        event !== targetEvent && interval.layoutEndMs === wallMs);
-      const isEventTouchingAtEndLayout = (targetEvent, wallMs) => ranges.some(({ event, interval }) =>
-        event !== targetEvent && interval.layoutStartMs === wallMs);
-
-      return {
-        isEventOverlappedAtLayout,
-        isEventTouchingAtStartLayout,
-        isEventTouchingAtEndLayout
-      };
+      return this.getEventIntervalIndex().boundaryLookup;
     },
 
     annotateSegmentClock(segment) {

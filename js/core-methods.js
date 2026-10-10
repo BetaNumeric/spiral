@@ -274,10 +274,12 @@ Object.assign(SpiralCalendar.prototype, {
       const windowStartMs = this.visibleWindowStart().getTime();
       const windowEndMs = this.visibleWindowEnd().getTime();
       const calendarsKey = JSON.stringify([...this.state.visibleCalendars].sort());
+      const zone = this.getCalendarTimeZone();
       const needRebuild = !this.layoutCache ||
         this.layoutCache.windowStartMs !== windowStartMs ||
         this.layoutCache.windowEndMs !== windowEndMs ||
         this.layoutCache.calendarsKey !== calendarsKey ||
+        this.layoutCache.zone !== zone ||
         this.layoutCache.eventsVersion !== this._eventsVersion;
       if (!needRebuild) return;
 
@@ -287,6 +289,7 @@ Object.assign(SpiralCalendar.prototype, {
         windowStartMs,
         windowEndMs,
         calendarsKey,
+        zone,
         eventsVersion: this._eventsVersion,
         eventToLane,
         eventToComponent,
@@ -458,9 +461,6 @@ Object.assign(SpiralCalendar.prototype, {
         this._visibleEventsCache = this.events.filter(ev => {
           const cal = ev.calendar || 'Home';
           return visibleCalendarsSet.has(cal);
-        }).map(ev => {
-          this.getEventProjection(ev);
-          return ev;
         });
         
         this._visibleEventsCacheVersion = this._eventsVersion;
@@ -471,24 +471,23 @@ Object.assign(SpiralCalendar.prototype, {
 
     getAllEventsForSegment(day, segment) {
       const { startMs: segmentStartMs, endMs: segmentEndMs } = this.getSegmentHourRange(day, segment);
-      let visibleEvents = this.getVisibleEvents();
+      const intervals = this.getEventIntervalIndex().query(segmentStartMs, segmentEndMs);
       if (this.draftEvent && this.mouseState && this.draftEvent.segmentId === this.mouseState.selectedSegmentId) {
-        visibleEvents = [...visibleEvents, this.draftEvent];
+        const event = this.draftEvent;
+        const projection = this.getEventProjection(event);
+        for (const displayInterval of projection.intervals) intervals.push({ event, projection, displayInterval });
       }
       const entries = [];
-      for (const event of visibleEvents) {
-        const projection = this.getEventProjection(event);
-        for (const interval of projection.intervals) {
-          const from = Math.max(interval.layoutStartMs, segmentStartMs);
-          const to = Math.min(interval.layoutEndMs, segmentEndMs);
-          if (from >= to) continue;
-          entries.push({ event, displayInterval: interval, color: this.getDisplayColorForEvent(event),
-            startMinute: (from - segmentStartMs) / 60000,
-            endMinute: (to - segmentStartMs) / 60000,
-            startLayoutMs: interval.layoutStartMs, endLayoutMs: interval.layoutEndMs,
-            totalDurationMinutes: (projection.endInstantMs - projection.startInstantMs) / 60000,
-            startUtcMs: interval.startInstantMs, endUtcMs: interval.endInstantMs });
-        }
+      for (const { event, projection, displayInterval: interval } of intervals) {
+        const from = Math.max(interval.layoutStartMs, segmentStartMs);
+        const to = Math.min(interval.layoutEndMs, segmentEndMs);
+        if (from >= to) continue;
+        entries.push({ event, displayInterval: interval, color: this.getDisplayColorForEvent(event),
+          startMinute: (from - segmentStartMs) / 60000,
+          endMinute: (to - segmentStartMs) / 60000,
+          startLayoutMs: interval.layoutStartMs, endLayoutMs: interval.layoutEndMs,
+          totalDurationMinutes: (projection.endInstantMs - projection.startInstantMs) / 60000,
+          startUtcMs: interval.startInstantMs, endUtcMs: interval.endInstantMs });
       }
       return entries;
     },
@@ -511,11 +510,11 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     getMaxOverlapForEventAcrossHours(targetEvent) {
-      const visibleIntervals = this.getVisibleEvents().flatMap(event => this.getEventProjection(event).intervals);
+      const index = this.getEventIntervalIndex();
       let maximum = 1;
       for (const target of this.getEventProjection(targetEvent).intervals) {
         const points = [];
-        for (const interval of visibleIntervals) {
+        for (const { displayInterval: interval } of index.query(target.layoutStartMs, target.layoutEndMs)) {
           const from = Math.max(target.layoutStartMs, interval.layoutStartMs);
           const to = Math.min(target.layoutEndMs, interval.layoutEndMs);
           if (from < to) points.push({ t: from, delta: 1 }, { t: to, delta: -1 });
@@ -586,17 +585,12 @@ Object.assign(SpiralCalendar.prototype, {
 
       // Build list of effective intervals within the window
       const intervals = [];
-      const visibleEvents = this.getVisibleEvents();
-      for (const ev of visibleEvents) {
-        const projection = this.getEventProjection(ev);
-        for (const displayInterval of projection.intervals) {
-          const startMs = Math.max(displayInterval.layoutStartMs, windowStartMs);
-          const endMs = Math.min(displayInterval.layoutEndMs, windowEndMs);
-          if (startMs >= endMs) continue;
-          intervals.push({ event: ev, displayInterval, startMs, endMs,
-            totalDurationMinutes: (projection.endInstantMs - projection.startInstantMs) / 60000,
-            globalStartMs: displayInterval.startInstantMs });
-        }
+      for (const { event, displayInterval, projection } of this.getEventIntervalsForWindow()) {
+        const startMs = Math.max(displayInterval.layoutStartMs, windowStartMs);
+        const endMs = Math.min(displayInterval.layoutEndMs, windowEndMs);
+        intervals.push({ event, displayInterval, startMs, endMs,
+          totalDurationMinutes: (projection.endInstantMs - projection.startInstantMs) / 60000,
+          globalStartMs: displayInterval.startInstantMs });
       }
 
       // Sweep line: create points, ends before starts at same time
@@ -648,9 +642,7 @@ Object.assign(SpiralCalendar.prototype, {
     computeEventComponentsForWindow(eventToLane) {
       const from = this.visibleWindowStart().getTime();
       const to = this.visibleWindowEnd().getTime();
-      const entries = this.getVisibleEvents().flatMap(event => this.getEventProjection(event).intervals
-        .filter(interval => interval.layoutStartMs < to && interval.layoutEndMs > from)
-        .map(interval => ({ event, interval })));
+      const entries = this.getEventIntervalsForWindow().map(({ event, displayInterval: interval }) => ({ event, interval }));
       const { find, unite } = createUnionFind(entries.length);
       const points = entries.flatMap(({ interval }, index) => [
         { t: Math.max(from, interval.layoutStartMs), index, delta: 1 },
@@ -660,7 +652,8 @@ Object.assign(SpiralCalendar.prototype, {
       for (const point of points) {
         if (point.delta < 0) active.delete(point.index);
         else {
-          for (const index of active) unite(index, point.index);
+          // Every active interval overlaps this start, so they already share a component.
+          if (active.size) unite(active.values().next().value, point.index);
           active.add(point.index);
         }
       }

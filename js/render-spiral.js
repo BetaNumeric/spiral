@@ -335,7 +335,23 @@ Object.assign(SpiralCalendar.prototype, {
       this.ctx.restore();
   },
 
-    drawEventSpiralSubsegment(eventSegment) {
+    getEventSpiralSamples(startTheta, endTheta, radiusFunction) {
+      const cache = this._eventSpiralSamples;
+      let starts = cache?.get(radiusFunction);
+      if (cache && !starts) cache.set(radiusFunction, starts = new Map());
+      let ends = starts?.get(startTheta);
+      if (starts && !ends) starts.set(startTheta, ends = new Map());
+      if (ends?.has(endTheta)) return ends.get(endTheta);
+      const samples = this.adaptiveThetaSamples(startTheta, endTheta, radiusFunction, 0.1, 10).map(th => {
+        const ang = -th + CONFIG.INITIAL_ROTATION_OFFSET;
+        return { th, ang, inner: radiusFunction(th), outer: radiusFunction(th + 2 * Math.PI),
+          cos: Math.cos(ang), sin: Math.sin(ang) };
+      });
+      ends?.set(endTheta, samples);
+      return samples;
+    },
+
+    drawEventSpiralSubsegment(eventSegment, lineCap = this.ctx.lineCap) {
       const startTheta = eventSegment.timeStartTheta;
       const endTheta = eventSegment.timeEndTheta;
       const color = eventSegment.color;
@@ -343,18 +359,12 @@ Object.assign(SpiralCalendar.prototype, {
       const eventSliceEnd = eventSegment.eventSliceEnd;
       const radiusFunction = eventSegment.originalRadiusFunction;
 
-      // Use adaptive sampling with tighter tolerance (same as overlays) for smooth arcs without gaps
-      const thetas = this.adaptiveThetaSamples(startTheta, endTheta, radiusFunction, 0.1, 10);
-      // Skip degenerate slivers near center to avoid flicker
-      const thicknessPxAt = (th) => {
-        const inner = radiusFunction(th);
-        const outer = radiusFunction(th + 2 * Math.PI);
-        return (outer - inner) * (eventSliceEnd - eventSliceStart);
-      };
+      // Overlapping pieces share the same curve samples for this frame.
+      const curve = this.getEventSpiralSamples(startTheta, endTheta, radiusFunction);
       // If average thickness is less than ~0.6px, skip drawing
       let avgThick = 0;
-      for (let i = 0; i < thetas.length; i++) avgThick += thicknessPxAt(thetas[i]);
-      avgThick /= Math.max(1, thetas.length);
+      for (const point of curve) avgThick += (point.outer - point.inner) * (eventSliceEnd - eventSliceStart);
+      avgThick /= Math.max(1, curve.length);
       if (avgThick < 0.6) {
         return;
       }
@@ -362,93 +372,85 @@ Object.assign(SpiralCalendar.prototype, {
       const edgeSliceStart = (eventSegment.edgeSliceStart !== undefined) ? eventSegment.edgeSliceStart : eventSliceStart;
       const edgeSliceEnd = (eventSegment.edgeSliceEnd !== undefined) ? eventSegment.edgeSliceEnd : eventSliceEnd;
       const samples = [];
-      for (let i = 0; i < thetas.length; i++) {
-        const th = thetas[i];
-        const inner = radiusFunction(th);
-        const outer = radiusFunction(th + 2 * Math.PI);
+      for (const { th, ang, inner, outer, cos, sin } of curve) {
         const { inner: rInner, outer: rOuter } = SpiralGeometry.radialRange(inner, outer, eventSliceStart, eventSliceEnd);
         const { inner: edgeInner, outer: edgeOuter } = SpiralGeometry.radialRange(inner, outer, edgeSliceStart, edgeSliceEnd);
-        const ang = -th + CONFIG.INITIAL_ROTATION_OFFSET;
-        samples.push({ th, ang, rInner, rOuter, edgeInner, edgeOuter });
+        samples.push({ th, ang, cos, sin, rInner, rOuter, edgeInner, edgeOuter });
       }
 
       // Build path: inner curve forward, connect to outer end, outer curve backward, connect back
       this.ctx.beginPath();
-      this.ctx.moveTo(samples[0].rInner * Math.cos(samples[0].ang), samples[0].rInner * Math.sin(samples[0].ang));
+      this.ctx.moveTo(samples[0].rInner * samples[0].cos, samples[0].rInner * samples[0].sin);
       for (let i = 1; i < samples.length; i++) {
         const s = samples[i];
-        this.ctx.lineTo(s.rInner * Math.cos(s.ang), s.rInner * Math.sin(s.ang));
+        this.ctx.lineTo(s.rInner * s.cos, s.rInner * s.sin);
       }
       const last = samples[samples.length - 1];
       // connect via short radial edge at the end
-      this.ctx.lineTo(last.rOuter * Math.cos(last.ang), last.rOuter * Math.sin(last.ang));
+      this.ctx.lineTo(last.rOuter * last.cos, last.rOuter * last.sin);
       for (let i = samples.length - 2; i >= 0; i--) {
         const s = samples[i];
-        this.ctx.lineTo(s.rOuter * Math.cos(s.ang), s.rOuter * Math.sin(s.ang));
+        this.ctx.lineTo(s.rOuter * s.cos, s.rOuter * s.sin);
       }
       // close along start radial to ensure no gaps
       const first = samples[0];
-      this.ctx.lineTo(first.rInner * Math.cos(first.ang), first.rInner * Math.sin(first.ang));
+      this.ctx.lineTo(first.rInner * first.cos, first.rInner * first.sin);
       this.ctx.closePath();
 
       // Fill with high resolution sampling (no stroke needed - same method as overlays)
       this.ctx.fillStyle = color;
       this.ctx.fill();
+      this.ctx.lineCap = lineCap;
       if (this.state.showEventBoundaryStrokes && this.state.showAllEventBoundaryStrokes && !this.state.showArcLines) {
-        this.ctx.save();
         this.ctx.lineWidth = CONFIG.STROKE_WIDTH;
         this.ctx.strokeStyle = '#000';
         this.ctx.beginPath();
-        this.ctx.moveTo(samples[0].rInner * Math.cos(samples[0].ang), samples[0].rInner * Math.sin(samples[0].ang));
+        this.ctx.moveTo(samples[0].rInner * samples[0].cos, samples[0].rInner * samples[0].sin);
         for (let i = 1; i < samples.length; i++) {
           const s = samples[i];
-          this.ctx.lineTo(s.rInner * Math.cos(s.ang), s.rInner * Math.sin(s.ang));
+          this.ctx.lineTo(s.rInner * s.cos, s.rInner * s.sin);
         }
         this.ctx.stroke();
         this.ctx.beginPath();
-        this.ctx.moveTo(samples[0].rOuter * Math.cos(samples[0].ang), samples[0].rOuter * Math.sin(samples[0].ang));
+        this.ctx.moveTo(samples[0].rOuter * samples[0].cos, samples[0].rOuter * samples[0].sin);
         for (let i = 1; i < samples.length; i++) {
           const s = samples[i];
-          this.ctx.lineTo(s.rOuter * Math.cos(s.ang), s.rOuter * Math.sin(s.ang));
+          this.ctx.lineTo(s.rOuter * s.cos, s.rOuter * s.sin);
         }
         this.ctx.stroke();
-        this.ctx.restore();
       }
       if (this.state.showEventBoundaryStrokes && eventSegment.dividerStroke) {
-        this.ctx.save();
         this.ctx.lineWidth = CONFIG.STROKE_WIDTH;
         this.ctx.strokeStyle = '#000';
         this.ctx.lineCap = 'square';
         this.ctx.beginPath();
-        this.ctx.moveTo(samples[0].rInner * Math.cos(samples[0].ang), samples[0].rInner * Math.sin(samples[0].ang));
+        this.ctx.moveTo(samples[0].rInner * samples[0].cos, samples[0].rInner * samples[0].sin);
         for (let i = 1; i < samples.length; i++) {
           const s = samples[i];
-          this.ctx.lineTo(s.rInner * Math.cos(s.ang), s.rInner * Math.sin(s.ang));
+          this.ctx.lineTo(s.rInner * s.cos, s.rInner * s.sin);
         }
         this.ctx.stroke();
-        this.ctx.restore();
       }
       const shouldCoverStartEdge = !!eventSegment.coverStartEdge;
       const shouldCoverEndEdge = !!eventSegment.coverEndEdge;
       if (shouldCoverStartEdge || shouldCoverEndEdge) {
         // Keep continuing event pieces visually closed where the layout changes
         // across hour joins or overlap transitions.
-        this.ctx.save();
+        this.ctx.lineCap = lineCap;
         this.ctx.lineWidth = CONFIG.EVENT_EDGE_STROKE_WIDTH;
         this.ctx.strokeStyle = color;
         if (shouldCoverEndEdge) {
           this.ctx.beginPath();
-          this.ctx.moveTo(last.edgeInner * Math.cos(last.ang), last.edgeInner * Math.sin(last.ang));
-          this.ctx.lineTo(last.edgeOuter * Math.cos(last.ang), last.edgeOuter * Math.sin(last.ang));
+          this.ctx.moveTo(last.edgeInner * last.cos, last.edgeInner * last.sin);
+          this.ctx.lineTo(last.edgeOuter * last.cos, last.edgeOuter * last.sin);
           this.ctx.stroke();
         }
         if (shouldCoverStartEdge) {
           this.ctx.beginPath();
-          this.ctx.moveTo(first.edgeInner * Math.cos(first.ang), first.edgeInner * Math.sin(first.ang));
-          this.ctx.lineTo(first.edgeOuter * Math.cos(first.ang), first.edgeOuter * Math.sin(first.ang));
+          this.ctx.moveTo(first.edgeInner * first.cos, first.edgeInner * first.sin);
+          this.ctx.lineTo(first.edgeOuter * first.cos, first.edgeOuter * first.sin);
           this.ctx.stroke();
         }
-        this.ctx.restore();
       }
 
       // Defer thin black event boundary edges until after all event fills so
@@ -458,18 +460,18 @@ Object.assign(SpiralCalendar.prototype, {
       if (this.state.showEventBoundaryStrokes && (shouldDrawStartEdge || shouldDrawEndEdge)) {
         if (shouldDrawEndEdge) {
           this.queuePendingSpiralOverlapEdge(
-            last.edgeInner * Math.cos(last.ang),
-            last.edgeInner * Math.sin(last.ang),
-            last.edgeOuter * Math.cos(last.ang),
-            last.edgeOuter * Math.sin(last.ang)
+            last.edgeInner * last.cos,
+            last.edgeInner * last.sin,
+            last.edgeOuter * last.cos,
+            last.edgeOuter * last.sin
           );
         }
         if (shouldDrawStartEdge) {
           this.queuePendingSpiralOverlapEdge(
-            first.edgeInner * Math.cos(first.ang),
-            first.edgeInner * Math.sin(first.ang),
-            first.edgeOuter * Math.cos(first.ang),
-            first.edgeOuter * Math.sin(first.ang)
+            first.edgeInner * first.cos,
+            first.edgeInner * first.sin,
+            first.edgeOuter * first.cos,
+            first.edgeOuter * first.sin
           );
         }
       }
@@ -905,6 +907,17 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     drawSpiral() {
+      // Resolve the device zone once per frame, then refresh it on the next draw.
+      const previousZone = this._renderTimeZone;
+      this._renderTimeZone = this.getCalendarTimeZone();
+      try {
+        this.drawSpiralFrame();
+      } finally {
+        this._renderTimeZone = previousZone;
+      }
+    },
+
+    drawSpiralFrame() {
       this.refreshStoredEventsIfIdle();
       const canvasWidth = this.canvas.clientWidth;
       const canvasHeight = this.canvas.clientHeight;

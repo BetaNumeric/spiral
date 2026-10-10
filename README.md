@@ -110,6 +110,12 @@ Storage regression checks use Node's built-in test runner:
 `node --test tests/*.test.mjs`. In environments that prohibit spawning test
 processes, use `node --test --test-isolation=none tests/*.test.mjs`.
 
+Rendering and hover queries reuse a projected interval index so large calendars
+do not require a full event scan for every hour. Run
+`node tools/benchmark-events.mjs` for the geometry/query benchmark; measurement
+details and remaining limits are in [docs/performance.md](docs/performance.md).
+For a local Chrome Canvas benchmark, run `node tools/benchmark-canvas.mjs`.
+
 ## **Event List Timeline**
 
 The time display at the bottom of the screen can be pulled up to reveal an event list. Each event is listed chronologically here, grouped by day, with the event that is closest in the spiral being scrolled to the top and highlighted when it is selected. At the top, there is a search bar to find events by name (you can quickly pull up this list and jump straight to the search bar by simply pressing `f` or `/`). One can select which calendars are shown by toggling the active calendars in a list, or by long-pressing the calendar tag of an element to show only events from that calendar. Behind each event in the list, there is a delete “x” button that lets you remove the event, and an “add” button that lets you add the event to your local calendar app. At the top, there is also the option to delete all events or add all events to your local calendar.

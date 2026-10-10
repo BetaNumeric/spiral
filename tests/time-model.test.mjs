@@ -6,7 +6,7 @@ import { webcrypto } from 'node:crypto';
 
 const context = vm.createContext({ console, Date, Intl, WeakMap, Map, Set, crypto: webcrypto, alert() {},
   CONFIG: { SEGMENTS_PER_DAY: 24 }, SpiralCalendar: class {} });
-for (const file of ['config-utils', 'time-model', 'event-model', 'icalendar', 'core-methods', 'render-geometry', 'state-storage-sync', 'detail-view-state', 'event-editors', 'event-projection', 'event-time', 'event-editing', 'pickers-calendars', 'touch-time-orientation', 'render-circle', 'render-spiral']) {
+for (const file of ['config-utils', 'time-model', 'event-model', 'icalendar', 'core-methods', 'render-geometry', 'state-storage-sync', 'detail-view-state', 'event-editors', 'event-projection', 'event-time', 'event-index', 'event-editing', 'pickers-calendars', 'touch-time-orientation', 'render-circle', 'render-spiral']) {
   vm.runInContext(fs.readFileSync(new URL(`../js/${file}.js`, import.meta.url), 'utf8'), context);
 }
 context.formatIcsDateUTC = value => new Date(value).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');

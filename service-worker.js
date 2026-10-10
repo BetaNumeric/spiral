@@ -25,6 +25,7 @@ const ASSETS = [
   './js/core-methods.js',
   './js/render-geometry.js',
   './js/event-time.js',
+  './js/event-index.js',
   './js/event-editing.js',
   './js/event-editors.js',
   './js/detail-view-state.js',
