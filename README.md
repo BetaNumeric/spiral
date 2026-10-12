@@ -83,17 +83,21 @@ months have thicker arcs, and the weekday gradient resets on Mondays. Hovering
 over an hour shows its date and time. Opening details can switch the view to
 circles and zoom in; clicking outside or pressing **Escape** closes it.
 
-Keyboard shortcuts apply when you are outside a text field:
+Press **?** for the shortcut guide in Settings. Shortcuts apply when you are
+outside form controls; **Escape** also works while a control has focus.
 
 | Key | Action |
 | --- | --- |
-| Left / Right or A / D | Rotate; add Alt for finer movement or Alt+Shift for faster movement |
-| Up / Down or W / S | Step through days; add Alt for hours or Alt+Shift for weeks |
+| Left / Right | Previous / next event while details are open; otherwise rotate |
+| A / D | Rotate; add Alt for finer movement or Alt+Shift for faster movement |
+| Up / Down | Step through days; add Alt for hours or Alt+Shift for weeks. W also steps forward |
 | Space or Home | Return to now |
 | N, +, or = | Open Add Event |
-| F or / | Search events |
+| F | Search events |
 | Delete or Backspace | Delete the selected event |
-| Escape | Close the current view or panel |
+| S | Open Settings |
+| ? | Show the shortcut guide |
+| Escape | Close the top popup, panel, or view; cancel a text edit or clear a search first |
 
 [Watch navigation](https://github.com/user-attachments/assets/25569a37-a7fb-4b82-8bc3-bdac0c8dc9c4)
 

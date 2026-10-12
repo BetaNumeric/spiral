@@ -61,10 +61,11 @@ Object.assign(SpiralCalendar.prototype, {
         cleanup();
       };
 
+      this.registerKeyboardDismissal(temp, cleanup);
       temp.addEventListener('change', apply);
       temp.addEventListener('blur', () => setTimeout(cleanup, 150));
       temp.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') cleanup();
+        if (e.key === 'Escape') { e.preventDefault(); cleanup(); }
         if (e.key === 'Enter') apply();
       });
 
@@ -340,9 +341,10 @@ Object.assign(SpiralCalendar.prototype, {
         this.requestEventListRender();
       });
       
-      // Clear search on Escape - sync both inputs
+      // First Escape clears a search; another Escape can close the list.
       searchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
+        if (e.key === 'Escape' && searchInput.value) {
+          e.preventDefault();
           searchInput.value = '';
           this.eventListSearchQuery = '';
           updateClearButton();
@@ -390,6 +392,7 @@ Object.assign(SpiralCalendar.prototype, {
         bottomCalendarDropdownMenu.id = 'bottomCalendarDropdownMenu';
         bottomCalendarDropdownMenu.style.cssText = 'display: none; position: fixed; border-radius: 0.3em; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 200px; z-index: 10000; padding: 0.4em 0;';
         document.body.appendChild(bottomCalendarDropdownMenu);
+        this.registerKeyboardDismissal(bottomCalendarDropdownMenu, () => { bottomCalendarDropdownMenu.style.display = 'none'; });
       }
       const applyBottomCalendarDropdownTheme = () => {
         if (!bottomCalendarDropdownMenu) return;
@@ -1021,6 +1024,7 @@ Object.assign(SpiralCalendar.prototype, {
           }
 
           document.body.appendChild(dialog);
+          this.registerKeyboardDismissal(dialog, () => dialog.querySelector('#cancelCalendar').click());
 
           // Download ICS file - mark as added since user is downloading
           dialog.querySelector('#downloadICS').onclick = () => {
@@ -1859,6 +1863,7 @@ Object.assign(SpiralCalendar.prototype, {
       `;
 
       document.body.appendChild(dialog);
+      this.registerKeyboardDismissal(dialog, () => dialog.querySelector('#cancelExport').click());
 
       // Event listeners
       dialog.querySelector('#exportJSON').onclick = () => {
@@ -2200,6 +2205,9 @@ Object.assign(SpiralCalendar.prototype, {
     
     // Initial build of calendar menu
     this.buildCalendarMenu();
+    if (calendarDropdownMenu) {
+      this.registerKeyboardDismissal(calendarDropdownMenu, () => { calendarDropdownMenu.style.display = 'none'; });
+    }
     if (calendarDropdownBtn && calendarDropdownMenu) {
       calendarDropdownBtn.addEventListener('click', (e) => {
         e.stopPropagation();

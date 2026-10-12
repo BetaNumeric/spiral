@@ -1167,7 +1167,8 @@
 
         <!-- Settings Button (top right) -->
     <button id="settingsPanelBtn"
-      title="Settings"
+      title="Settings (S)"
+      aria-keyshortcuts="S"
       style="position: absolute; top: 1em; right: 1em; z-index: 30; background: #888888; color: white; border: none; border-radius: 50%; width: 44px; height: 44px; aspect-ratio: 1/1; display: grid; place-items: center; box-shadow: 0 2px 6px rgba(0,0,0,0.12); cursor: pointer; padding: 0; min-width: 0; min-height: 0; transition: all 0.2s ease;"
       onmouseover="this.style.background='#666666'; this.style.transform='scale(1.1)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.2)'"
       onmouseout="this.style.background='#888888'; this.style.transform='scale(1)'; this.style.boxShadow='0 2px 6px rgba(0,0,0,0.12)'">
@@ -1538,6 +1539,25 @@
         </div>
         
         <!-- Event Input section removed from here -->
+
+        <details id="keyboardShortcutsHelp" style="margin-top: 0.8em; font-size: 0.9em;">
+          <summary title="Keyboard shortcuts (?)" style="cursor: pointer; font-weight: bold;">Keyboard shortcuts</summary>
+          <table style="width: 100%; margin-top: 0.5em; border-spacing: 0 0.35em; text-align: left;">
+            <tbody>
+              <tr><th scope="row">Esc</th><td>Close the top popup, panel, or view</td></tr>
+              <tr><th scope="row">N / +</th><td>Add Event</td></tr>
+              <tr><th scope="row">F</th><td>Search events</td></tr>
+              <tr><th scope="row">S</th><td>Settings</td></tr>
+              <tr><th scope="row">Left / Right</th><td>Previous / next event while details are open; otherwise rotate</td></tr>
+              <tr><th scope="row">Space / Home</th><td>Return to now</td></tr>
+              <tr><th scope="row">Up / Down</th><td>Step through days (W also steps forward)</td></tr>
+              <tr><th scope="row">A / D</th><td>Rotate the calendar</td></tr>
+              <tr><th scope="row">Backspace</th><td>Delete the selected event</td></tr>
+              <tr><th scope="row">?</th><td>Show this guide</td></tr>
+            </tbody>
+          </table>
+          <p style="margin: 0.4em 0;">Alt + arrows moves more precisely; Alt + Shift + Up/Down steps through weeks. Shortcuts pause while using form controls. Esc cancels a text edit or clears a search before closing its view.</p>
+        </details>
 
         <!-- Study Session Controls (STUDY_MODE only) -->
         <div id="studySessionSection" style="margin-top: 0.8em; padding-top: 0.6em; border-top: 1px solid #ccc;">

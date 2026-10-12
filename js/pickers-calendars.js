@@ -62,6 +62,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (previousFocus?.isConnected) previousFocus.focus();
     };
     this._cleanupRepeatedTimeChooser = cleanup;
+    this.registerKeyboardDismissal(panel, cleanup);
     cancel.addEventListener('click', cleanup);
     apply.addEventListener('click', () => {
       if (this.applyEventDateTimeInputValue(event, type, value, { occurrence: Number(select.value) })) cleanup();
@@ -216,6 +217,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (panel.parentNode) panel.remove();
     };
     this._cleanupExtendedDateTimeEditor = cleanup;
+    this.registerKeyboardDismissal(panel, cleanup);
     const showInvalidState = () => {
       input.style.borderColor = '#e53935';
       hint.textContent = 'Invalid date/time. Use YYYY-MM-DDTHH:MM, for example 0000-01-01T00:00 or -0044-03-15T12:00.';
@@ -323,12 +325,14 @@ Object.assign(SpiralCalendar.prototype, {
       }
     };
     
+    this.registerKeyboardDismissal(input, handleCancel);
     input.addEventListener('change', handleChange);
     input.addEventListener('blur', () => {
       setTimeout(handleCancel, 100);
     });
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
+        e.preventDefault();
         handleCancel();
       }
       if (e.key === 'Enter') {
@@ -395,10 +399,11 @@ Object.assign(SpiralCalendar.prototype, {
     };
     const cancelAndCleanup = () => { if (temp.parentNode) temp.remove(); };
 
+    this.registerKeyboardDismissal(temp, cancelAndCleanup);
     temp.addEventListener('change', applyAndCleanup);
     temp.addEventListener('blur', () => setTimeout(cancelAndCleanup, 100));
     temp.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') cancelAndCleanup();
+      if (e.key === 'Escape') { e.preventDefault(); cancelAndCleanup(); }
       if (e.key === 'Enter') applyAndCleanup();
     });
 
@@ -455,12 +460,14 @@ Object.assign(SpiralCalendar.prototype, {
       }
     };
     
+    this.registerKeyboardDismissal(input, handleCancel);
     input.addEventListener('change', handleChange);
     input.addEventListener('blur', () => {
       setTimeout(handleCancel, 100);
     });
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
+        e.preventDefault();
         handleCancel();
       }
     });
@@ -699,6 +706,7 @@ Object.assign(SpiralCalendar.prototype, {
     };
     
     // Event handlers
+    this.registerKeyboardDismissal(dialog, cleanup);
     closeBtn.addEventListener('click', cleanup);
     cancelBtn.addEventListener('click', cleanup);
     createBtn.addEventListener('click', handleCreate);
@@ -947,6 +955,7 @@ Object.assign(SpiralCalendar.prototype, {
       }, 0);
     });
 
+    this.registerKeyboardDismissal(dialog, cleanup);
     closeBtn.addEventListener('click', cleanup);
     cancelBtn.addEventListener('click', cleanup);
     saveBtn.addEventListener('click', handleSave);
@@ -1073,9 +1082,10 @@ Object.assign(SpiralCalendar.prototype, {
       document.removeEventListener('click', cleanup);
     };
 
+    this.registerKeyboardDismissal(dropdown, cleanup);
     // Use setTimeout to avoid immediate closure
     setTimeout(() => {
-      document.addEventListener('click', cleanup);
+      if (dropdown.isConnected) document.addEventListener('click', cleanup);
     }, 10);
   },
 
@@ -1211,14 +1221,7 @@ Object.assign(SpiralCalendar.prototype, {
     document.body.appendChild(backdrop);
     document.body.appendChild(dropdown);
     
-    // Handle escape key to close
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        cleanup();
-        document.removeEventListener('keydown', handleKeyDown);
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
+    this.registerKeyboardDismissal(dropdown, cleanup);
     
     // Auto-remove after 30 seconds as failsafe
     setTimeout(() => {

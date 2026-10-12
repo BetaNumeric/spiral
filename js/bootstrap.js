@@ -339,7 +339,11 @@ if (locationSearch && locationSearchBtn && locationSearchSuggestions) {
   locationSearchBtn.addEventListener('click', () => void triggerSearch());
   locationSearch.addEventListener('input', () => { dismiss(); setStatus('Press Enter or Search to look up a place.'); });
   locationSearch.addEventListener('keydown', event => {
-    if (event.key === 'Escape') { dismiss(); setStatus(''); }
+    if (event.key === 'Escape') {
+      const hasResults = controller || locationSearchSuggestions.childElementCount > 0;
+      dismiss(); setStatus('');
+      if (hasResults) event.preventDefault();
+    }
     if (event.key === 'Enter') { event.preventDefault(); void triggerSearch(); }
     if (event.key === 'ArrowDown') {
       const first = locationSearchSuggestions.querySelector('button');

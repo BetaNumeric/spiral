@@ -444,167 +444,7 @@ Object.assign(SpiralCalendar.prototype, {
       });
     }
 
-    document.addEventListener('keydown', (e) => {
-      const target = e.target;
-      const tagName = target && target.tagName ? target.tagName.toLowerCase() : '';
-      const inInput = target && (target.isContentEditable || ['input', 'textarea', 'select', 'button'].includes(tagName)
-        || target.closest?.('[role="button"]'));
-
-      // 1. Delete Event Handling via Delete or Backspace key
-      if ((e.key === 'Delete' || e.key === 'Backspace') && !inInput) {
-        if (this.state.detailViewDay !== null && this.deleteButtonInfo && this.deleteButtonInfo.event) {
-          e.preventDefault();
-          const btn = this.deleteButtonInfo;
-          this.playFeedback(); // Add click sound
-          if (confirm(`Delete event "${btn.event.title}"? This action cannot be undone.`)) {
-            if (this.runWithStudyEventSource('detail_view', () => this.deleteCalendarEvent(btn.event))) {
-              this._detailViewHasChanges = true;
-              this.deleteButtonInfo = null;
-              this.addButtonInfo = null;
-              this.titleClickArea = null;
-              this.closeDetailView({ clearSelection: true });
-              
-              this.resetAutoActivatedSettings();
-              this.drawSpiral();
-            }
-          }
-          return;
-        }
-      }
-
-      // 2. Global Shortcuts (when not typing in an input)
-      if (!inInput) {
-        if (e.key === ' ' || e.key === 'Home') {
-          // Spacebar or Home: reset rotation to current time
-          e.preventDefault();
-          if (typeof this.resetToCurrentTimeFromTap === 'function') {
-            this.resetToCurrentTimeFromTap();
-          }
-          return;
-        }
-        
-        if (e.key === '+' || e.key === '=' || e.key.toLowerCase() === 'n') {
-          // '+', '=', or 'n': open New Event panel
-          e.preventDefault();
-          const addEventPanelBtn = document.getElementById('addEventPanelBtn');
-          if (addEventPanelBtn && addEventPanelBtn.offsetParent !== null) { // visible
-            addEventPanelBtn.click();
-          }
-          return;
-        }
-
-        if (e.key.toLowerCase() === 'f' || e.key === '/') {
-          // 'f' or '/': Open bottom slide and focus search
-          e.preventDefault();
-          const searchInput = document.getElementById('eventListSearchBottom') || document.getElementById('eventListSearch');
-          if (searchInput) {
-            // Expand the event list naturally up to 1/3 if bottom list
-            if (this.timeDisplayState && searchInput.id === 'eventListSearchBottom') {
-              const canvasHeight = this.canvas ? this.canvas.clientHeight : window.innerHeight;
-              const maxScreenHeight = canvasHeight * 0.6;
-              const minTopMargin = canvasHeight * 0.1;
-              const availableSpace = Math.max(0, canvasHeight - minTopMargin);
-              const maxAllowedHeight = Math.min(typeof this.getEventListMaxHeight === 'function' ? this.getEventListMaxHeight() : 300, maxScreenHeight, availableSpace);
-              this.timeDisplayState.pullUpOffset = maxAllowedHeight;
-              if (typeof this.showBottomEventList === 'function') {
-                this.showBottomEventList(maxAllowedHeight);
-              }
-              this.drawSpiral();
-            }
-            setTimeout(() => {
-              searchInput.focus();
-            }, 50); // delay focus to allow rendering
-          }
-          return;
-        }
-      }
-
-      if (e.key !== 'Escape' || e.defaultPrevented) {
-        return;
-      }
-
-      if (inInput) {
-        return;
-      }
-
-      let handled = false;
-      
-      // 1. Close specific dynamically generated dialogs first
-      const dynamicDialogs = ['newCalendarDialog', 'editCalendarDialog'];
-      for (const id of dynamicDialogs) {
-        const dialog = document.getElementById(id);
-        if (dialog && dialog.parentNode) {
-          const closeBtn = dialog.querySelector('button'); 
-          if(closeBtn) {
-            closeBtn.click();
-            handled = true;
-            break;
-          }
-        }
-      }
-      
-      if (handled) {
-        e.preventDefault();
-        return;
-      }
-
-      // 2. Settings Panel
-      const sp = document.getElementById('settingsPanel');
-      if (sp && sp.style.display !== 'none') {
-        const closeBtn = document.getElementById('closeSettingsPanelBtn');
-        if (closeBtn) {
-           closeBtn.click();
-           handled = true;
-        }
-      }
-
-      if (handled) {
-        e.preventDefault();
-        return;
-      }
-
-      // 3. Add Event Panel
-      const ep = document.getElementById('eventInputPanel');
-      if (ep && ep.style.display !== 'none') {
-        const closeBtn = document.getElementById('closeEventPanelBtn');
-        if (closeBtn) {
-           closeBtn.click();
-           handled = true;
-        }
-      }
-
-      if (handled) {
-        e.preventDefault();
-        return;
-      }
-      
-      // 4. Time Display / Bottom Event List
-      if (this.timeDisplayState && this.timeDisplayState.pullUpOffset > 0) {
-        this.timeDisplayState.pullUpOffset = 0;
-        if (typeof this.hideBottomEventList === 'function') {
-           this.hideBottomEventList();
-        }
-        this.drawSpiral();
-        handled = true;
-      }
-
-      if (handled) {
-        e.preventDefault();
-        return;
-      }
-
-      // 5. Detail View Day
-      if (this.state.detailViewDay !== null) {
-        this.closeDetailView({ clearSelection: true, clearDraft: true });
-        this.resetAutoActivatedSettings();
-        this.drawSpiral();
-        handled = true;
-      }
-
-      if (handled) {
-        e.preventDefault();
-      }
-    });
+    document.addEventListener('keydown', (e) => this.handleKeyboardShortcut(e));
 
     const gradientOverlayOpacitySlider = document.getElementById('gradientOverlayOpacitySlider');
     const gradientOverlayOpacityVal = document.getElementById('gradientOverlayOpacityVal');
@@ -1561,6 +1401,136 @@ Object.assign(SpiralCalendar.prototype, {
     this.setupKeyboardNavigation();
   },
 
+  registerKeyboardDismissal(element, dismiss) {
+    const previousFocus = document.activeElement;
+    element.setAttribute('data-keyboard-dismiss', '');
+    element._dismissKeyboardLayer = () => {
+      dismiss();
+      if (previousFocus?.isConnected &&
+          (document.activeElement === document.body || element.contains(document.activeElement))) {
+        previousFocus.focus({ preventScroll: true });
+      }
+    };
+  },
+
+  getKeyboardDismissibleLayer() {
+    const layers = Array.from(document.querySelectorAll('[data-keyboard-dismiss]'))
+      .filter(element => element.getClientRects().length > 0);
+    // Prefer the highest layer; the most recently appended one wins ties.
+    return layers.reverse().sort((a, b) =>
+      (Number.parseFloat(window.getComputedStyle(b).zIndex) || 0) -
+      (Number.parseFloat(window.getComputedStyle(a).zIndex) || 0))[0] || null;
+  },
+
+  dismissKeyboardLayer() {
+    const layer = this.getKeyboardDismissibleLayer();
+    if (layer) {
+      layer._dismissKeyboardLayer();
+      return true;
+    }
+    for (const [panelId, closeId] of [
+      ['ios-install-overlay', 'ios-close-btn'],
+      ['settingsPanel', 'closeSettingsPanelBtn'],
+      ['eventInputPanel', 'closeEventPanelBtn']
+    ]) {
+      const panel = document.getElementById(panelId);
+      const close = document.getElementById(closeId);
+      if (panel?.getClientRects().length && close) {
+        close.click();
+        return true;
+      }
+    }
+    if (this.timeDisplayState?.pullUpOffset > 0) {
+      this.timeDisplayState.pullUpOffset = 0;
+      this.hideBottomEventList();
+      this.drawSpiral();
+      return true;
+    }
+    if (this.state.detailViewDay !== null || this.isDetailViewOpeningTransitionActive?.()) {
+      this.completeModeTransitionImmediately?.();
+      this.closeDetailView({ clearSelection: true, clearDraft: true });
+      this.resetAutoActivatedSettings();
+      this.drawSpiral();
+      return true;
+    }
+    return false;
+  },
+
+  handleKeyboardShortcut(e) {
+    if (e.defaultPrevented || e.isComposing ||
+        (e.repeat && !['ArrowLeft', 'ArrowRight'].includes(e.key))) return;
+    if (e.key === 'Escape') {
+      if (this.dismissKeyboardLayer()) e.preventDefault();
+      return;
+    }
+    // '?' may require Option or AltGr on non-US keyboards.
+    const layoutKey = e.key === '?' &&
+      (!e.ctrlKey || e.getModifierState?.('AltGraph'));
+    if (e.metaKey || ((e.ctrlKey || e.altKey) && !layoutKey)) return;
+    const target = e.target;
+    if (target?.isContentEditable || target?.closest?.('input, textarea, select, button, summary, a[href], [role="button"]')) return;
+    if (this.getKeyboardDismissibleLayer()) return;
+
+    const key = e.key.toLowerCase();
+    if (key === 'delete' || key === 'backspace') {
+      const event = this.state.detailViewDay !== null && this.deleteButtonInfo?.event;
+      if (!event) return;
+      e.preventDefault();
+      this.playFeedback();
+      if (confirm(`Delete event "${event.title}"? This action cannot be undone.`) &&
+          this.runWithStudyEventSource('detail_view', () => this.deleteCalendarEvent(event))) {
+        this._detailViewHasChanges = true;
+        this.deleteButtonInfo = this.addButtonInfo = this.titleClickArea = null;
+        this.closeDetailView({ clearSelection: true });
+        this.resetAutoActivatedSettings();
+        this.drawSpiral();
+      }
+    } else if (key === ' ' || key === 'home') {
+      e.preventDefault();
+      this.resetToCurrentTimeFromTap();
+    } else if (key === '+' || key === '=' || key === 'n' || key === 's') {
+      const button = document.getElementById(key === 's' ? 'settingsPanelBtn' : 'addEventPanelBtn');
+      if (button?.getClientRects().length) { e.preventDefault(); button.click(); }
+    } else if ((key === 'arrowleft' || key === 'arrowright') &&
+               (this.state.detailViewDay !== null || this.isDetailViewOpeningTransitionActive?.())) {
+      e.preventDefault();
+      this.completeModeTransitionImmediately?.();
+      if (this.cycleDetailViewEvent(key === 'arrowleft' ? -1 : 1)) {
+        this.drawSpiral();
+      }
+    } else if (key === '?') {
+      const help = document.getElementById('keyboardShortcutsHelp');
+      if (!help) return;
+      e.preventDefault();
+      if (!document.getElementById('settingsPanel')?.getClientRects().length) {
+        document.getElementById('settingsPanelBtn')?.click();
+      }
+      help.open = true;
+      help.scrollIntoView({ block: 'nearest' });
+    } else if (key === 'f') {
+      this.completeModeTransitionImmediately?.();
+      let search = document.getElementById('eventListSearchBottom') || document.getElementById('eventListSearch');
+      if (!search && this.events?.length) {
+        window.renderEventList?.();
+        search = document.getElementById('eventListSearchBottom') || document.getElementById('eventListSearch');
+      }
+      if (!search) return;
+      const searchId = search.id;
+      e.preventDefault();
+      if (this.timeDisplayState && search.id === 'eventListSearchBottom') {
+        const height = this.canvas?.clientHeight || window.innerHeight;
+        const offset = Math.min(this.getEventListMaxHeight(), height * 0.6, height * 0.9);
+        this.timeDisplayState.pullUpOffset = offset;
+        this.showBottomEventList(offset);
+        this.drawSpiral();
+      }
+      setTimeout(() => {
+        const currentSearch = document.getElementById(searchId);
+        if (currentSearch?.getClientRects().length) currentSearch.focus();
+      }, 50);
+    }
+  },
+
   setupKeyboardNavigation() {
     this.keyboardState = {
       keys: {},
@@ -1573,7 +1543,9 @@ Object.assign(SpiralCalendar.prototype, {
 
     window.addEventListener('keydown', (e) => {
       // Native controls and handled keys keep their own keyboard behavior.
-      if (e.defaultPrevented || e.target.isContentEditable || e.target.closest?.('input, textarea, select, button, [role="button"]')) return;
+      if (e.defaultPrevented || e.isComposing || e.ctrlKey || e.metaKey ||
+          this.getKeyboardDismissibleLayer() || e.target.isContentEditable ||
+          e.target.closest?.('input, textarea, select, button, summary, a[href], [role="button"]')) return;
       
       // Track modifiers globally
       this.keyboardState.modifiers.shift = e.shiftKey;
@@ -1581,7 +1553,13 @@ Object.assign(SpiralCalendar.prototype, {
       this.keyboardState.modifiers.ctrl = e.ctrlKey;
       
       const key = e.key.toLowerCase();
-      if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+      // An event's arrows stay reserved even when it has no other event to select.
+      if (!e.altKey && ['arrowleft', 'arrowright'].includes(key) &&
+          (this.state.detailViewDay !== null || this.isDetailViewOpeningTransitionActive?.())) {
+        e.preventDefault();
+        return;
+      }
+      if (['w', 'a', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
         if (!this.keyboardState.keys[key]) {
           this.keyboardState.keys[key] = true;
           this.startKeyboardLoop();
@@ -1631,10 +1609,12 @@ Object.assign(SpiralCalendar.prototype, {
       const keys = this.keyboardState.keys;
       const mods = this.keyboardState.modifiers;
       
-      // Horizontal A/D and Left/Right -> Rotate
+      // A/D rotate; unmodified Left/Right belong to the open event view.
+      const arrowsNavigate = mods.alt ||
+        (this.state.detailViewDay === null && !this.isDetailViewOpeningTransitionActive?.());
       let x = 0;
-      if (keys['a'] || keys['arrowleft']) x -= 1;
-      if (keys['d'] || keys['arrowright']) x += 1;
+      if (keys['a'] || (arrowsNavigate && keys['arrowleft'])) x -= 1;
+      if (keys['d'] || (arrowsNavigate && keys['arrowright'])) x += 1;
       
       if (x !== 0) {
         let multiplier = 1.0;
@@ -1647,10 +1627,10 @@ Object.assign(SpiralCalendar.prototype, {
         rotationChanged = true;
       }
       
-      // Vertical W/S and Up/Down -> Scroll days/hours
+      // Up/Down -> Scroll days/hours; W also moves forward.
       let y = 0;
       if (keys['w'] || keys['arrowup']) y -= 1; // Scroll direction (Up)
-      if (keys['s'] || keys['arrowdown']) y += 1; // Scroll direction (Down)
+      if (keys['arrowdown']) y += 1; // Scroll direction (Down)
       
       if (y !== 0) {
         const direction = y > 0 ? -1 : 1; 
