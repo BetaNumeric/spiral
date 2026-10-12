@@ -102,15 +102,15 @@
     body.dark-mode .event-storage-notice { background: #322700; color: #fff1c7; }
     body.dark-mode .event-storage-actions button { background: #161300; }
 
-    /* Dark mode: invert canvas and adjust UI base colors */
+    /* Dark mode uses the same charcoal palette as the native Canvas painters. */
     :root {
-      --dark-bg-primary: #000;
-      --dark-bg-secondary: #111;
-      --dark-bg-panel: rgba(30,30,30,0.9);
-      --dark-bg-banner: rgba(20,20,20,0.92);
-      --dark-text-primary: #eee;
-      --dark-text-secondary: #fff;
-      --dark-border: #444;
+      --dark-bg-primary: #101820;
+      --dark-bg-secondary: #253440;
+      --dark-bg-panel: rgba(24,35,45,0.97);
+      --dark-bg-banner: rgba(20,31,41,0.97);
+      --dark-text-primary: #e3ebf2;
+      --dark-text-secondary: #a4b5c4;
+      --dark-border: #465c6d;
     }
     
     html.dark-mode, body.dark-mode {
@@ -118,6 +118,7 @@
     }
     body.dark-mode {
       color: var(--dark-text-primary);
+      color-scheme: dark;
     }
     body.dark-mode #a2hs-banner { background: var(--dark-bg-banner) !important; }
     body.dark-mode #settingsPanel { background: var(--dark-bg-panel) !important; color: var(--dark-text-primary) !important; }
@@ -125,46 +126,17 @@
     body.dark-mode input, body.dark-mode textarea { background: var(--dark-bg-secondary); color: var(--dark-text-primary); border-color: var(--dark-border) !important; }
     body.dark-mode input[type="datetime-local"] { background: var(--dark-bg-secondary) !important; color: var(--dark-text-primary) !important; border-color: var(--dark-border) !important; }
     
-    /* Attempt to style the native date picker popup */
-    body.dark-mode input[type="datetime-local"]::-webkit-calendar-picker-indicator {
-      background: var(--dark-text-primary);
-      border-radius: 2px;
-    }
-    
-    /* Try to style date picker components */
-    body.dark-mode input[type="datetime-local"]::-webkit-datetime-edit {
-      background: var(--dark-bg-secondary) !important;
-      color: var(--dark-text-primary) !important;
-    }
-    
-    body.dark-mode input[type="datetime-local"]::-webkit-datetime-edit-fields-wrapper {
-      background: var(--dark-bg-secondary) !important;
-      color: var(--dark-text-primary) !important;
-    }
-    
-    body.dark-mode input[type="datetime-local"]::-webkit-datetime-edit-text {
-      color: var(--dark-text-primary) !important;
-    }
-    
-    body.dark-mode input[type="datetime-local"]::-webkit-datetime-edit-month-field,
-    body.dark-mode input[type="datetime-local"]::-webkit-datetime-edit-day-field,
-    body.dark-mode input[type="datetime-local"]::-webkit-datetime-edit-year-field,
-    body.dark-mode input[type="datetime-local"]::-webkit-datetime-edit-hour-field,
-    body.dark-mode input[type="datetime-local"]::-webkit-datetime-edit-minute-field {
-      background: var(--dark-bg-secondary) !important;
-      color: var(--dark-text-primary) !important;
-    }
     body.dark-mode .dt-box { background: var(--dark-bg-secondary) !important; color: var(--dark-text-primary) !important; border-color: var(--dark-border) !important; }
     body.dark-mode #eventStartOccurrence,
     body.dark-mode #eventEndOccurrence { background: var(--dark-bg-secondary); color: var(--dark-text-primary); border-color: var(--dark-border); color-scheme: dark; }
-    body.dark-mode button { color: var(--dark-text-secondary) !important; }
+    body.dark-mode button { color: var(--dark-text-primary) !important; }
     
     /* Dark mode button styling */
-    body.dark-mode #addEventBtn { background: #4CAF50 !important; color: white !important; }
-    body.dark-mode #exportEventsBtn { background: #2196F3 !important; color: white !important; }
-    body.dark-mode #importEventsBtn { background: #4CAF50 !important; color: white !important; }
-    body.dark-mode #randGenerate { background: #666 !important; color: white !important; }
-    body.dark-mode #randDeleteRandom { background: #d32f2f !important; color: white !important; }
+    body.dark-mode #addEventBtn { background: #2b756a !important; color: white !important; }
+    body.dark-mode #exportEventsBtn { background: #315f80 !important; color: white !important; }
+    body.dark-mode #importEventsBtn { background: #2b756a !important; color: white !important; }
+    body.dark-mode #randGenerate { background: #3d5363 !important; color: white !important; }
+    body.dark-mode #randDeleteRandom { background: #b94851 !important; color: white !important; }
     body.dark-mode #a2hs-install-btn { background: #4CAF50 !important; color: white !important; }
     body.dark-mode #a2hs-close-btn { background: #777 !important; color: white !important; }
     body.dark-mode #ios-close-btn { background: #007aff !important; color: white !important; }
@@ -359,7 +331,7 @@
     }
     body.dark-mode #locationSearchSuggestions {
       border-color: var(--dark-border);
-      background: rgba(24, 24, 24, 0.98);
+      background: var(--dark-bg-secondary);
       box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
     }
     body.dark-mode #locationSearchSuggestions button {
@@ -536,8 +508,26 @@
     body.dark-mode ::-webkit-scrollbar-thumb { background: var(--dark-border); }
     body.dark-mode ::-webkit-scrollbar-thumb:hover { background: #666; }
     
-    /* Invert just the canvas to flip drawn colors without touching logic */
-    body.dark-mode #spiral { filter: invert(1) hue-rotate(180deg); }
+    /* Event hues are painted directly in either theme. */
+    body.dark-mode #spiral { filter: none; }
+
+    body.dark-mode div[data-keyboard-dismiss] {
+      background: var(--dark-bg-secondary) !important;
+      color: var(--dark-text-primary) !important;
+      border-color: var(--dark-border) !important;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3) !important;
+    }
+    body.dark-mode div[data-keyboard-dismiss] h3,
+    body.dark-mode div[data-keyboard-dismiss] h4,
+    body.dark-mode div[data-keyboard-dismiss] label { color: var(--dark-text-primary) !important; }
+    body.dark-mode div[data-keyboard-dismiss] button:not([aria-label="Close"]) {
+      background: #3d5363 !important;
+      border-color: var(--dark-border) !important;
+      color: var(--dark-text-primary) !important;
+    }
+    body.dark-mode #appVersionInfo,
+    body.dark-mode #settingsPanel div[style*="color: #666"],
+    body.dark-mode #eventInputPanel div[style*="color: #666"] { color: var(--dark-text-secondary) !important; }
     
     /* Disable text selection and long-press behavior on mobile */
     * {
@@ -1167,8 +1157,8 @@
 
         <!-- Settings Button (top right) -->
     <button id="settingsPanelBtn"
-      title="Settings (S)"
-      aria-keyshortcuts="S"
+      title="Settings (,)"
+      aria-keyshortcuts=","
       style="position: absolute; top: 1em; right: 1em; z-index: 30; background: #888888; color: white; border: none; border-radius: 50%; width: 44px; height: 44px; aspect-ratio: 1/1; display: grid; place-items: center; box-shadow: 0 2px 6px rgba(0,0,0,0.12); cursor: pointer; padding: 0; min-width: 0; min-height: 0; transition: all 0.2s ease;"
       onmouseover="this.style.background='#666666'; this.style.transform='scale(1.1)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.2)'"
       onmouseout="this.style.background='#888888'; this.style.transform='scale(1)'; this.style.boxShadow='0 2px 6px rgba(0,0,0,0.12)'">
@@ -1187,7 +1177,7 @@
       
       <div class="control-content">
         <div style="display: flex; justify-content: space-between; gap: 2em; flex-wrap: wrap; align-items: center;">
-          <label style="display: flex; align-items: center;"><input type="checkbox" id="darkModeToggle"> Dark mode</label>
+          <label title="Toggle dark mode (M)" style="display: flex; align-items: center;"><input type="checkbox" id="darkModeToggle" aria-keyshortcuts="M"> Dark mode</label>
           <label style="display: flex; align-items: center; cursor: pointer; margin-right: 2px;">
             <button id="audioFeedbackToggle" style="background: none; border: none; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; width: 25px; height: 25px;">
               <img id="audioFeedbackIcon" src="icons/speaker.png" alt="Audio/vibration" style="width: 25px; height: 25px;">
@@ -1547,16 +1537,16 @@
               <tr><th scope="row">Esc</th><td>Close the top popup, panel, or view</td></tr>
               <tr><th scope="row">N / +</th><td>Add Event</td></tr>
               <tr><th scope="row">F</th><td>Search events</td></tr>
-              <tr><th scope="row">S</th><td>Settings</td></tr>
-              <tr><th scope="row">Left / Right</th><td>Previous / next event while details are open; otherwise rotate</td></tr>
+              <tr><th scope="row">,</th><td>Settings</td></tr>
+              <tr><th scope="row">M</th><td>Toggle dark mode</td></tr>
+              <tr><th scope="row">Left / Right<br>A / D</th><td>Previous / next event while selected; otherwise rotate</td></tr>
               <tr><th scope="row">Space / Home</th><td>Return to now</td></tr>
-              <tr><th scope="row">Up / Down</th><td>Step through days (W also steps forward)</td></tr>
-              <tr><th scope="row">A / D</th><td>Rotate the calendar</td></tr>
+              <tr><th scope="row">Up / Down<br>W / S</th><td>Previous / next event while selected; otherwise step through days</td></tr>
               <tr><th scope="row">Backspace</th><td>Delete the selected event</td></tr>
               <tr><th scope="row">?</th><td>Show this guide</td></tr>
             </tbody>
           </table>
-          <p style="margin: 0.4em 0;">Alt + arrows moves more precisely; Alt + Shift + Up/Down steps through weeks. Shortcuts pause while using form controls. Esc cancels a text edit or clears a search before closing its view.</p>
+          <p style="margin: 0.4em 0;">Selected events follow the visible event list in chronological order. When details are closed, Alt + arrows moves more precisely; Alt + Shift + Up/Down steps through weeks. Shortcuts pause while using form controls. Esc cancels a text edit or clears a search before closing its view.</p>
         </details>
 
         <!-- Study Session Controls (STUDY_MODE only) -->

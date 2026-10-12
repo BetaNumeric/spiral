@@ -76,6 +76,7 @@ class SpiralCalendar {
         detailViewCloseButtonEnabled: true,
         detailViewCloseButtonAlignToSegment: true,
         nightOverlayOpacity: 0.05,
+        darkNightOverlayOpacity: 0.20,
         dayOverlayOpacity: 0.15,
         gradientOverlayOpacity: 0.15
       };
@@ -180,6 +181,7 @@ class SpiralCalendar {
         detailViewCloseButtonAlignToSegment: this.defaultSettings.detailViewCloseButtonAlignToSegment,
         // Overlay opacity values
         nightOverlayOpacity: this.defaultSettings.nightOverlayOpacity,
+        darkNightOverlayOpacity: this.defaultSettings.darkNightOverlayOpacity,
         dayOverlayOpacity: this.defaultSettings.dayOverlayOpacity,
         gradientOverlayOpacity: this.defaultSettings.gradientOverlayOpacity,
       };

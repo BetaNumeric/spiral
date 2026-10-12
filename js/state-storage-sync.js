@@ -460,6 +460,7 @@ Object.assign(SpiralCalendar.prototype, {
       'detailViewCloseButtonEnabled',
       'detailViewCloseButtonAlignToSegment',
       'nightOverlayOpacity',
+      'darkNightOverlayOpacity',
       'dayOverlayOpacity',
       'gradientOverlayOpacity'
     ];
@@ -499,6 +500,22 @@ Object.assign(SpiralCalendar.prototype, {
     return payload;
   },
 
+  getNightOverlayOpacity() {
+    return this.state.darkMode
+      ? (this.state.darkNightOverlayOpacity ?? this.defaultSettings?.darkNightOverlayOpacity ?? 0.20)
+      : this.state.nightOverlayOpacity;
+  },
+
+  syncNightOverlayOpacityControls() {
+    const slider = document.getElementById('nightOverlayOpacitySlider');
+    const value = document.getElementById('nightOverlayOpacityVal');
+    if (slider && value) {
+      const percent = Math.round(this.getNightOverlayOpacity() * 100);
+      slider.value = String(percent);
+      value.textContent = percent + '%';
+    }
+  },
+
   setDarkModeEnabled(enabled, options = {}) {
     const shouldPersist = options.persist !== false;
     const shouldRedraw = options.redraw !== false;
@@ -515,6 +532,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (darkModeToggle) {
         darkModeToggle.checked = this.state.darkMode;
       }
+      this.syncNightOverlayOpacityControls();
     }
 
     this.updateThemeColor();
@@ -1144,13 +1162,7 @@ Object.assign(SpiralCalendar.prototype, {
     }
 
     // Sync overlay opacity sliders and show/hide controls
-    const nightOverlayOpacitySlider = document.getElementById('nightOverlayOpacitySlider');
-    const nightOverlayOpacityVal = document.getElementById('nightOverlayOpacityVal');
-    if (nightOverlayOpacitySlider && nightOverlayOpacityVal) {
-      const opacityPercent = Math.round(this.state.nightOverlayOpacity * 100);
-      nightOverlayOpacitySlider.value = opacityPercent;
-      nightOverlayOpacityVal.textContent = opacityPercent + '%';
-    }
+    this.syncNightOverlayOpacityControls();
     const nightOverlayOpacityControls = document.getElementById('nightOverlayOpacityControls');
     if (nightOverlayOpacityControls) {
       nightOverlayOpacityControls.style.display = this.state.showNightOverlay ? 'block' : 'none';
@@ -2427,7 +2439,7 @@ Object.assign(SpiralCalendar.prototype, {
     this.ctx.save();
     this.ctx.lineWidth = 2;
     this.ctx.strokeStyle = eventColor;
-    this.ctx.fillStyle = '#ffffff';
+    this.ctx.fillStyle = getCanvasTheme(this.state.darkMode).surface;
     this.ctx.shadowColor = 'rgba(0,0,0,0.25)';
     this.ctx.shadowBlur = 2;
     this.ctx.shadowOffsetX = 0;
@@ -2656,7 +2668,7 @@ Object.assign(SpiralCalendar.prototype, {
       this.mouseState.lastMouseX &&
       this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: startBoxX - boxWidth / 2, y: dateTimeY - boxHeight / 2, width: boxWidth, height: boxHeight });
     this.drawClickableBox(startBoxX, dateTimeY, boxWidth, boxHeight, 
-                         this.getEventEndpointLabel(event, 'start'), fontSize, '#f0f0f0', isHoverStart);
+                         this.getEventEndpointLabel(event, 'start'), fontSize, getCanvasTheme(this.state.darkMode).field, isHoverStart);
     if (interactive) {
       this.canvasClickAreas.startDateBox = {
         x: startBoxX - boxWidth / 2,
@@ -2673,7 +2685,7 @@ Object.assign(SpiralCalendar.prototype, {
       this.mouseState.lastMouseX &&
       this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: endBoxX - boxWidth / 2, y: dateTimeY - boxHeight / 2, width: boxWidth, height: boxHeight });
     this.drawClickableBox(endBoxX, dateTimeY, boxWidth, boxHeight, 
-                         this.getEventEndpointLabel(event, 'end'), fontSize, '#f0f0f0', isHoverEnd);
+                         this.getEventEndpointLabel(event, 'end'), fontSize, getCanvasTheme(this.state.darkMode).field, isHoverEnd);
     if (interactive) {
       this.canvasClickAreas.endDateBox = {
         x: endBoxX - boxWidth / 2,
@@ -2686,7 +2698,7 @@ Object.assign(SpiralCalendar.prototype, {
     
     // Small connector between start and end boxes
     const dashLength = boxSpacing * 1.0; // Scale with box spacing
-    this.ctx.strokeStyle = '#ccc'; // Same color as box borders
+    this.ctx.strokeStyle = getCanvasTheme(this.state.darkMode).fieldBorder;
     this.ctx.lineWidth = 1; // Same line width as box borders
     this.ctx.beginPath();
     this.ctx.moveTo(centerX - dashLength / 2, dateTimeY);
@@ -2698,7 +2710,7 @@ Object.assign(SpiralCalendar.prototype, {
     const durationY = (dateTimeY + calendarBoxY) / 2;
     this.ctx.save();
     this.ctx.font = `${baseFontSize * 0.65}px Arial`;
-    this.ctx.fillStyle = '#666'; // The detail circle has a white background in either theme.
+    this.ctx.fillStyle = getCanvasTheme(this.state.darkMode).muted;
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
     this.ctx.fillText(`Duration: ${this.getEventDurationLabel(event)}`, centerX, durationY, totalWidth);
@@ -2712,7 +2724,7 @@ Object.assign(SpiralCalendar.prototype, {
       this.mouseState.lastMouseX &&
       this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: centerX - calendarBoxWidth / 2, y: calendarBoxY - calendarBoxHeight / 2, width: calendarBoxWidth, height: calendarBoxHeight });
     this.drawClickableBox(centerX, calendarBoxY, calendarBoxWidth, calendarBoxHeight, 
-                         `${calendarText}`, calendarFontSize, '#ffffff', isHoverCalendar);
+                         `${calendarText}`, calendarFontSize, getCanvasTheme(this.state.darkMode).surface, isHoverCalendar);
     if (interactive) {
       this.canvasClickAreas.calendarBox = {
         x: centerX - calendarBoxWidth / 2,
@@ -2732,13 +2744,14 @@ Object.assign(SpiralCalendar.prototype, {
     
     this.ctx.fillStyle = backgroundColor;
     this.ctx.fillRect(x, y, width, height);
-    this.ctx.strokeStyle = isHovered ? '#888' : '#ccc';
+    const theme = getCanvasTheme(this.state.darkMode);
+    this.ctx.strokeStyle = isHovered ? theme.fieldHoverBorder : theme.fieldBorder;
     this.ctx.lineWidth = isHovered ? 2 : 1;
     this.ctx.strokeRect(x, y, width, height);
     
             // Use white text on dark backgrounds, black on light
       const isLight = backgroundColor === '#f0f0f0' || backgroundColor === '#ffffff';
-      this.ctx.fillStyle = isLight ? '#000' : '#fff';
+      this.ctx.fillStyle = this.state.darkMode ? theme.text : (isLight ? '#000' : '#fff');
     const lines = String(text).split('\n');
     const textSize = lines.length > 1 ? Math.min(fontSize * 0.8, height / (lines.length * 1.3)) : fontSize;
     this.ctx.font = getFontString(textSize);

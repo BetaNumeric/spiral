@@ -6,7 +6,7 @@ import { webcrypto } from 'node:crypto';
 
 const context = vm.createContext({ console, Date, Intl, WeakMap, Map, Set, crypto: webcrypto,
   SpiralCalendar: class {} });
-for (const file of ['config-utils', 'time-model', 'event-model', 'event-projection', 'core-methods', 'state-storage-sync', 'detail-view-state', 'event-editors', 'event-time', 'event-index', 'event-editing', 'render-geometry']) {
+for (const file of ['config-utils', 'time-model', 'event-model', 'event-projection', 'core-methods', 'state-storage-sync', 'detail-view-state', 'event-editors', 'event-time', 'event-index', 'event-editing', 'render-geometry', 'render-circle']) {
   vm.runInContext(fs.readFileSync(new URL(`../js/${file}.js`, import.meta.url), 'utf8'), context);
 }
 const Time = context.SpiralTime;
@@ -42,6 +42,7 @@ function collect(app, hour, circle, clip = [0, 1]) {
     radiusFunction: theta => 100 + (theta - origin) / turn * 100 };
   if (circle) Object.assign(geometry, { innerRadius: 100, outerRadius: 200 });
   app.eventSegments = [];
+  app._clockLabelSlices = null;
   app.collectEventSegments(geometry, app.createVisibleEventBoundaryLookup());
   return geometry;
 }
@@ -83,6 +84,59 @@ test('both views retain identical overlap coverage and select the event actually
     }
     assert.deepEqual(layouts[0], layouts[1]);
   }
+});
+
+test('dark labels follow the painted overlap lane in both views and stacking modes', () => {
+  for (const circle of [false, true]) for (const stack of [false, true]) {
+    const app = calendar();
+    app.state.darkMode = true;
+    app.state.overlayStackMode = stack;
+    app.getDisplayColorForEvent = event => event.color;
+    app.add('Dark', '08:00', '10:00').color = '#263448';
+    app.add('Pale', '09:15', '09:45').color = '#9fe5df';
+    const geometry = collect(app, 9, circle);
+    for (const slice of app.eventSegments) {
+      const angle = (slice.timeStartTheta + slice.timeEndTheta) / 2;
+      const start = circle ? slice.edgeInnerRadius : geometry.radiusFunction(angle) + slice.edgeSliceStart * 100;
+      const end = circle ? slice.edgeOuterRadius : geometry.radiusFunction(angle) + slice.edgeSliceEnd * 100;
+      const radius = (start + end) / 2;
+      const point = { day: geometry.day, segment: geometry.segment,
+        angle: circle ? angle + 3 * turn : angle, radius };
+      const hit = app.findEventEntryAtSegmentPoint(point);
+      const event = app.getEventsForClockSegment(point)[hit].event;
+      const label = { ...point, centerTheta: point.angle, centerRadius: radius };
+      assert.equal(app.getClockLabelColor(label), event.title === 'Pale' ? '#000000' : '#ffffff');
+      app.state.darkMode = false;
+      assert.equal(app.getClockLabelColor(label), '#000000');
+      app.state.darkMode = true;
+    }
+    const outside = { day: geometry.day, segment: geometry.segment,
+      centerTheta: geometry.rawStartAngle + step / 2, centerRadius: 300 };
+    assert.equal(app.getClockLabelColor(outside), vm.runInContext('getCanvasTheme(true).label', context));
+  }
+});
+
+test('drafts blend into the current clock surface without changing event records', () => {
+  const app = calendar();
+  // Use the real color pipeline rather than the geometry fixture's fixed color.
+  delete app.getDisplayColorForEvent;
+  const event = app.add('Color', '09:00', '10:00');
+  app.setEventCustomColor(event, '#9fe5df');
+  const draft = { ...event, isDraft: true };
+  const originalEvent = JSON.stringify(event), originalDraft = JSON.stringify(draft);
+  const version = app._eventsVersion;
+  const draftColors = [];
+  for (const darkMode of [false, true, false]) {
+    app.state.darkMode = darkMode;
+    assert.equal(app.getDisplayColorForEvent(event), '#9fe5df');
+    draftColors.push(app.getDisplayColorForEvent(draft));
+    assert.equal(JSON.stringify(event), originalEvent);
+    assert.equal(JSON.stringify(draft), originalDraft);
+    assert.equal(app._eventsVersion, version);
+  }
+  assert.equal(draftColors[0], '#cff2ef');
+  assert.equal(draftColors[0], draftColors[2]);
+  assert.notEqual(draftColors[0], draftColors[1]);
 });
 
 test('stacked overlaps restore full coverage before and after a shorter event', () => {

@@ -379,33 +379,8 @@ Object.assign(SpiralCalendar.prototype, {
 
     if (event && event.isDraft) {
       if (typeof finalColor === 'string' && finalColor.startsWith('#')) {
-        let r_fg = 0, g_fg = 0, b_fg = 0;
-        if (finalColor.length === 7) {
-          r_fg = parseInt(finalColor.substring(1, 3), 16);
-          g_fg = parseInt(finalColor.substring(3, 5), 16);
-          b_fg = parseInt(finalColor.substring(5, 7), 16);
-        } else if (finalColor.length === 4) {
-          r_fg = parseInt(finalColor[1] + finalColor[1], 16);
-          g_fg = parseInt(finalColor[2] + finalColor[2], 16);
-          b_fg = parseInt(finalColor[3] + finalColor[3], 16);
-        }
-        
-        // Blend with white (the true canvas background, since dark mode uses CSS invert filter)
-        // to simulate 50% opacity without actually being transparent.
-        // This prevents overlapping segments from showing a darker seam.
-        const r_bg = 255;
-        const g_bg = 255;
-        const b_bg = 255;
-        
-        const alpha = 0.5; // 50% transparency simulation
-        const r_out = Math.round(r_fg * alpha + r_bg * (1 - alpha));
-        const g_out = Math.round(g_fg * alpha + g_bg * (1 - alpha));
-        const b_out = Math.round(b_fg * alpha + b_bg * (1 - alpha));
-        
-        return '#' + 
-          r_out.toString(16).padStart(2, '0') + 
-          g_out.toString(16).padStart(2, '0') + 
-          b_out.toString(16).padStart(2, '0');
+        // Opaque blending prevents seams between neighboring draft pieces.
+        return blendCanvasColor(finalColor, getCanvasTheme(this.state.darkMode).clock);
       }
     }
     return finalColor;
@@ -636,7 +611,7 @@ Object.assign(SpiralCalendar.prototype, {
     this.ctx.fillStyle = eventSegment.color;
     this.ctx.fill();
     if (this.state.showEventBoundaryStrokes && this.state.showAllEventBoundaryStrokes && !this.state.showArcLines) {
-      this.ctx.strokeStyle = '#000';
+      this.ctx.strokeStyle = getCanvasTheme(this.state.darkMode).eventSeparator;
       this.ctx.lineWidth = CONFIG.STROKE_WIDTH;
       this.ctx.beginPath();
       this.ctx.arc(0, 0, eventSegment.innerRadius, startAngle, endAngle, true);
@@ -668,7 +643,7 @@ Object.assign(SpiralCalendar.prototype, {
       );
     }
     if (this.state.showEventBoundaryStrokes && eventSegment.dividerStroke) {
-      this.ctx.strokeStyle = '#000';
+      this.ctx.strokeStyle = getCanvasTheme(this.state.darkMode).eventSeparator;
       this.ctx.lineWidth = CONFIG.STROKE_WIDTH;
       this.ctx.lineCap = 'square';
       this.ctx.beginPath();
@@ -703,16 +678,16 @@ Object.assign(SpiralCalendar.prototype, {
         // Set stroke width based on line type
         if (line.isNoonLine) {
           this.ctx.lineWidth = CONFIG.NOON_BORDER_WIDTH;
-          this.ctx.strokeStyle = CONFIG.MIDNIGHT_SEGMENT_COLOR; // Use same color as midnight
+          this.ctx.strokeStyle = getCanvasTheme(this.state.darkMode).midnight; // Use same color as midnight
         } else if (line.isSixAMLine) {
           this.ctx.lineWidth = CONFIG.SIX_AM_PM_BORDER_WIDTH;
-          this.ctx.strokeStyle = CONFIG.MIDNIGHT_SEGMENT_COLOR; // Use same color as midnight
+          this.ctx.strokeStyle = getCanvasTheme(this.state.darkMode).midnight; // Use same color as midnight
         } else if (line.isSixPMLine) {
           this.ctx.lineWidth = CONFIG.SIX_AM_PM_BORDER_WIDTH;
-          this.ctx.strokeStyle = CONFIG.MIDNIGHT_SEGMENT_COLOR; // Use same color as midnight
+          this.ctx.strokeStyle = getCanvasTheme(this.state.darkMode).midnight; // Use same color as midnight
         } else {
           this.ctx.lineWidth = CONFIG.MIDNIGHT_BORDER_WIDTH;
-          this.ctx.strokeStyle = CONFIG.MIDNIGHT_SEGMENT_COLOR; // Black for midnight
+          this.ctx.strokeStyle = getCanvasTheme(this.state.darkMode).midnight; // Black for midnight
         }
         
         if (line.isCircleMode) {
@@ -779,7 +754,7 @@ Object.assign(SpiralCalendar.prototype, {
         return;
       }
       this.ctx.save();
-      this.ctx.strokeStyle = CONFIG.MONTH_SEGMENT_COLOR;
+      this.ctx.strokeStyle = getCanvasTheme(this.state.darkMode).month;
       
       // Separate spiral and circle mode month lines
       const spiralLines = [];
@@ -874,7 +849,7 @@ Object.assign(SpiralCalendar.prototype, {
       this.ctx.font = getFontString(fontSize);
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
-      this.ctx.fillStyle = CONFIG.LABEL_COLOR;
+      this.ctx.fillStyle = getCanvasTheme(this.state.darkMode).label;
       
       const hoursToShow = [];
       for (let hour = 0; hour < CONFIG.SEGMENTS_PER_DAY; hour++) {
@@ -1029,8 +1004,34 @@ Object.assign(SpiralCalendar.prototype, {
       const y = labelRadius * Math.sin(angle);
 
       this.hourNumbersInSegments.push({
-        x, y, centerTheta, displayNumber, fontSize
+        x, y, day, segment, centerTheta, displayNumber, fontSize
       });
+    },
+
+    getClockLabelColor(item) {
+      const theme = getCanvasTheme(this.state.darkMode);
+      if (!this.state.darkMode) return theme.label;
+      const radius = item.centerRadius ?? Math.hypot(item.x, item.y);
+      // Group once per frame so inside labels only inspect events in their hour.
+      if (!this._clockLabelSlices) {
+        this._clockLabelSlices = new Map();
+        for (const slice of this.eventSegments) {
+          const key = slice.day * CONFIG.SEGMENTS_PER_DAY + slice.segment;
+          if (!this._clockLabelSlices.has(key)) this._clockLabelSlices.set(key, []);
+          this._clockLabelSlices.get(key).push(slice);
+        }
+      }
+      const slices = this._clockLabelSlices.get(item.day * CONFIG.SEGMENTS_PER_DAY + item.segment) || [];
+      for (let index = slices.length - 1; index >= 0; index--) {
+        const slice = slices[index];
+        const angle = slice.isCircleMode
+          ? SpiralGeometry.unwrapAngle(item.centerTheta, slice.rawStartAngle ?? slice.timeStartTheta)
+          : item.centerTheta;
+        if (angle < slice.timeStartTheta || angle > slice.timeEndTheta) continue;
+        const { inner, outer } = SpiralGeometry.eventBoundsAtAngle(slice, angle);
+        if (radius >= inner && radius <= outer) return getContrastingCanvasText(slice.color);
+      }
+      return theme.label;
     },
 
     drawHourNumbersInSegments() {
@@ -1054,7 +1055,7 @@ Object.assign(SpiralCalendar.prototype, {
           this.ctx.rotate(Math.PI/2);
         }
 
-        this.ctx.fillStyle = CONFIG.LABEL_COLOR;
+        this.ctx.fillStyle = this.getClockLabelColor(item);
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         this.ctx.font = getFontString(item.fontSize);
@@ -1107,7 +1108,7 @@ Object.assign(SpiralCalendar.prototype, {
       // Set text properties (same as regular hour numbers)
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
-      this.ctx.fillStyle = CONFIG.LABEL_COLOR;
+      this.ctx.fillStyle = this.getClockLabelColor({ day, segment, centerTheta, centerRadius: labelRadius });
       this.ctx.font = getFontString(fontSize);
       
       this.ctx.fillText(displayNumber.toString(), 0, 0);
@@ -1121,7 +1122,7 @@ Object.assign(SpiralCalendar.prototype, {
       this.ctx.save();
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
-      this.ctx.fillStyle = CONFIG.LABEL_COLOR;
+      this.ctx.fillStyle = getCanvasTheme(this.state.darkMode).label;
       
     // 7.5 degrees in radians (used if upright is off)
     const tiltRadians = 7.5 * Math.PI / 180;
@@ -1402,6 +1403,16 @@ Object.assign(SpiralCalendar.prototype, {
         } else {
           this.ctx.rotate(tangentAngle);
         }
+        // A curved date can span several hours with different event backgrounds.
+        if (this.state.darkMode) {
+          const turn = 2 * Math.PI;
+          const segment = ((Math.floor(thetaMid / (turn / CONFIG.SEGMENTS_PER_DAY)) % CONFIG.SEGMENTS_PER_DAY)
+            + CONFIG.SEGMENTS_PER_DAY) % CONFIG.SEGMENTS_PER_DAY;
+          this.ctx.fillStyle = this.getClockLabelColor({
+            day: item.isCircleMode ? item.day : Math.floor(thetaMid / turn), segment,
+            centerTheta: thetaMid, centerRadius: rMid
+          });
+        }
         this.ctx.fillText(ch, 0, 0);
         this.ctx.restore();
         const dThetaHalf2 = stepByArc(thetaMid, halfAdvance);
@@ -1411,6 +1422,7 @@ Object.assign(SpiralCalendar.prototype, {
     };
       
       for (const dayNum of this.dayNumbers) {
+      this.ctx.fillStyle = this.getClockLabelColor(dayNum);
       // If only the numeric day is shown, render centered like before (non-curved)
       if (onlyDayNumber || dayNum.onlyNumeric) {
         const drawCentered = () => {
@@ -1517,11 +1529,11 @@ Object.assign(SpiralCalendar.prototype, {
       const tooltipY = y - tooltipHeight - 5;
       
       // Draw tooltip background
-      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      this.ctx.fillStyle = getCanvasTheme(this.state.darkMode).tooltip;
       this.ctx.fillRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight);
        
       // Draw tooltip text with clipping
-      this.ctx.fillStyle = '#ffffff';
+      this.ctx.fillStyle = getCanvasTheme(this.state.darkMode).tooltipText;
       const textAreaWidth = tooltipWidth - padding * 2;
       
       lines.forEach((line, index) => {
@@ -1694,7 +1706,7 @@ Object.assign(SpiralCalendar.prototype, {
         else if (dayOfWeek === 6) brightness = 50;
         else brightness = 255 - (dayOfWeek - 1) * 35;
         
-        const dayOverlayColor = `rgba(${brightness}, ${brightness}, ${brightness}, ${this.state.dayOverlayOpacity})`;
+        const dayOverlayColor = getCanvasWeekdayOverlay(brightness, this.state.dayOverlayOpacity, this.state.darkMode);
         
         const data = { sunTimes, dayOverlayColor, segmentDateBase: segmentDate };
         dailyDataCache.set(dayOffset, data);
@@ -1832,6 +1844,7 @@ Object.assign(SpiralCalendar.prototype, {
             
             this.dayNumbers.push({
               day: day,
+              segment,
               dayNumber: dayNumber,
               segmentDateMs: segmentDateMs,
               x: centerRadius * Math.cos(-centerAngle + CONFIG.INITIAL_ROTATION_OFFSET),
@@ -1894,7 +1907,7 @@ Object.assign(SpiralCalendar.prototype, {
           const circleRadiusFunction = (theta) => (theta >= (day + 1) * 2 * Math.PI ? outerRadius : innerRadius);
           const darkness = this.getSteppedGradientOverlayOpacity(day, segment, circleRadiusFunction, maxRadius, 6);
           
-          const gradientOverlayColor = `rgba(0, 0, 0, ${darkness})`;
+          const gradientOverlayColor = `rgba(${getCanvasTheme(this.state.darkMode).shadeRgb}, ${darkness})`;
           
           // Store gradient overlay data for drawing after events (circle mode)
           this.gradientOverlays.push({
@@ -1935,7 +1948,8 @@ Object.assign(SpiralCalendar.prototype, {
       const startAngle = startTheta + CONFIG.INITIAL_ROTATION_OFFSET;
       const endAngle = endTheta + CONFIG.INITIAL_ROTATION_OFFSET;
       this.traceCircleBandPath(innerRadius, outerRadius, startAngle, endAngle);
-      this.ctx.fillStyle = color;
+      this.ctx.fillStyle = !isEventSubSegment && color === CONFIG.BLANK_COLOR
+        ? getCanvasTheme(this.state.darkMode).clock : color;
       this.ctx.fill();
     
     // Draw straight edge lines (radial lines)
@@ -1948,7 +1962,8 @@ Object.assign(SpiralCalendar.prototype, {
       // Radial line from inner to outer radius at end angle
       this.ctx.moveTo(innerRadius * Math.cos(endAngle), innerRadius * Math.sin(endAngle));
       this.ctx.lineTo(outerRadius * Math.cos(endAngle), outerRadius * Math.sin(endAngle));
-      this.ctx.strokeStyle = (isEventSubSegment && eventStrokeColor) ? eventStrokeColor : (isEventSubSegment ? color : CONFIG.STROKE_COLOR);
+      this.ctx.strokeStyle = (isEventSubSegment && eventStrokeColor) ? eventStrokeColor :
+        (isEventSubSegment ? color : getCanvasTheme(this.state.darkMode).stroke);
       
       this.ctx.lineWidth = (isEventSubSegment && eventStrokeWidth !== null && eventStrokeWidth !== undefined)
         ? eventStrokeWidth

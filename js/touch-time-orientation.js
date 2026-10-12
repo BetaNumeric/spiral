@@ -342,28 +342,27 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   getTouchJoystickOverlayPalette(circularActive, axialActive) {
-    const isDarkCanvas = !!(document.body && document.body.classList.contains('dark-mode'));
+    const isDarkCanvas = !!this.state.darkMode;
     const alpha = (lightModeAlpha, darkModeAlpha = lightModeAlpha) =>
       isDarkCanvas ? darkModeAlpha : lightModeAlpha;
 
-    // The spiral canvas is CSS-inverted in dark mode, so these stay in
-    // pre-inversion dark colors to display as light overlays on screen.
+    const rgb = isDarkCanvas ? '132,181,204' : '28,36,48';
     return {
       centerDotRadius: 3,
       angularAreaFill: circularActive
-        ? `rgba(28,36,48,${alpha('0.04', '0.08')})`
-        : `rgba(28,36,48,${alpha('0.02', '0.04')})`,
+        ? `rgba(${rgb},${alpha('0.04', '0.08')})`
+        : `rgba(${rgb},${alpha('0.02', '0.04')})`,
       guideStroke: circularActive
-        ? `rgba(28,36,48,${alpha('0.14', '0.28')})`
-        : `rgba(19,29,42,${alpha('0.02', '0.04')})`,
+        ? `rgba(${rgb},${alpha('0.14', '0.28')})`
+        : `rgba(${isDarkCanvas ? rgb : '19,29,42'},${alpha('0.02', '0.04')})`,
       centerDotColor: axialActive
-        ? `rgba(28,36,48,${alpha('0.14', '0.24')})`
-        : `rgba(28,36,48,${alpha('0.1', '0.18')})`,
+        ? `rgba(${rgb},${alpha('0.14', '0.24')})`
+        : `rgba(${rgb},${alpha('0.1', '0.18')})`,
       knobFill: circularActive
-        ? `rgba(28,36,48,${alpha('0.88', '0.94')})`
-        : `rgba(28,36,48,${alpha('0.8', '0.86')})`,
-      wedgeFill: `rgba(28,36,48,${alpha('0.06', '0.12')})`,
-      wedgeActiveFill: `rgba(28,36,48,${alpha('0.15', '0.25')})`
+        ? `rgba(${rgb},${alpha('0.88', '0.94')})`
+        : `rgba(${rgb},${alpha('0.8', '0.86')})`,
+      wedgeFill: `rgba(${rgb},${alpha('0.06', '0.12')})`,
+      wedgeActiveFill: `rgba(${rgb},${alpha('0.15', '0.25')})`
     };
   },
 
@@ -1992,12 +1991,13 @@ drawTimeDisplay(canvasWidth, canvasHeight) {
   this.ctx.save();
   
   // Background color based on state
-  let backgroundColor = 'rgba(255, 255, 255, 0.9)'; // Default normal background
+  const theme = getCanvasTheme(this.state.darkMode);
+  let backgroundColor = theme.footer;
   
   if (isClicking) {
-    backgroundColor = 'rgba(240, 240, 240, 0.95)'; // Slightly darker when clicking
+    backgroundColor = theme.footerPressed;
   } else if (isHovering) {
-    backgroundColor = 'rgba(248, 248, 248, 0.95)'; // Slightly lighter when hovering
+    backgroundColor = theme.footerHover;
   }
   
   
@@ -2030,7 +2030,7 @@ drawTimeDisplay(canvasWidth, canvasHeight) {
     const topPadCollapsed = (minH / 2);
     const handleTopOffset = topPadCollapsed + (topPadExpanded - topPadCollapsed) * progress;
     const handleY = timeDisplayY + handleTopOffset;
-    this.ctx.fillStyle = '#888';
+    this.ctx.fillStyle = theme.grabber;
     this.ctx.globalAlpha = 0.85;
     this.ctx.fillRect(handleX, handleY, handleWidth, handleHeight);
     this.ctx.globalAlpha = 1.0;
@@ -2065,7 +2065,7 @@ drawTimeDisplay(canvasWidth, canvasHeight) {
     this.ctx.strokeStyle = '#bbb'; // Slightly darker border when hovering time display
     this.ctx.lineWidth = 1;
   } else {
-    this.ctx.strokeStyle = '#ccc'; // Normal border
+    this.ctx.strokeStyle = theme.fieldBorder; // Normal border
     this.ctx.lineWidth = 1;
   }
 
@@ -2088,7 +2088,7 @@ drawTimeDisplay(canvasWidth, canvasHeight) {
   }
 
   // just show the default border
-  this.ctx.strokeStyle = '#ccc';
+  this.ctx.strokeStyle = theme.fieldBorder;
   this.ctx.lineWidth = 1;
 
 
@@ -2118,7 +2118,7 @@ drawTimeDisplay(canvasWidth, canvasHeight) {
   // If collapsed, draw only a small grab-handle indicator and skip text
   if (timeDisplayCollapsed) {
     // Small chevron to indicate expandable bar
-    this.ctx.fillStyle = '#888';
+    this.ctx.fillStyle = theme.grabber;
     const cx = canvasWidth / 2;
     const cy = timeDisplayY + timeDisplayHeight / 2;
     const w = 16, h = 3;
@@ -2128,7 +2128,7 @@ drawTimeDisplay(canvasWidth, canvasHeight) {
   }
   
   // Draw text
-  this.ctx.fillStyle = '#333';
+  this.ctx.fillStyle = theme.footerText;
   this.ctx.textAlign = 'center';
   // Use middle baseline so time+date pair can be centered perfectly within the bar
   this.ctx.textBaseline = 'middle';
@@ -2379,7 +2379,7 @@ clampRotationToEventWindow() {
     // Reset context state to ensure consistent rendering
     this.ctx.globalAlpha = 1.0;
     this.ctx.globalCompositeOperation = 'source-over';
-    const nightOverlayColor = `rgba(0, 0, 0, ${this.state.nightOverlayOpacity})`;
+    const nightOverlayColor = `rgba(${getCanvasTheme(this.state.darkMode).shadeRgb}, ${this.getNightOverlayOpacity()})`;
 
     this.drawMergedCircleOverlays(
       this.nightOverlays,
@@ -2483,7 +2483,7 @@ clampRotationToEventWindow() {
   drawArcLines() {
     if (!this.state.showArcLines) return;
     
-    this.ctx.strokeStyle = CONFIG.STROKE_COLOR;
+    this.ctx.strokeStyle = getCanvasTheme(this.state.darkMode).stroke;
     this.ctx.lineWidth = CONFIG.STROKE_WIDTH;
     
     for (const arcLine of this.arcLines) {

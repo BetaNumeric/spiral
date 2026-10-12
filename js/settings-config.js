@@ -87,6 +87,7 @@ const APP_SETTINGS_DEFAULTS = {
 
   // Overlay opacity values (0.0 - 1.0)
   nightOverlayOpacity: 0.05,
+  darkNightOverlayOpacity: 0.20,
   dayOverlayOpacity: 0.15,
   gradientOverlayOpacity: 0.15
 };

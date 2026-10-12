@@ -59,7 +59,7 @@
 
     drawRepeatedHourSegments() {
       this.ctx.save();
-      this.ctx.strokeStyle = '#666';
+      this.ctx.strokeStyle = getCanvasTheme(this.state.darkMode).divider;
       this.ctx.lineWidth = 1;
       for (const entry of this.repeatedHourSegments) {
         if (!this.state.showSegmentEdges && this.getAllEventsForSegment(entry.day, entry.segment).length === 0) continue;

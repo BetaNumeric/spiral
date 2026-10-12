@@ -729,7 +729,7 @@ Object.assign(SpiralCalendar.prototype, {
       themeColorMeta.name = 'theme-color';
       document.head.appendChild(themeColorMeta);
     }
-    themeColorMeta.content = this.state.darkMode ? '#000000' : '#ffffff';
+    themeColorMeta.content = getCanvasTheme(this.state.darkMode).page;
   },
 
   getTimeDisplayHeight() {

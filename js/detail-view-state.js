@@ -192,6 +192,18 @@ Object.assign(SpiralCalendar.prototype, {
     return true;
   },
 
+  navigateDetailViewEvent(direction = 1) {
+    const detail = this.getDetailViewEventState();
+    if (!detail?.activePersistedEvent || detail.isDraftEventActive) return false;
+    this.finishActiveDetailTextEditor({ redraw: false });
+    const events = this.getVisibleEvents().slice()
+      .sort((a, b) => this.getEventDateMs(a.start) - this.getEventDateMs(b.start));
+    const index = events.indexOf(detail.activePersistedEvent);
+    if (index < 0) return false;
+    const next = events[index + (direction < 0 ? -1 : 1)];
+    return next ? this.openEventAtStart(next) : false;
+  },
+
   _getSelectedEventForHandleEditing() {
     if (this.state.detailViewDay === null) return null;
     const detailEventState = this.getDetailViewEventState();

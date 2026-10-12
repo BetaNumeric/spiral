@@ -45,7 +45,8 @@ Object.assign(SpiralCalendar.prototype, {
         this.ctx.closePath();
       }
       // Fill the segment (works for both open and closed paths)
-      this.ctx.fillStyle = color;
+      this.ctx.fillStyle = !isEventSubSegment && color === CONFIG.BLANK_COLOR
+        ? getCanvasTheme(this.state.darkMode).clock : color;
       this.ctx.fill();
       
 
@@ -76,7 +77,7 @@ Object.assign(SpiralCalendar.prototype, {
         this.ctx.moveTo(x1, y1);
         this.ctx.lineTo(x2, y2);
         
-        this.ctx.strokeStyle = isEventSubSegment ? color : CONFIG.STROKE_COLOR;
+        this.ctx.strokeStyle = isEventSubSegment ? color : getCanvasTheme(this.state.darkMode).stroke;
         this.ctx.lineWidth = isEventSubSegment ? CONFIG.EVENT_EDGE_STROKE_WIDTH : CONFIG.STROKE_WIDTH;
         
         this.ctx.stroke();
@@ -403,7 +404,7 @@ Object.assign(SpiralCalendar.prototype, {
       this.ctx.lineCap = lineCap;
       if (this.state.showEventBoundaryStrokes && this.state.showAllEventBoundaryStrokes && !this.state.showArcLines) {
         this.ctx.lineWidth = CONFIG.STROKE_WIDTH;
-        this.ctx.strokeStyle = '#000';
+        this.ctx.strokeStyle = getCanvasTheme(this.state.darkMode).eventSeparator;
         this.ctx.beginPath();
         this.ctx.moveTo(samples[0].rInner * samples[0].cos, samples[0].rInner * samples[0].sin);
         for (let i = 1; i < samples.length; i++) {
@@ -421,7 +422,7 @@ Object.assign(SpiralCalendar.prototype, {
       }
       if (this.state.showEventBoundaryStrokes && eventSegment.dividerStroke) {
         this.ctx.lineWidth = CONFIG.STROKE_WIDTH;
-        this.ctx.strokeStyle = '#000';
+        this.ctx.strokeStyle = getCanvasTheme(this.state.darkMode).eventSeparator;
         this.ctx.lineCap = 'square';
         this.ctx.beginPath();
         this.ctx.moveTo(samples[0].rInner * samples[0].cos, samples[0].rInner * samples[0].sin);
@@ -495,7 +496,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (!this._pendingSpiralOverlapEdges || this._pendingSpiralOverlapEdges.length === 0) return;
       this.ctx.save();
       this.ctx.lineWidth = CONFIG.STROKE_WIDTH;
-      this.ctx.strokeStyle = '#000';
+      this.ctx.strokeStyle = getCanvasTheme(this.state.darkMode).eventSeparator;
       this.ctx.lineCap = 'square';
       for (const edge of this._pendingSpiralOverlapEdges) {
         const dx = edge.x2 - edge.x1;
@@ -521,7 +522,8 @@ Object.assign(SpiralCalendar.prototype, {
       const halfWidth = size * 0.12;
 
       this.ctx.save();
-      this.ctx.strokeStyle = isHover ? '#111' : '#555';
+      const theme = getCanvasTheme(this.state.darkMode);
+      this.ctx.strokeStyle = isHover ? theme.chevronHover : theme.chevron;
       this.ctx.lineWidth = strokeWidth;
       this.ctx.lineCap = 'round';
       this.ctx.lineJoin = 'round';
@@ -597,7 +599,7 @@ Object.assign(SpiralCalendar.prototype, {
         ? this.getDetailViewEventState({ ensureDraft: true })
         : null;
 
-      // Draw the colored outer ring and white inner circle first (before content)
+      // Draw the colored outer ring and inner surface first (before content)
       if (this.mouseState.selectedSegment) {
         const segment = this.mouseState.selectedSegment;
         const outerRingColor = this.calculateSelectedSegmentColor(segment.day, segment.segment);
@@ -609,7 +611,7 @@ Object.assign(SpiralCalendar.prototype, {
         this.ctx.arc(centerX, centerY, outerRadius, 0, 2 * Math.PI);
         this.ctx.fill();
 
-        this.ctx.fillStyle = '#fff';
+        this.ctx.fillStyle = getCanvasTheme(this.state.darkMode).surface;
         this.ctx.beginPath();
         this.ctx.arc(centerX, centerY, circleRadius, 0, 2 * Math.PI);
         this.ctx.fill();
@@ -624,8 +626,8 @@ Object.assign(SpiralCalendar.prototype, {
           };
         }
       } else {
-        this.ctx.fillStyle = 'white';
-        this.ctx.strokeStyle = '#444';
+        this.ctx.fillStyle = getCanvasTheme(this.state.darkMode).surface;
+        this.ctx.strokeStyle = getCanvasTheme(this.state.darkMode).stroke;
         this.ctx.lineWidth = 2;
         this.ctx.beginPath();
         this.ctx.arc(centerX, centerY, outerRadius, 0, 2 * Math.PI);
@@ -647,7 +649,7 @@ Object.assign(SpiralCalendar.prototype, {
           selectedSegment: detailSelectedSegment
         } = detailEventState;
 
-        this.ctx.fillStyle = '#000';
+        this.ctx.fillStyle = getCanvasTheme(this.state.darkMode).text;
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
 
@@ -691,7 +693,8 @@ Object.assign(SpiralCalendar.prototype, {
           this.ctx.fill();
 
           const closeCrossHalfSize = closeGlyphSize * 0.28;
-          this.ctx.strokeStyle = isHoverClose ? 'rgba(255, 255, 255, 0.98)' : 'rgba(255, 255, 255, 0.88)';
+          this.ctx.strokeStyle = this.state.darkMode ? getContrastingCanvasText(detailSelectedSegment.calculatedColor) :
+            (isHoverClose ? 'rgba(255, 255, 255, 0.98)' : 'rgba(255, 255, 255, 0.88)');
           this.ctx.save();
           this.ctx.translate(closeCenterX, closeCenterY);
           this.ctx.rotate(closeCenterAngle + Math.PI / 2);
@@ -714,7 +717,7 @@ Object.assign(SpiralCalendar.prototype, {
           const counter = eventsInHour.length === 1 ? `Part ${activeEventIndex + 1} of ${selectedEventCount}`
             : `Event ${eventsInHour.indexOf(detailEvent) + 1} of ${eventsInHour.length}`;
           const eventCounterText = `${counter}${offsetLabel}`;
-          this.ctx.fillStyle = '#666';
+          this.ctx.fillStyle = getCanvasTheme(this.state.darkMode).muted;
           this.ctx.font = getFontString(smallFontSize);
           this.ctx.textAlign = 'center';
           this.ctx.textBaseline = 'middle';
@@ -748,7 +751,8 @@ Object.assign(SpiralCalendar.prototype, {
         }
 
         const displayTitle = isDraftEventActive ? (detailEvent.title || 'Click to add title...') : detailEvent.title;
-        const color = isDraftEventActive && !detailEvent.title ? '#999' : '#000';
+        const color = isDraftEventActive && !detailEvent.title
+          ? getCanvasTheme(this.state.darkMode).placeholder : getCanvasTheme(this.state.darkMode).text;
         const { width: fittedWidth, height: fittedHeight, fontSizeUsed, maxTitleWidth } = this.measureTitleFitted(displayTitle, circleRadius, titleFontSize, true);
         const titleBoxWidth = Math.min(maxTitleWidth, fittedWidth) + baseFontSize * 0.9;
         const titleBoxHeight = Math.max(fontSizeUsed * 1.7, baseFontSize * 1.7);
@@ -786,7 +790,7 @@ Object.assign(SpiralCalendar.prototype, {
         if (!this.hideDescriptionWhileEditing) {
           this.ctx.font = getFontString(smallFontSize);
           if (detailEvent.description) {
-            this.ctx.fillStyle = '#000';
+            this.ctx.fillStyle = getCanvasTheme(this.state.darkMode).text;
             const wrappedText = this.wrapText(detailEvent.description, maxWidth);
             const maxDescriptionLines = Math.max(1, Math.floor(maxDescriptionHeight / smallLineHeight));
             const visibleLines = wrappedText.slice(0, maxDescriptionLines);
@@ -804,7 +808,7 @@ Object.assign(SpiralCalendar.prototype, {
               lineY += smallLineHeight;
             }
           } else {
-            this.ctx.fillStyle = '#999';
+            this.ctx.fillStyle = getCanvasTheme(this.state.darkMode).placeholder;
             this.ctx.fillText('Click to add description...', centerX, descriptionY);
           }
         }
@@ -835,7 +839,7 @@ Object.assign(SpiralCalendar.prototype, {
           const isHoverButton = allowInteraction &&
             this.mouseState.lastMouseX &&
             this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: buttonX, y: deleteButtonY, width: buttonWidth, height: buttonHeight });
-          this.ctx.fillStyle = isHoverButton ? '#43A047' : '#4CAF50';
+          this.ctx.fillStyle = isHoverButton ? getCanvasTheme(this.state.darkMode).addHover : getCanvasTheme(this.state.darkMode).add;
           this.ctx.beginPath();
           this.ctx.roundRect(buttonX, deleteButtonY, buttonWidth, buttonHeight, buttonRadius);
           this.ctx.fill();
@@ -868,7 +872,7 @@ Object.assign(SpiralCalendar.prototype, {
             this.mouseState.lastMouseX &&
             this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: addButtonX, y: deleteButtonY, width: buttonWidth, height: buttonHeight });
           const buttonText = this._detailViewHasChanges ? 'Done' : '+ New';
-          this.ctx.fillStyle = isHoverAdd ? '#666666' : '#888888';
+          this.ctx.fillStyle = isHoverAdd ? getCanvasTheme(this.state.darkMode).neutralHover : getCanvasTheme(this.state.darkMode).neutral;
           this.ctx.beginPath();
           this.ctx.roundRect(addButtonX, deleteButtonY, buttonWidth, buttonHeight, buttonRadius);
           this.ctx.fill();
@@ -891,7 +895,7 @@ Object.assign(SpiralCalendar.prototype, {
           const isHoverDelete = allowInteraction &&
             this.mouseState.lastMouseX &&
             this.isPointInRect(this.mouseState.lastMouseX, this.mouseState.lastMouseY, { x: deleteButtonX, y: deleteButtonY, width: buttonWidth, height: buttonHeight });
-          this.ctx.fillStyle = isHoverDelete ? '#e53935' : '#ff4444';
+          this.ctx.fillStyle = isHoverDelete ? getCanvasTheme(this.state.darkMode).dangerHover : getCanvasTheme(this.state.darkMode).danger;
           this.ctx.beginPath();
           this.ctx.roundRect(deleteButtonX, deleteButtonY, buttonWidth, buttonHeight, buttonRadius);
           this.ctx.fill();
@@ -1004,6 +1008,7 @@ Object.assign(SpiralCalendar.prototype, {
       this.hourNumbersInSegments.length = 0;
       this.highlightedSegments.length = 0;
       this.eventSegments.length = 0;
+      this._clockLabelSlices = null;
       this.repeatedHourSegments = [];
       this.nightOverlays.length = 0;
       this.dayOverlays.length = 0;
@@ -1278,7 +1283,7 @@ Object.assign(SpiralCalendar.prototype, {
         else if (dayOfWeek === 6) brightness = 50;
         else brightness = 255 - (dayOfWeek - 1) * 35;
         
-        const dayOverlayColor = `rgba(${brightness}, ${brightness}, ${brightness}, ${this.state.dayOverlayOpacity})`;
+        const dayOverlayColor = getCanvasWeekdayOverlay(brightness, this.state.dayOverlayOpacity, this.state.darkMode);
         
         const data = { sunTimes, dayOverlayColor, segmentDateBase: segmentDate };
         dailyDataCache.set(dayOffset, data);
@@ -1368,7 +1373,7 @@ Object.assign(SpiralCalendar.prototype, {
             const { maxRadius } = this.calculateTransforms(this.canvas.clientWidth, this.canvas.clientHeight);
             const darkness = this.getSteppedGradientOverlayOpacity(day, segment, radiusFunction, maxRadius, 6);
             
-            const gradientOverlayColor = `rgba(0, 0, 0, ${darkness})`;
+            const gradientOverlayColor = `rgba(${getCanvasTheme(this.state.darkMode).shadeRgb}, ${darkness})`;
             
             // Store gradient overlay data for drawing after events
             this.gradientOverlays.push({
@@ -1475,6 +1480,7 @@ Object.assign(SpiralCalendar.prototype, {
             
             this.dayNumbers.push({
               day: day,
+              segment,
               dayNumber: dayNumber,
               segmentDateMs: segmentDateMs,
               x: centerRadius * Math.cos(-centerTheta + CONFIG.INITIAL_ROTATION_OFFSET),

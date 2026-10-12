@@ -88,14 +88,14 @@ outside form controls; **Escape** also works while a control has focus.
 
 | Key | Action |
 | --- | --- |
-| Left / Right | Previous / next event while details are open; otherwise rotate |
-| A / D | Rotate; add Alt for finer movement or Alt+Shift for faster movement |
-| Up / Down | Step through days; add Alt for hours or Alt+Shift for weeks. W also steps forward |
+| Left / Right or A / D | Previous / next visible event while selected; otherwise rotate. Add Alt for finer rotation or Alt+Shift for faster rotation |
+| Up / Down or W / S | Previous / next visible event while selected; otherwise step through days. Add Alt for hours or Alt+Shift for weeks |
 | Space or Home | Return to now |
 | N, +, or = | Open Add Event |
 | F | Search events |
 | Delete or Backspace | Delete the selected event |
-| S | Open Settings |
+| , | Open Settings |
+| M | Toggle dark mode |
 | ? | Show the shortcut guide |
 | Escape | Close the top popup, panel, or view; cancel a text edit or clear a search first |
 
@@ -125,6 +125,8 @@ Open **Settings** for dark mode, sound and vibration, color palettes, layout
 presets, and overlays. **Static Mode** keeps midnight at the top; turning it off
 keeps the spiral's end at the bottom. **Circle Mode** uses concentric day rings.
 **Reset Settings** restores the defaults.
+Dark mode uses charcoal surfaces and keeps event colors consistent with light mode.
+Nighttime shading remembers a separate opacity for each theme.
 
 **Show Dev Options** reveals controls for the number of days, scale, coil
 thickness, guide lines, and labels. You can also adjust the day count with

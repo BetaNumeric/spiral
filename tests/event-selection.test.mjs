@@ -62,6 +62,63 @@ test('repeated mouse and pen clicks select the painted event without advancing',
   }
 });
 
+test('keyboard event navigation follows chronology across hours and days, skipping hidden calendars', () => {
+  const app = fixture();
+  app.requestRender = () => app.drawSpiral();
+  const early = app.normalizeRuntimeEvent({ title: 'Early', calendar: 'Home',
+    start: '2026-10-08T07:00:00Z', end: '2026-10-08T07:30:00Z' });
+  const late = app.normalizeRuntimeEvent({ title: 'Tomorrow', calendar: 'Home',
+    start: '2026-10-09T12:00:00Z', end: '2026-10-09T13:00:00Z' });
+  const hidden = app.normalizeRuntimeEvent({ title: 'Hidden', calendar: 'Work',
+    start: '2026-10-08T08:20:00Z', end: '2026-10-08T09:00:00Z' });
+  app.events.push(late, hidden, early);
+  app._eventsVersion++;
+  const records = JSON.stringify(app.events);
+  app.click();
+  assert.equal(app.selected(), '0');
+  assert.equal(app.navigateDetailViewEvent(-1), true);
+  assert.equal(app.selected(), 'Early');
+  assert.equal(app.navigateDetailViewEvent(-1), false);
+  for (const title of ['0', '1', '2', 'Tomorrow']) {
+    assert.equal(app.navigateDetailViewEvent(1), true);
+    assert.equal(app.selected(), title);
+  }
+  assert.equal(app.navigateDetailViewEvent(1), false);
+  assert.equal(JSON.stringify(app.events), records);
+  assert.equal(app.persists, 0);
+});
+
+test('keyboard event navigation sorts repeated-hour events by their actual instants', () => {
+  const app = fixture('2026-10-25', [
+    ['00:00:00Z', '01:00:00Z'], ['01:00:00Z', '02:00:00Z'], ['02:00:00Z', '03:00:00Z']
+  ]);
+  app.requestRender = () => app.drawSpiral();
+  assert.equal(app.openEventAtStart(app.events[0]), true);
+  assert.equal(app.selected(), '0');
+  assert.equal(app.mouseState.selectedSegment.clockOffsetMs, 2 * context.SpiralTime.HOUR);
+  assert.equal(app.navigateDetailViewEvent(1), true);
+  assert.equal(app.selected(), '1');
+  assert.equal(app.mouseState.selectedSegment.clockOffsetMs, context.SpiralTime.HOUR);
+  assert.equal(app.navigateDetailViewEvent(-1), true);
+  assert.equal(app.selected(), '0');
+});
+
+test('keyboard navigation at a lone event or unsaved draft keeps the selection intact', () => {
+  const app = fixture('2026-10-08', [['08:00:00Z', '10:00:00Z']]);
+  app.click();
+  const rotation = app.state.rotation;
+  const selection = app.mouseState.selectedSegment;
+  for (const direction of [-1, 1]) assert.equal(app.navigateDetailViewEvent(direction), false);
+  assert.equal(app.mouseState.selectedSegment, selection);
+  assert.equal(app.state.rotation, rotation);
+  app.draftEvent = { ...app.events[0], title: 'Unsaved', isDraft: true,
+    segmentId: app.getSelectedSegmentId() };
+  const draft = JSON.stringify(app.draftEvent);
+  assert.equal(app.navigateDetailViewEvent(1), false);
+  assert.equal(JSON.stringify(app.draftEvent), draft);
+  assert.equal(app.persists, 0);
+});
+
 test('touch taps visit every event and wrap without resetting to a narrow band', () => {
   for (const hits of [[1, 1, 1, 1, 1, 1, 1], [2, 0, 2, 1, 0, 1, 2]]) {
     const app = fixture();

@@ -425,7 +425,8 @@ Object.assign(SpiralCalendar.prototype, {
     if (nightOverlayOpacitySlider && nightOverlayOpacityVal) {
       nightOverlayOpacitySlider.addEventListener('input', function(e) {
         const opacity = parseFloat(e.target.value) / 100; // Convert from 0-100 to 0-1
-        self.state.nightOverlayOpacity = opacity;
+        const key = self.state.darkMode ? 'darkNightOverlayOpacity' : 'nightOverlayOpacity';
+        self.state[key] = opacity;
         nightOverlayOpacityVal.textContent = e.target.value + '%';
         self.drawSpiral();
         self.requestSettingsSave();
@@ -1457,8 +1458,7 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   handleKeyboardShortcut(e) {
-    if (e.defaultPrevented || e.isComposing ||
-        (e.repeat && !['ArrowLeft', 'ArrowRight'].includes(e.key))) return;
+    if (e.defaultPrevented || e.isComposing || e.repeat) return;
     if (e.key === 'Escape') {
       if (this.dismissKeyboardLayer()) e.preventDefault();
       return;
@@ -1488,16 +1488,12 @@ Object.assign(SpiralCalendar.prototype, {
     } else if (key === ' ' || key === 'home') {
       e.preventDefault();
       this.resetToCurrentTimeFromTap();
-    } else if (key === '+' || key === '=' || key === 'n' || key === 's') {
-      const button = document.getElementById(key === 's' ? 'settingsPanelBtn' : 'addEventPanelBtn');
+    } else if (key === '+' || key === '=' || key === 'n' || key === ',') {
+      const button = document.getElementById(key === ',' ? 'settingsPanelBtn' : 'addEventPanelBtn');
       if (button?.getClientRects().length) { e.preventDefault(); button.click(); }
-    } else if ((key === 'arrowleft' || key === 'arrowright') &&
-               (this.state.detailViewDay !== null || this.isDetailViewOpeningTransitionActive?.())) {
+    } else if (key === 'm') {
       e.preventDefault();
-      this.completeModeTransitionImmediately?.();
-      if (this.cycleDetailViewEvent(key === 'arrowleft' ? -1 : 1)) {
-        this.drawSpiral();
-      }
+      this.setDarkModeEnabled(!this.state.darkMode);
     } else if (key === '?') {
       const help = document.getElementById('keyboardShortcutsHelp');
       if (!help) return;
@@ -1531,6 +1527,10 @@ Object.assign(SpiralCalendar.prototype, {
     }
   },
 
+  isKeyboardEventNavigationActive() {
+    return this.state.detailViewDay !== null || !!this.isDetailViewOpeningTransitionActive?.();
+  },
+
   setupKeyboardNavigation() {
     this.keyboardState = {
       keys: {},
@@ -1553,19 +1553,21 @@ Object.assign(SpiralCalendar.prototype, {
       this.keyboardState.modifiers.ctrl = e.ctrlKey;
       
       const key = e.key.toLowerCase();
-      // An event's arrows stay reserved even when it has no other event to select.
-      if (!e.altKey && ['arrowleft', 'arrowright'].includes(key) &&
-          (this.state.detailViewDay !== null || this.isDetailViewOpeningTransitionActive?.())) {
+      if (!['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) return;
+      if (this.isKeyboardEventNavigationActive()) {
         e.preventDefault();
+        this.keyboardState.keys = {};
+        this.stopKeyboardLoop();
+        this.completeModeTransitionImmediately?.();
+        const direction = ['w', 'a', 'arrowup', 'arrowleft'].includes(key) ? -1 : 1;
+        this.navigateDetailViewEvent(direction);
         return;
       }
-      if (['w', 'a', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
-        if (!this.keyboardState.keys[key]) {
-          this.keyboardState.keys[key] = true;
-          this.startKeyboardLoop();
-        }
-        e.preventDefault(); // prevent scrolling the page
+      if (!this.keyboardState.keys[key]) {
+        this.keyboardState.keys[key] = true;
+        this.startKeyboardLoop();
       }
+      e.preventDefault(); // prevent scrolling the page
     });
 
     window.addEventListener('keyup', (e) => {
@@ -1602,6 +1604,12 @@ Object.assign(SpiralCalendar.prototype, {
     }
     
     const step = (now) => {
+      // A key held before opening details must also stop moving the clock.
+      if (this.isKeyboardEventNavigationActive()) {
+        this.keyboardState.keys = {};
+        this.stopKeyboardLoop();
+        return;
+      }
       const dtMs = Math.max(0, Math.min(80, now - (this.keyboardState.lastFrameTs || now)));
       this.keyboardState.lastFrameTs = now;
       
@@ -1609,12 +1617,10 @@ Object.assign(SpiralCalendar.prototype, {
       const keys = this.keyboardState.keys;
       const mods = this.keyboardState.modifiers;
       
-      // A/D rotate; unmodified Left/Right belong to the open event view.
-      const arrowsNavigate = mods.alt ||
-        (this.state.detailViewDay === null && !this.isDetailViewOpeningTransitionActive?.());
+      // Horizontal A/D and Left/Right rotate the clock.
       let x = 0;
-      if (keys['a'] || (arrowsNavigate && keys['arrowleft'])) x -= 1;
-      if (keys['d'] || (arrowsNavigate && keys['arrowright'])) x += 1;
+      if (keys['a'] || keys['arrowleft']) x -= 1;
+      if (keys['d'] || keys['arrowright']) x += 1;
       
       if (x !== 0) {
         let multiplier = 1.0;
@@ -1627,10 +1633,10 @@ Object.assign(SpiralCalendar.prototype, {
         rotationChanged = true;
       }
       
-      // Up/Down -> Scroll days/hours; W also moves forward.
+      // Vertical W/S and Up/Down scroll days/hours.
       let y = 0;
       if (keys['w'] || keys['arrowup']) y -= 1; // Scroll direction (Up)
-      if (keys['arrowdown']) y += 1; // Scroll direction (Down)
+      if (keys['s'] || keys['arrowdown']) y += 1; // Scroll direction (Down)
       
       if (y !== 0) {
         const direction = y > 0 ? -1 : 1; 
@@ -1676,11 +1682,6 @@ Object.assign(SpiralCalendar.prototype, {
         this.keyboardState.dayAccumulator = 0;
       }
       
-      // Clamp the rotation so we don't spin endlessly past the visible limits if needed
-      if (this.state.detailViewDay !== null && this.mouseState && this.mouseState.selectedSegment) {
-          this.clampRotationToEventWindow();
-      }
-
       if (rotationChanged) {
         this.drawSpiral();
       }

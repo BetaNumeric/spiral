@@ -598,6 +598,35 @@ test('repeated-hour dividers follow visible events and the Segment edges setting
   }
 });
 
+test('night shading uses each theme opacity and persists both choices independently', () => {
+  const app = calendar();
+  app.defaultSettings = { darkNightOverlayOpacity: 0.20 };
+  app.state.nightOverlayOpacity = 0.05;
+  assert.equal(app.getNightOverlayOpacity(), 0.05);
+  app.state.darkMode = true;
+  assert.equal(app.getNightOverlayOpacity(), 0.20);
+  app.state.darkNightOverlayOpacity = 0.32;
+  app.ctx = {};
+  app.mouseState = {};
+  const colors = [];
+  app.nightOverlays = [{ day: 0, segment: 0, innerRadius: 100, outerRadius: 180,
+    startTheta: 1, endTheta: 0.9, isCircleMode: true }];
+  app.fillCircleModeOverlaySegment = (span, color) => colors.push(color);
+  for (const darkMode of [false, true, false]) {
+    app.state.darkMode = darkMode;
+    app.drawNightOverlays();
+  }
+  assert.deepEqual(colors, ['rgba(0, 0, 0, 0.05)', 'rgba(5, 10, 17, 0.32)', 'rgba(0, 0, 0, 0.05)']);
+  const saved = JSON.parse(JSON.stringify(app.buildSettingsStoragePayload()));
+  assert.equal(saved.nightOverlayOpacity, 0.05);
+  assert.equal(saved.darkNightOverlayOpacity, 0.32);
+  app.state = saved;
+  app.state.darkMode = true;
+  assert.equal(app.getNightOverlayOpacity(), 0.32);
+  app.state.darkNightOverlayOpacity = 0;
+  assert.equal(app.getNightOverlayOpacity(), 0);
+});
+
 test('night shading preserves both repeated sections without filling gaps between partial overlays', () => {
   const app = calendar();
   app.ctx = {};

@@ -44,7 +44,12 @@ function fixture() {
     frames.delete(id);
     callback(now);
   }
-  return { app, doc, element, key, listeners, frame };
+  function press(name, options = {}) {
+    const event = key(name, options);
+    listeners.get('keydown')?.(event);
+    return event;
+  }
+  return { app, doc, element, key, press, listeners, frame };
 }
 
 test('Escape closes panels even when an input, select, or button has focus', () => {
@@ -133,12 +138,12 @@ test('canceling a popup restores focus to the connected control that opened it',
   assert.equal(doc.activeElement, opener);
 });
 
-test('S opens Settings and question mark opens its expanded shortcut guide', () => {
+test('comma opens Settings and question mark opens its expanded shortcut guide', () => {
   const { element, key } = fixture();
   const panel = element('settingsPanel', false), button = element('settingsPanelBtn');
   const help = element('keyboardShortcutsHelp');
   button.click = () => { button.clicks = (button.clicks || 0) + 1; panel.visible = !panel.visible; };
-  assert.equal(key('s').defaultPrevented, true);
+  assert.equal(key(',').defaultPrevented, true);
   assert.equal(panel.visible, true);
   key('?');
   assert.equal(button.clicks, 1);
@@ -149,31 +154,36 @@ test('S opens Settings and question mark opens its expanded shortcut guide', () 
   assert.equal(panel.visible, true);
 });
 
-test('Left and Right cycle a selected event and never rotate the calendar', () => {
-  const { app, key } = fixture();
+test('arrows and WASD navigate selected events without rotating or opening Settings', () => {
+  const { app, press, element } = fixture();
   const directions = [];
-  app.cycleDetailViewEvent = direction => { directions.push(direction); return true; };
-  key('ArrowRight');
-  assert.deepEqual(directions, []);
+  const settings = element('settingsPanelBtn');
+  app.setupKeyboardNavigation();
+  app.navigateDetailViewEvent = direction => { directions.push(direction); return true; };
   app.state.detailViewDay = 1;
-  assert.equal(key('ArrowLeft').defaultPrevented, true);
-  assert.equal(key('ArrowRight').defaultPrevented, true);
-  assert.deepEqual(directions, [-1, 1]);
-  assert.equal(app.draws, 2);
+  for (const key of ['ArrowLeft', 'ArrowUp', 'w', 'a', 'ArrowRight', 'ArrowDown', 's', 'd']) {
+    assert.equal(press(key).defaultPrevented, true);
+  }
+  assert.deepEqual(directions, [-1, -1, -1, -1, 1, 1, 1, 1]);
+  assert.equal(settings.clicked, undefined);
+  assert.equal(app.state.rotation, 0);
+  assert.equal(app.keyboardState.loopId, null);
 });
 
 test('form controls, modifiers, composition, and popups keep their own shortcuts', () => {
   const { app, element, key } = fixture();
   const button = element('settingsPanelBtn');
+  app.setDarkModeEnabled = () => { throw new Error('Must not toggle dark mode'); };
   for (const options of [{ ctrlKey: true }, { metaKey: true }, { altKey: true },
     { isComposing: true }, { repeat: true }, { target: { closest: () => ({}) } },
     { target: { isContentEditable: true } }]) {
-    assert.equal(key('s', options).defaultPrevented, undefined);
+    for (const shortcut of [',', 'm']) assert.equal(key(shortcut, options).defaultPrevented, undefined);
     assert.equal(button.clicked, undefined);
   }
   const popup = element();
   app.registerKeyboardDismissal(popup, () => {});
-  key('s');
+  key(',');
+  key('m');
   assert.equal(button.clicked, undefined);
 });
 
@@ -235,74 +245,125 @@ test('shortcut help works when a keyboard layout requires AltGr or Option', () =
   assert.equal(help.open, true);
 });
 
-test('S opens Settings without starting the old backward navigation action', () => {
-  const { app, element, key, listeners } = fixture();
+test('S steps backward through the clock and comma opens Settings without navigating', () => {
+  const { app, element, press, frame, listeners } = fixture();
   const settings = element('settingsPanelBtn');
   app.setupKeyboardNavigation();
-  const event = key('s');
-  listeners.get('keydown')(event);
+  assert.equal(press('s').defaultPrevented, true);
+  frame(100);
+  assert.equal(app.state.rotation, -2 * Math.PI);
+  assert.equal(settings.clicked, undefined);
+  listeners.get('keyup')({ key: 's' });
+  assert.equal(press(',').defaultPrevented, true);
   assert.equal(settings.clicked, true);
-  assert.equal(app.keyboardState.keys.s, undefined);
-  assert.equal(app.state.rotation, 0);
-  listeners.get('keydown')({ key: 's', target: {} });
-  assert.equal(app.keyboardState.keys.s, undefined);
+  assert.equal(app.state.rotation, -2 * Math.PI);
+  assert.equal(app.keyboardState.loopId, null);
 });
 
-test('single-event views reserve Left/Right and held arrows cycle rather than rotate', () => {
-  const { app, key, listeners } = fixture();
+test('comma opens Settings while an event is selected without changing the selection', () => {
+  const { app, element, press } = fixture();
   app.setupKeyboardNavigation();
   app.state.detailViewDay = 1;
-  app.cycleDetailViewEvent = () => false;
-  for (const name of ['ArrowLeft', 'ArrowRight']) {
-    const event = key(name);
-    listeners.get('keydown')(event);
+  const settings = element('settingsPanelBtn');
+  assert.equal(press(',').defaultPrevented, true);
+  assert.equal(settings.clicked, true);
+  assert.equal(app.state.detailViewDay, 1);
+  assert.equal(app.state.rotation, 0);
+  assert.equal(app.keyboardState.loopId, null);
+});
+
+test('M toggles the theme once per press through the shared theme setter in either view', () => {
+  for (const detailViewDay of [null, 1]) {
+    const { app, press } = fixture();
+    app.setupKeyboardNavigation();
+    app.state.detailViewDay = detailViewDay;
+    app.state.darkMode = false;
+    const toggles = [];
+    app.setDarkModeEnabled = enabled => { toggles.push(enabled); app.state.darkMode = enabled; };
+    assert.equal(press('m').defaultPrevented, true);
+    press('m', { repeat: true });
+    assert.deepEqual(toggles, [true]);
+    assert.equal(press('M').defaultPrevented, true);
+    assert.deepEqual(toggles, [true, false]);
+    assert.equal(app.state.detailViewDay, detailViewDay);
+    assert.equal(app.state.rotation, 0);
+    assert.equal(app.keyboardState.loopId, null);
+  }
+});
+
+test('event boundaries reserve all navigation keys and held keys repeat event navigation', () => {
+  const { app, press } = fixture();
+  app.setupKeyboardNavigation();
+  app.state.detailViewDay = 1;
+  app.navigateDetailViewEvent = () => false;
+  for (const name of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'w', 'a', 's', 'd']) {
+    const event = press(name);
     assert.equal(event.defaultPrevented, true);
     assert.equal(app.keyboardState.keys[name.toLowerCase()], undefined);
   }
   const directions = [];
-  app.cycleDetailViewEvent = direction => { directions.push(direction); return true; };
-  const held = key('ArrowRight', { repeat: true });
-  listeners.get('keydown')(held);
-  assert.deepEqual(directions, [1]);
+  app.navigateDetailViewEvent = direction => { directions.push(direction); return true; };
+  press('ArrowRight', { repeat: true });
+  press('w', { repeat: true });
+  press('ArrowDown', { altKey: true, shiftKey: true });
+  assert.deepEqual(directions, [1, -1, 1]);
   assert.equal(app.state.rotation, 0);
 });
 
-test('Left/Right rotate when closed, stop rotating when details open, and Down still steps days', () => {
-  const { app, key, listeners, frame } = fixture();
-  app.setupKeyboardNavigation();
-  listeners.get('keydown')(key('ArrowRight'));
-  frame(100); frame(200);
-  const rotation = app.state.rotation;
-  assert.ok(rotation > 0);
-  app.state.detailViewDay = 1;
-  frame(300);
-  assert.equal(app.state.rotation, rotation); // A key held before opening also respects the context.
-  listeners.get('keydown')(key('ArrowDown'));
-  frame(400);
-  assert.equal(app.state.rotation, rotation - 2 * Math.PI);
+test('held clock navigation stops when details open and resumes normally after closing', () => {
+  for (const name of ['ArrowRight', 'ArrowDown', 'a', 'w', 's']) {
+    const { app, press, frame, listeners } = fixture();
+    app.setupKeyboardNavigation();
+    press(name);
+    frame(100); frame(200);
+    const rotation = app.state.rotation;
+    assert.notEqual(rotation, 0);
+    app.state.detailViewDay = 1;
+    frame(300);
+    assert.equal(app.state.rotation, rotation);
+    assert.equal(app.keyboardState.loopId, null);
+    assert.deepEqual(Object.keys(app.keyboardState.keys), []);
+    listeners.get('keyup')({ key: name });
+    app.state.detailViewDay = null;
+    press('ArrowDown'); frame(400);
+    assert.equal(app.state.rotation, rotation - 2 * Math.PI);
+  }
 });
 
-test('Left/Right can select during the opening transition without starting navigation', () => {
-  const { app, key, listeners } = fixture();
+test('event navigation finishes the opening transition without starting clock navigation', () => {
+  const { app, press } = fixture();
   app.setupKeyboardNavigation();
   app.isDetailViewOpeningTransitionActive = () => true;
   app.completeModeTransitionImmediately = () => { app.state.detailViewDay = 1; };
   let direction;
-  app.cycleDetailViewEvent = value => { direction = value; return true; };
-  const event = key('ArrowLeft');
-  listeners.get('keydown')(event);
+  app.navigateDetailViewEvent = value => { direction = value; return true; };
+  press('ArrowLeft');
   assert.equal(direction, -1);
   assert.equal(app.keyboardState.keys.arrowleft, undefined);
 });
 
-test('comma, brackets, and slash no longer act as shortcut aliases', () => {
+test('selected-event navigation leaves focused controls and browser shortcuts alone', () => {
+  const { app, press, element } = fixture();
+  app.setupKeyboardNavigation();
+  app.state.detailViewDay = 1;
+  app.navigateDetailViewEvent = () => { throw new Error('Must not navigate events'); };
+  for (const options of [{ ctrlKey: true }, { metaKey: true }, { isComposing: true },
+    { target: { isContentEditable: true } }, { target: { closest: () => ({}) } }]) {
+    assert.equal(press('ArrowDown', options).defaultPrevented, undefined);
+    assert.equal(app.keyboardState.loopId, null);
+  }
+  app.registerKeyboardDismissal(element(), () => {});
+  assert.equal(press('ArrowRight').defaultPrevented, undefined);
+});
+
+test('brackets and slash remain inactive and F still focuses search', () => {
   const { app, element, key, doc } = fixture();
   const settings = element('settingsPanelBtn');
   const search = element('eventListSearchBottom');
   search.id = 'eventListSearchBottom';
   app.state.detailViewDay = 1;
   app.cycleDetailViewEvent = () => { throw new Error('Removed aliases must not cycle'); };
-  for (const name of [',', '[', ']', '/']) assert.equal(key(name).defaultPrevented, undefined);
+  for (const name of ['[', ']', '/']) assert.equal(key(name).defaultPrevented, undefined);
   assert.equal(settings.clicked, undefined);
   assert.equal(doc.activeElement, null);
   assert.equal(key('F').defaultPrevented, true);

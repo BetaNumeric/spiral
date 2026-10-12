@@ -15,7 +15,7 @@ const CONFIG = {
     MONTH_BORDER_WIDTH: 1,
     UNIFORM_EVENT_THICKNESS: true,
   getHoverSegmentColor: function() {
-    return document.body.classList.contains('dark-mode') ? '#606000cc' : '#ffff00cc';
+    return document.body.classList.contains('dark-mode') ? '#9ccedbcc' : '#ffff00cc';
   },
     HOVER_BORDER_WIDTH: 2,
     SELECTED_SEGMENT_COLOR: '#ffff00',
@@ -31,6 +31,66 @@ const CONFIG = {
   NIGHT_OVERLAY_COLOR: 'rgba(0, 0, 0, 0.05)',
   TIME_DISPLAY_HEIGHT: 80,  // Height of the time display bar at the bottom
 };
+
+// Canvas colors are native paint colors; event colors never pass through an inversion filter.
+const CANVAS_THEMES = Object.freeze({
+  light: Object.freeze({
+    page: '#ffffff', clock: '#fff', surface: '#ffffff', text: '#000', label: '#000000',
+    muted: '#666', placeholder: '#999', stroke: '#444', midnight: '#444', month: '#000000',
+    eventSeparator: '#000', divider: '#666', shadeRgb: '0, 0, 0',
+    field: '#f0f0f0', fieldBorder: '#ccc', fieldHoverBorder: '#888',
+    footer: 'rgba(255, 255, 255, 0.9)', footerHover: 'rgba(248, 248, 248, 0.95)',
+    footerPressed: 'rgba(240, 240, 240, 0.95)', footerText: '#333', grabber: '#888',
+    tooltip: 'rgba(0, 0, 0, 0.3)', tooltipText: '#ffffff',
+    chevron: '#555', chevronHover: '#111',
+    add: '#4CAF50', addHover: '#43A047', neutral: '#888888', neutralHover: '#666666',
+    danger: '#ff4444', dangerHover: '#e53935'
+  }),
+  dark: Object.freeze({
+    page: '#101820', clock: '#293641', surface: '#18232d', text: '#e3ebf2', label: '#d6e2eb',
+    muted: '#a4b5c4', placeholder: '#8c9fad', stroke: '#4c6171', midnight: '#7891a3', month: '#7891a3',
+    eventSeparator: '#17232d', divider: '#8198aa', shadeRgb: '5, 10, 17',
+    field: '#253440', fieldBorder: '#465c6d', fieldHoverBorder: '#8faec2',
+    footer: 'rgba(20, 31, 41, 0.96)', footerHover: 'rgba(29, 43, 55, 0.98)',
+    footerPressed: 'rgba(36, 53, 67, 0.98)', footerText: '#d6e2eb', grabber: '#7891a3',
+    tooltip: 'rgba(27, 41, 53, 0.96)', tooltipText: '#e3ebf2',
+    chevron: '#a4b5c4', chevronHover: '#e3ebf2',
+    add: '#2b756a', addHover: '#328779', neutral: '#3d5363', neutralHover: '#4c6375',
+    danger: '#b94851', dangerHover: '#cb535d'
+  })
+});
+
+function getCanvasTheme(darkMode = false) {
+  return darkMode ? CANVAS_THEMES.dark : CANVAS_THEMES.light;
+}
+
+function blendCanvasColor(color, background, alpha = 0.5) {
+  const rgb = value => {
+    const hex = value.slice(1);
+    return (hex.length === 3 ? [...hex].map(char => char + char) : hex.match(/../g))
+      .map(channel => parseInt(channel, 16));
+  };
+  const foreground = rgb(color), behind = rgb(background);
+  return '#' + foreground.map((channel, index) =>
+    Math.round(channel * alpha + behind[index] * (1 - alpha)).toString(16).padStart(2, '0')).join('');
+}
+
+function getContrastingCanvasText(color) {
+  const hex = color.match(/^#([\da-f]{3}|[\da-f]{6})$/i)?.[1];
+  if (!hex) return '#ffffff';
+  const channels = (hex.length === 3 ? [...hex].map(char => char + char) : hex.match(/../g))
+    .map(channel => parseInt(channel, 16) / 255)
+    .map(channel => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  const luminance = channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  return (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05) ? '#000000' : '#ffffff';
+}
+
+function getCanvasWeekdayOverlay(brightness, opacity, darkMode = false) {
+  const channels = darkMode
+    ? [32 + brightness * 0.6, 42 + brightness * 0.65, 58 + brightness * 0.7].map(Math.round)
+    : [brightness, brightness, brightness];
+  return `rgba(${channels.join(', ')}, ${opacity})`;
+}
 
 const RUNTIME_FEATURE_FLAGS_STORAGE_KEY = 'spiralRuntimeFeatureFlags';
 const DEFAULT_DEV_MODE = true;
