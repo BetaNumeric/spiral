@@ -1430,7 +1430,6 @@ Object.assign(SpiralCalendar.prototype, {
       return true;
     }
     for (const [panelId, closeId] of [
-      ['ios-install-overlay', 'ios-close-btn'],
       ['settingsPanel', 'closeSettingsPanelBtn'],
       ['eventInputPanel', 'closeEventPanelBtn']
     ]) {

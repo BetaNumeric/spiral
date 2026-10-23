@@ -6,6 +6,8 @@
   <title>Spiral Calendar</title>
   <link rel="icon" type="image/gif" href="icons/icon_32.gif">
   <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon_192.png">
+  <link rel="stylesheet" href="install.css">
   <meta name="theme-color" content="#ffffff">
 
   <!-- Vendored locally so sunrise/sunset works offline -->
@@ -137,11 +139,6 @@
     body.dark-mode #importEventsBtn { background: #2b756a !important; color: white !important; }
     body.dark-mode #randGenerate { background: #3d5363 !important; color: white !important; }
     body.dark-mode #randDeleteRandom { background: #b94851 !important; color: white !important; }
-    body.dark-mode #a2hs-install-btn { background: #4CAF50 !important; color: white !important; }
-    body.dark-mode #a2hs-close-btn { background: #777 !important; color: white !important; }
-    body.dark-mode #ios-close-btn { background: #007aff !important; color: white !important; }
-    body.dark-mode #ios-install-overlay .ios-install-content { background: var(--dark-bg-panel) !important; color: var(--dark-text-primary) !important; }
-    body.dark-mode #ios-install-overlay .ios-install-content img[src*="share.png"] { content: url('icons/share_white.png'); }
     
     /* Dark mode close buttons */
     body.dark-mode #closeEventPanelBtn { color: var(--dark-text-primary) !important; }
@@ -1584,38 +1581,64 @@
         <div id="devModeToggleSection" style="margin-bottom: 0.3em;">
           <button id="devModeToggleBtn" class="btn-action-soft btn-warning-soft">Show Dev Options</button>
         </div>
+        <button id="installSpiralBtn" class="btn-action-soft" style="margin-bottom: 0.4em;">Install Spiral</button>
         <button id="resetSettingsBtn" class="btn-action-soft btn-danger-soft">Reset Settings</button>
         <button id="deleteAllDataBtn" class="btn-action-soft btn-danger-soft" style="margin-top: 0.4em;">Delete All Data</button>
         
       </div>
     </div>
 
-    <!-- Add to Home Screen Banner (mobile only, hidden by default) -->
-    <div id="a2hs-banner" style="display:none;">
-      <div id="a2hs-text"></div>
-      <button id="a2hs-install-btn"></button>
-      <button id="a2hs-open-btn" style="display:none;"></button>
-      <button id="a2hs-close-btn">×</button>
-    </div>
+    <!-- A gentle reminder; the guide is always available from Settings. -->
+    <aside id="a2hs-banner" aria-label="Install Spiral" hidden>
+      <img src="icons/icon_192.png" alt="" width="36" height="36">
+      <div id="a2hs-text"><strong>Keep Spiral close</strong><span>Add it to your Home Screen</span></div>
+      <button id="a2hs-install-btn" type="button">Install</button>
+      <button id="a2hs-close-btn" type="button" aria-label="Dismiss installation reminder">&times;</button>
+    </aside>
 
-    <!-- iOS Add to Home Screen instructions overlay -->
-    <div id="ios-install-overlay" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 50; align-items: center; justify-content: center;">
-      <div class="ios-install-content" style="background: white; padding: 1.5em; border-radius: 0.5em; max-width: 90vw; text-align: left; color: #333;">
-        <h2 style="font-weight:bold; margin-bottom:0.5em; text-align:center;">Install Spiral</h2>
-        <ol style="margin: 0.5em 0; padding-left: 1.2em;">
-          <li style="margin-bottom: 8px;">Tap Safari's <strong>Share</strong> button <img src="icons/share.png" alt="Share" style="width: 16px; height: 16px; vertical-align: middle; margin: 0 0px;"></li>
-          <li style="margin-bottom: 8px;">Choose <strong>Add to Home Screen</strong></li>
-          <li>Tap <strong>Add</strong></li>
-        </ol>
-        <p style="font-size: 13px; color: var(--button-locked-text); margin: 8px 0;">Open Spiral from your home screen.</p>
-        <div style="text-align:center; margin-top:1em;">
-          <button id="ios-close-btn" style="padding:0.5em 1.5em; background:#888888; color:#000000; border:none; border-radius:0.3em; cursor:pointer; font-size:1em;">Got it!</button>
-        </div>
-      </div>
-    </div>
   </div>
 
+    <div id="install-backdrop" aria-hidden="true" hidden></div>
+    <dialog id="install-guide" aria-labelledby="install-title" aria-describedby="install-intro">
+      <div class="install-content">
+        <header class="install-header">
+          <img src="icons/icon_192.png" alt="" width="48" height="48">
+          <div><p class="install-eyebrow">Your time, at a glance</p><h2 id="install-title" tabindex="-1">Install Spiral</h2></div>
+          <button id="install-close-btn" type="button" aria-label="Close installation guide">&times;</button>
+        </header>
+        <p id="install-intro" class="install-intro">Keep your clock and calendar one tap away on your Home Screen.</p>
+        <ul class="install-benefits" aria-label="Installation benefits">
+          <li>Quick access</li><li>Works offline after first load</li><li>No app store needed</li>
+        </ul>
+        <div class="install-device-row">
+          <p id="install-device"></p>
+          <select id="install-platform" aria-label="Installation device">
+            <option value="auto">Detect my device</option>
+            <option value="ios">iPhone / iPad</option>
+            <option value="android">Android</option>
+            <option value="desktop">Computer</option>
+          </select>
+        </div>
+        <p id="install-status" role="status" aria-live="polite"></p>
+        <button id="install-native-btn" class="install-primary" type="button" hidden>Install Spiral</button>
+        <ol id="install-steps"></ol>
+        <section class="install-sharing" aria-label="Share the installation link">
+          <label for="install-link">Installation link</label>
+          <input id="install-link" type="text" readonly spellcheck="false" aria-label="Shareable installation link">
+          <div class="install-link-actions">
+            <button id="install-copy-btn" class="install-secondary" type="button">Copy link</button>
+            <button id="install-share-btn" class="install-secondary" type="button" hidden>Share link</button>
+          </div>
+          <p id="install-link-status" role="status" aria-live="polite"></p>
+          <figure id="install-qr-section" hidden><div id="install-qr"></div><figcaption>Scan to open this guide on your phone</figcaption></figure>
+        </section>
+        <button id="install-continue-btn" type="button">Continue in browser</button>
+      </div>
+    </dialog>
+
   <script src="js/app-version.js"></script>
+  <script src="js/vendor/qrcodegen.js"></script>
+  <script src="js/vendor/install-qr.js"></script>
   <script src="a2hs.js"></script>
   <script src="js/time-model.js"></script>
   <script src="js/event-model.js"></script>

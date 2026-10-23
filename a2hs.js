@@ -1,212 +1,333 @@
-// Add to Home Screen (A2HS) functionality
-let __deferredA2HSPrompt = null;
+// One installation flow for the banner, Settings, and shared installation links.
+(function (global) {
+  'use strict';
 
-function isStandaloneDisplayMode() {
-  // PWA standalone detection (Android/desktop)
-  const standaloneMq = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
-  // iOS Safari standalone detection
-  const iosStandalone = window.navigator && window.navigator.standalone;
-  return !!(standaloneMq || iosStandalone);
-}
+  const DISMISS_KEY = 'a2hsDismissed';
+  const REMINDER_DELAY = 7 * 24 * 60 * 60 * 1000;
+  const state = { ready: false, prompt: null, installing: false, installedHere: false,
+    requestedOpen: false, platform: 'auto', feedback: '', previousFocus: null, dismissedAt: 0, qrUrl: '',
+    fallback: false, previousInert: false, previousAriaHidden: null };
+  let elements;
 
-function getA2HSBannerElements() {
-  const banner = document.getElementById('a2hs-banner');
-  const installBtn = document.getElementById('a2hs-install-btn');
-  const openBtn = document.getElementById('a2hs-open-btn');
-  const closeBtn = document.getElementById('a2hs-close-btn');
-  const text = document.getElementById('a2hs-text');
-  const iosOverlay = document.getElementById('ios-install-overlay');
-  const iosCloseBtn = document.getElementById('ios-close-btn');
-  return { banner, installBtn, openBtn, closeBtn, text, iosOverlay, iosCloseBtn };
-}
-
-function shouldShowA2HSBanner() {
-  // Use the global isMobileDevice helper from config-utils.js
-  if (typeof isMobileDevice === 'function' && !isMobileDevice()) return false;
-  if (isStandaloneDisplayMode()) return false;
-  try {
-    if (localStorage.getItem('a2hsDismissed') === 'true') return false;
-  } catch (_) {}
-  return true;
-}
-
-function showA2HSBanner({ showInstallButton, showOpenButton, text: messageText }) {
-  const { banner, installBtn, openBtn, closeBtn, text } = getA2HSBannerElements();
-  if (!banner) return;
-  
-  // Clear all existing styles and CSS variables - use explicit styles only
-  banner.style.cssText = '';
-  banner.style.display = 'flex';
-  banner.style.position = 'fixed';
-  banner.style.top = '0px';
-  banner.style.left = '0px';
-  banner.style.right = '0px';
-  banner.style.height = 'auto';
-  banner.style.minHeight = '60px';
-  banner.style.maxHeight = '80px';
-  banner.style.zIndex = '99999';
-  banner.style.backgroundColor = '#2c3e50';
-  banner.style.color = '#ffffff';
-  banner.style.padding = '12px 16px';
-  banner.style.boxShadow = '0 2px 10px rgba(0,0,0,0.3)';
-  banner.style.fontFamily = 'Helvetica, Arial, sans-serif';
-  banner.style.fontSize = '14px';
-  banner.style.alignItems = 'center';
-  banner.style.justifyContent = 'space-between';
-  banner.style.gap = '2px';
-  banner.style.flexWrap = 'nowrap';
-  
-  // Set up the content
-  if (text && messageText) {
-    text.textContent = messageText;
-    text.style.flex = '1';
-    text.style.marginRight = '3px';
-    text.style.fontSize = '14px';
-    text.style.lineHeight = '1.2';
-    text.style.overflow = 'hidden';
-    text.style.textOverflow = 'ellipsis';
-    text.style.whiteSpace = 'nowrap';
-    text.style.minWidth = '0';
+  function isStandaloneDisplayMode() {
+    return !!(global.navigator.standalone ||
+      ['standalone', 'fullscreen', 'minimal-ui'].some(mode => global.matchMedia?.(`(display-mode: ${mode})`).matches));
   }
-  
-  if (installBtn) {
-    installBtn.style.display = showInstallButton ? 'inline-block' : 'none';
-    installBtn.style.backgroundColor = '#3498db';
-    installBtn.style.color = '#ffffff';
-    installBtn.style.border = 'none';
-    installBtn.style.padding = '10px 12px';
-    installBtn.style.borderRadius = '6px';
-    installBtn.style.fontSize = '15px';
-    installBtn.style.cursor = 'pointer';
-    installBtn.style.fontFamily = 'Helvetica, Arial, sans-serif';
-    installBtn.style.flexShrink = '0';
-    installBtn.style.whiteSpace = 'nowrap';
-    installBtn.style.minWidth = '60px';
-    // Ensure button has text content
-    if (!installBtn.textContent) {
-      installBtn.textContent = 'Install';
+
+  function getEnvironment() {
+    const nav = global.navigator;
+    const ua = nav.userAgent || '';
+    const ios = /iPhone|iPad|iPod/i.test(ua) ||
+      (/Mac/i.test(nav.platform || ua) && nav.maxTouchPoints > 1);
+    const platform = ios ? 'ios' : /Android/i.test(ua) ? 'android' : 'desktop';
+    let browser = 'other';
+    if (/Edg(?:e|A|iOS)?\//i.test(ua)) browser = 'edge';
+    else if (/SamsungBrowser\//i.test(ua)) browser = 'samsung';
+    else if (/Firefox\/|FxiOS\//i.test(ua)) browser = 'firefox';
+    else if (/Chrome\/|CriOS\//i.test(ua)) browser = 'chrome';
+    else if (/Safari\//i.test(ua)) browser = 'safari';
+    // Only explicit embedded-browser signatures: other iOS browsers can install too.
+    const inApp = /FBAN|FBAV|Instagram|MicroMessenger|Snapchat|TikTok|BytedanceWebview|\bLine\/|\bGSA\/|; wv\)/i.test(ua);
+    return { platform, browser, inApp, standalone: isStandaloneDisplayMode() };
+  }
+
+  function getInstallUrl() {
+    return new URL('install.html', global.location.href).href;
+  }
+
+  function isDismissed() {
+    let dismissedAt = state.dismissedAt;
+    try { dismissedAt = Math.max(dismissedAt, Number(global.localStorage.getItem(DISMISS_KEY)) || 0); } catch (_) {}
+    const age = Date.now() - dismissedAt;
+    return dismissedAt > 0 && age >= 0 && age < REMINDER_DELAY;
+  }
+
+  function dismissReminder() {
+    state.dismissedAt = Date.now();
+    try { global.localStorage.setItem(DISMISS_KEY, String(state.dismissedAt)); } catch (_) {}
+  }
+
+  function getCalendar() {
+    try { return typeof spiralCalendar === 'undefined' ? null : spiralCalendar; } catch (_) { return null; }
+  }
+
+  function isOpen() {
+    return !!(elements?.dialog.open || elements?.dialog.hasAttribute('open'));
+  }
+
+  function renderBanner() {
+    if (!state.ready) return;
+    const env = getEnvironment();
+    elements.banner.hidden = isOpen() || env.standalone || state.installedHere || isDismissed() ||
+      (env.platform === 'desktop' && !state.prompt);
+  }
+
+  function stepsFor(platform, browser, inApp) {
+    if (inApp) {
+      const target = platform === 'ios' ? 'Safari' : 'Chrome';
+      return [
+        ['menu', 'Open your browser', `Use this app\u2019s menu to open the page in ${target}, if offered.`],
+        ['link', 'Or copy the link below', `Paste it into ${target} and open it. The installation guide will appear again.`],
+        ['home', 'Then add Spiral', 'Follow the installation steps in that browser.']
+      ];
+    }
+    if (platform === 'ios') {
+      const chrome = browser === 'chrome' || browser === 'edge' || browser === 'firefox';
+      return [
+        ['share', 'Open the Share menu', chrome
+          ? 'Look for Share in your browser\u2019s menu. If Add to Home Screen is missing, open this link in Safari.'
+          : 'In Safari, tap Share. In some layouts, open the Page Menu first, then choose Share.'],
+        ['home', 'Choose Add to Home Screen', 'Scroll down the Share menu to find it. If missing in Safari, look under Edit Actions.'],
+        ['check', 'Add Spiral', 'Keep Open as Web App turned on if shown, then tap Add. Open Spiral from its Home Screen icon.']
+      ];
+    }
+    if (platform === 'android') {
+      const menu = browser === 'samsung' ? 'In Samsung Internet, open the menu and look for Add page to \u2192 Home screen.'
+        : browser === 'firefox' ? 'In Firefox, open the menu and look for Install or Add to Home screen.'
+        : 'Open your browser\u2019s three-dot menu and look for Install app or Add to Home screen. If missing, open the copied link in Chrome.';
+      return [
+        ['menu', 'Open the browser menu', menu],
+        ['home', 'Choose Install or Add', 'Follow your browser\u2019s confirmation. The exact wording depends on the browser.'],
+        ['check', 'Open Spiral', 'Use the new icon on your Home Screen or in your app list.']
+      ];
+    }
+    return [
+      ['phone', 'Install on your phone', 'Scan the QR code below with your phone\u2019s camera to open this guide.'],
+      ['menu', 'Or install on this computer', 'Use Install Spiral above when available. Otherwise, look for Install in your browser menu, or Add to Dock in Safari on Mac.']
+    ];
+  }
+
+  const icons = {
+    share: '<path d="M12 16V3m-4 4 4-4 4 4M7 11H4v10h16V11h-3"/>',
+    home: '<path d="m3 11 9-8 9 8M5 10v11h14V10M9 21v-7h6v7"/>',
+    menu: '<circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>',
+    check: '<path d="m5 12 4 4L19 6"/>',
+    phone: '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/>',
+    link: '<path d="m10 13 4-4m-6 6-1 1a4 4 0 0 1-6-6l5-5a4 4 0 0 1 6 0m0 4 1-1a4 4 0 0 1 6 6l-5 5a4 4 0 0 1-6 0"/>'
+  };
+
+  function renderSteps(platform, browser, inApp) {
+    elements.steps.replaceChildren();
+    for (const [icon, title, description] of stepsFor(platform, browser, inApp)) {
+      const item = document.createElement('li');
+      const picture = document.createElement('span');
+      picture.className = 'install-step-icon';
+      picture.setAttribute('aria-hidden', 'true');
+      picture.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${icons[icon]}</svg>`;
+      const content = document.createElement('div');
+      const heading = document.createElement('strong');
+      heading.textContent = title;
+      const text = document.createElement('p');
+      text.textContent = description;
+      content.append(heading, text);
+      item.append(picture, content);
+      elements.steps.append(item);
     }
   }
-  
-  if (openBtn) {
-    openBtn.style.display = showOpenButton ? 'inline-block' : 'none';
-    openBtn.style.backgroundColor = '#2ecc71';
-    openBtn.style.color = '#ffffff';
-    openBtn.style.border = 'none';
-    openBtn.style.padding = '10px 12px';
-    openBtn.style.borderRadius = '6px';
-    openBtn.style.fontSize = '15px';
-    openBtn.style.cursor = 'pointer';
-    openBtn.style.fontFamily = 'Helvetica, Arial, sans-serif';
-    openBtn.style.flexShrink = '0';
-    openBtn.style.whiteSpace = 'nowrap';
-    openBtn.style.minWidth = '60px';
-    // Ensure button has text content
-    if (!openBtn.textContent) {
-      openBtn.textContent = 'Open App';
-    }
-  }
-  
-  if (closeBtn) {
-    closeBtn.style.backgroundColor = 'transparent';
-    closeBtn.style.color = '#ffffff';
-    closeBtn.style.border = 'none';
-    closeBtn.style.fontSize = '16px';
-    closeBtn.style.cursor = 'pointer';
-    closeBtn.style.padding = '4px 4px';
-    closeBtn.style.fontFamily = 'Helvetica, Arial, sans-serif';
-    closeBtn.style.flexShrink = '0';
-    closeBtn.style.minWidth = '24px';
-    closeBtn.onclick = () => {
-      banner.style.display = 'none';
-      try { localStorage.setItem('a2hsDismissed', 'true'); } catch (_) {}
+
+  function render() {
+    if (!state.ready) return;
+    const env = getEnvironment();
+    const platform = state.platform === 'auto' ? env.platform : state.platform;
+    const browser = platform === env.platform ? env.browser : 'other';
+    const inApp = platform === env.platform && env.inApp;
+    const alreadyOpen = env.standalone || state.installedHere;
+    elements.entry.textContent = env.standalone ? 'Share Spiral' : 'Install Spiral';
+    elements.title.textContent = env.standalone ? 'Share Spiral' : 'Install Spiral';
+    elements.platform.hidden = alreadyOpen;
+    elements.steps.hidden = alreadyOpen;
+    elements.native.hidden = alreadyOpen || !(state.prompt || state.installing);
+    elements.native.disabled = state.installing;
+    elements.native.textContent = state.installing ? 'Opening installer\u2026' : 'Install Spiral';
+    elements.native.setAttribute('aria-busy', String(state.installing));
+    const descriptions = {
+      ios: 'iPhone and iPad installation', android: 'Android installation', desktop: 'Install on your phone or computer'
     };
+    elements.device.textContent = inApp ? 'Open in your browser to install' : descriptions[platform];
+    elements.device.hidden = alreadyOpen;
+    elements.status.textContent = env.standalone ? 'You\u2019re already using Spiral as an app. Share this link to install it on another device.'
+      : state.installedHere ? 'Installation accepted. Open Spiral from your Home Screen when its icon appears.'
+      : state.feedback || (inApp ? 'This browser may hide installation options. Copy the link to Safari or Chrome.'
+        : state.prompt ? 'Your browser is ready to install Spiral.' : 'Follow the steps below to add Spiral to your Home Screen.');
+    renderSteps(platform, browser, inApp);
+    elements.link.value = getInstallUrl();
+    elements.share.hidden = typeof global.navigator.share !== 'function';
+    elements.qrSection.hidden = platform !== 'desktop' && !env.standalone;
+    if (isOpen() && state.qrUrl !== getInstallUrl()) {
+      try {
+        elements.qr.innerHTML = global.SpiralInstallQR.toSvg(getInstallUrl());
+        state.qrUrl = getInstallUrl();
+      } catch (_) {
+        elements.qrSection.hidden = true;
+      }
+    }
+    renderBanner();
   }
-}
 
-function initA2HSBanner() {
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  const isAndroid = /android/i.test(navigator.userAgent);
-  
-  // Check if app is already installed (standalone mode)
-  if (isStandaloneDisplayMode()) {
-    // App is already installed - don't show banner
-    return;
+  function open() {
+    state.requestedOpen = true;
+    if (!state.ready) return false;
+    state.feedback = '';
+    if (!isOpen()) {
+      state.previousFocus = document.activeElement;
+      if (typeof elements.dialog.showModal === 'function') elements.dialog.showModal();
+      else {
+        state.fallback = true;
+        state.previousInert = elements.app.inert;
+        state.previousAriaHidden = elements.app.getAttribute('aria-hidden');
+        elements.app.inert = true;
+        elements.app.setAttribute('aria-hidden', 'true');
+        elements.backdrop.hidden = false;
+        elements.dialog.setAttribute('open', '');
+        elements.dialog.setAttribute('role', 'dialog');
+        elements.dialog.setAttribute('aria-modal', 'true');
+      }
+    }
+    const calendar = getCalendar();
+    if (calendar?.keyboardState) {
+      calendar.keyboardState.keys = {};
+      calendar.stopKeyboardLoop();
+    }
+    render();
+    elements.title.focus({ preventScroll: true });
+    return true;
   }
-  
-  // Don't show banner if not mobile device (handled by shouldShowA2HSBanner for new installs)
-  if (!shouldShowA2HSBanner()) return;
-  
-  // Handle Android/Chromium via beforeinstallprompt
-  window.addEventListener('beforeinstallprompt', (e) => {
-    // Prevent the mini-infobar from appearing
-    e.preventDefault();
-    __deferredA2HSPrompt = e;
-    const { installBtn, openBtn, banner } = getA2HSBannerElements();
-    showA2HSBanner({ showInstallButton: true, showOpenButton: false, text: 'Install Spiral' });
-    if (installBtn) {
-      installBtn.onclick = async () => {
-        if (!__deferredA2HSPrompt) return;
-        __deferredA2HSPrompt.prompt();
-        try { await __deferredA2HSPrompt.userChoice; } catch (_) {}
-        __deferredA2HSPrompt = null;
-        if (banner) banner.style.display = 'none';
-      };
+
+  function close() {
+    state.requestedOpen = false;
+    if (!state.ready || !isOpen()) return;
+    dismissReminder();
+    if (state.fallback) {
+      elements.dialog.removeAttribute('open');
+      elements.dialog.removeAttribute('role');
+      elements.dialog.removeAttribute('aria-modal');
+      elements.backdrop.hidden = true;
+      elements.app.inert = state.previousInert;
+      if (state.previousAriaHidden === null) elements.app.removeAttribute('aria-hidden');
+      else elements.app.setAttribute('aria-hidden', state.previousAriaHidden);
+      state.fallback = false;
+    } else elements.dialog.close();
+    renderBanner();
+    const target = state.previousFocus;
+    if (target?.isConnected && target.getClientRects().length) target.focus({ preventScroll: true });
+  }
+
+  async function install() {
+    if (!state.prompt || state.installing || getEnvironment().standalone) return false;
+    const prompt = state.prompt;
+    state.prompt = null; // A browser-provided prompt can only be used once.
+    state.installing = true;
+    state.feedback = '';
+    render();
+    let accepted = false;
+    try {
+      await prompt.prompt();
+      accepted = (await prompt.userChoice)?.outcome === 'accepted';
+      if (!state.prompt && !state.installedHere) state.feedback = accepted
+        ? 'Installation requested. Look for Spiral on your Home Screen when its icon appears.'
+        : 'You can install later using your browser menu. The steps are below.';
+    } catch (_) {
+      if (!state.prompt) state.feedback = 'Use your browser menu to install Spiral. The steps are below.';
+    } finally {
+      state.installing = false;
+      render();
     }
-  });
-  
-  // Handle iOS Safari (no beforeinstallprompt)
-  if (isIOS) {
-    const { installBtn, iosOverlay, iosCloseBtn } = getA2HSBannerElements();
-    showA2HSBanner({ showInstallButton: true, showOpenButton: false, text: 'Install Spiral' });
-    if (installBtn) {
-      installBtn.textContent = 'How to Install';
-      installBtn.onclick = () => {
-        if (iosOverlay) iosOverlay.style.display = 'flex';
-      };
+    return accepted;
+  }
+
+  async function copyLink() {
+    let copied = false;
+    try {
+      if (global.navigator.clipboard?.writeText) {
+        await global.navigator.clipboard.writeText(getInstallUrl());
+        copied = true;
+      }
+    } catch (_) {}
+    if (!copied) {
+      elements.link.focus();
+      elements.link.select();
+      try { copied = !!document.execCommand?.('copy'); } catch (_) {}
     }
-    if (iosCloseBtn && iosOverlay) {
-      iosCloseBtn.onclick = () => { iosOverlay.style.display = 'none'; };
-      iosOverlay.onclick = (e) => {
-        if (e.target === iosOverlay) iosOverlay.style.display = 'none';
-      };
+    elements.linkStatus.textContent = copied ? 'Link copied.' : 'Select and copy the link above.';
+  }
+
+  async function shareLink() {
+    try {
+      await global.navigator.share({ title: 'Install Spiral', text: 'Add Spiral to your Home Screen.', url: getInstallUrl() });
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        elements.linkStatus.textContent = 'Copy the link above to share it.';
+        elements.link.focus();
+        elements.link.select();
+      }
     }
   }
-  
-  // Android fallback if beforeinstallprompt doesn't fire
-  if (isAndroid) {
-    setTimeout(() => {
-      if (!__deferredA2HSPrompt && !isStandaloneDisplayMode()) {
-        // Check if manifest exists to determine if PWA can be installed
-        if ('serviceWorker' in navigator && window.matchMedia('(display-mode: browser)').matches) {
-          // Show banner with install button if PWA is not installed
-          showA2HSBanner({ showInstallButton: false, showOpenButton: false, text: 'Install: Menu → Add to Home screen' });
+
+  function initialize() {
+    if (state.ready) return;
+    const ids = { dialog: 'install-guide', app: 'app', backdrop: 'install-backdrop', title: 'install-title', device: 'install-device',
+      status: 'install-status', platform: 'install-platform', steps: 'install-steps', native: 'install-native-btn',
+      link: 'install-link', copy: 'install-copy-btn', share: 'install-share-btn', linkStatus: 'install-link-status',
+      qr: 'install-qr', qrSection: 'install-qr-section', banner: 'a2hs-banner', entry: 'installSpiralBtn' };
+    elements = Object.fromEntries(Object.entries(ids).map(([name, id]) => [name, document.getElementById(id)]));
+    if (Object.values(elements).some(element => !element)) return;
+    state.ready = true;
+    elements.entry.addEventListener('click', open);
+    document.getElementById('a2hs-install-btn').addEventListener('click', open);
+    document.getElementById('a2hs-close-btn').addEventListener('click', () => { dismissReminder(); renderBanner(); });
+    document.getElementById('install-close-btn').addEventListener('click', close);
+    document.getElementById('install-continue-btn').addEventListener('click', close);
+    elements.native.addEventListener('click', install);
+    elements.copy.addEventListener('click', copyLink);
+    elements.share.addEventListener('click', shareLink);
+    elements.platform.addEventListener('change', () => { state.platform = elements.platform.value; state.feedback = ''; render(); });
+    elements.dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
+    elements.backdrop.addEventListener('click', close);
+    elements.dialog.addEventListener('click', event => {
+      if (event.target !== elements.dialog) return;
+      const rect = elements.dialog.getBoundingClientRect();
+      if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) close();
+    });
+    elements.dialog.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
+      else if (event.key === 'Tab') {
+        const focusable = [...elements.dialog.querySelectorAll('button, input, select, a[href]')]
+          .filter(element => !element.disabled && element.getClientRects().length);
+        const first = focusable[0], last = focusable.at(-1);
+        if (first && (event.shiftKey ? document.activeElement === first || document.activeElement === elements.title
+          : document.activeElement === last)) {
+          event.preventDefault();
+          (event.shiftKey ? last : first).focus();
         }
       }
-    }, 2000);
+    });
+    elements.dialog.setAttribute('data-keyboard-dismiss', '');
+    elements.dialog._dismissKeyboardLayer = close;
+    const url = new URL(global.location.href);
+    const requested = url.searchParams.get('install') === '1';
+    if (requested) {
+      url.searchParams.delete('install');
+      global.history.replaceState(global.history.state, '', url.pathname + url.search + url.hash);
+    }
+    render();
+    if ((requested || state.requestedOpen) && !getEnvironment().standalone) open();
+    global.matchMedia?.('(display-mode: standalone)').addEventListener?.('change', render);
   }
-  
-  // Hide banner when app is installed
-  window.addEventListener('appinstalled', () => {
-    const { banner } = getA2HSBannerElements();
-    if (banner) banner.style.display = 'none';
-    try { localStorage.setItem('a2hsDismissed', 'true'); } catch (_) {}
+
+  // Capture capability events immediately, independent of banner cooldown or DOM readiness.
+  global.addEventListener('beforeinstallprompt', event => {
+    event.preventDefault();
+    state.prompt = event;
+    state.feedback = '';
+    render();
   });
-}
-
-// Initialize when DOM is ready and shared helpers have loaded
-function initializeA2HS() {
-  // Wait for isMobileDevice function to be available
-  if (typeof isMobileDevice === 'function') {
-    initA2HSBanner();
-  } else {
-    // Retry after a short delay
-    setTimeout(initializeA2HS, 100);
-  }
-}
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initializeA2HS);
-} else {
-  initializeA2HS();
-}
+  global.addEventListener('appinstalled', () => {
+    state.prompt = null;
+    state.installedHere = true;
+    state.feedback = '';
+    render();
+  });
+  global.SpiralInstall = Object.freeze({ initialize, open, close, install, getEnvironment, getInstallUrl });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initialize, { once: true });
+  else initialize();
+})(window);

@@ -1,11 +1,29 @@
 {
   "name":        "Spiral Calendar",
   "short_name":  "Spiral",
+  "description": "See your time in a continuous spiral: a clock, calendar, and events in one view, with offline access.",
+  "categories": ["productivity", "utilities"],
   "start_url":   "./?source=pwa",
   "scope":       "./",
   "display":     "standalone",
   "background_color": "#ffffff",
   "theme_color":      "#007aff",
+  "screenshots": [
+    {
+      "src": "images/install-light.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Spiral Calendar with events in light mode"
+    },
+    {
+      "src": "images/install-dark.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Spiral Calendar with events in dark mode"
+    }
+  ],
   "icons": [
     {
       "src":   "icons/icon_192.png",

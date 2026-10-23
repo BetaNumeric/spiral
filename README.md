@@ -15,10 +15,16 @@ between sunset and sunrise at your chosen location.
 3. Pull the time display at the bottom upward to browse and search your events.
 4. Tap the time display to return to now.
 
-Spiral runs in your browser. You can also install it using your browser's
-**Install app** or **Add to Home Screen** option. In Safari on iPhone or iPad,
-look for **Add to Home Screen** in the Share menu. Once its files are cached,
-the clock, events, and settings work offline; new place searches need a connection.
+Spiral runs in your browser. To add it to your phone's Home Screen, open the
+[installation guide](https://betanumeric.github.io/spiral/install.html), or choose
+**Settings > Install Spiral**. The guide adapts to your device and can be shared
+as a link or QR code. On Android, use **Install Spiral** when available, or your
+browser's **Install app / Add to Home Screen** menu option. On iPhone or iPad,
+use **Share > Add to Home Screen**, keep **Open as Web App** enabled if shown,
+then tap **Add**. If these options are missing, open the link in Safari on iPhone
+or Chrome on Android. The Home Screen icon opens the calendar directly.
+Once its files are cached, the clock, events, and settings work offline; new
+place searches need a connection.
 
 ## Your data
 

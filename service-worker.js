@@ -9,8 +9,12 @@ const toURL = (p) => new URL(p, self.location).toString();
 const ASSETS = [
   './',
   './index.html',
+  './install.html',
+  './install.css',
   './study-analysis.html',
   './a2hs.js',
+  './js/vendor/qrcodegen.js',
+  './js/vendor/install-qr.js',
   './js/app-version.js',
   './js/config-utils.js',
   './js/time-model.js',
@@ -44,6 +48,8 @@ const ASSETS = [
   './tools/study-analysis-core.mjs',
   './js/bootstrap.js',
   './manifest.json',
+  './images/install-light.png',
+  './images/install-dark.png',
   './icons/icon_32.gif',
   './icons/icon_192.png',
   './icons/icon_512.png',
@@ -88,16 +94,31 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Installation and app launch add query parameters to these static documents.
+// Match their precached shells without changing resource or data cache keys.
+function getDocumentCacheKey(request) {
+  if (request.method !== 'GET' || request.mode !== 'navigate') return request;
+  const root = new URL('./', self.location);
+  const requested = new URL(request.url);
+  if (requested.origin !== root.origin) return request;
+  for (const path of ['', 'index.html', 'install.html']) {
+    const document = new URL(path, root);
+    if (requested.pathname === document.pathname) return document.href;
+  }
+  return request;
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
+  const cacheKey = getDocumentCacheKey(req);
   event.respondWith(
-    caches.match(req).then((cached) => 
+    caches.match(cacheKey).then((cached) =>
       cached || fetch(req).then((resp) => {
         const copy = resp.clone();
         caches.open(CACHE_NAME).then((cache) => {
           // Only cache GET and same-origin
           if (req.method === 'GET' && new URL(req.url).origin === self.location.origin) {
-            cache.put(req, copy).catch(() => {});
+            cache.put(cacheKey, copy).catch(() => {});
           }
         });
         return resp;
