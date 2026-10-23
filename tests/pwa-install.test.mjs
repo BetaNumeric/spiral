@@ -84,7 +84,7 @@ function fixture({ userAgent = ANDROID_CHROME, platform = 'Linux armv8l', maxTou
   const ids = ['a2hs-banner', 'a2hs-text', 'a2hs-install-btn', 'a2hs-close-btn',
     'install-guide', 'install-platform', 'install-steps', 'install-status', 'install-native-btn',
     'install-copy-btn', 'install-share-btn', 'install-link', 'install-qr', 'installSpiralBtn',
-    'install-close-btn', 'install-continue-btn', 'install-intro', 'install-title', 'install-device',
+    'install-close-btn', 'install-continue-btn', 'install-title', 'install-platform-auto',
     'install-link-status', 'install-qr-section', 'app', 'install-backdrop'];
   for (const id of ids) {
     const tag = id === 'install-guide' ? 'dialog' : id === 'install-platform' ? 'select' :
@@ -286,7 +286,7 @@ test('manual device selection updates the guide without changing detection or th
   app.initialize();
   app.api.open();
   const steps = app.elements.get('install-steps');
-  assert.match(content(steps), /Share menu/);
+  assert.match(content(steps), /Tap Share/);
   assert.match(content(steps), /Open as Web App/);
   const selector = app.elements.get('install-platform');
   selector.value = 'android';
@@ -303,8 +303,8 @@ test('manual device selection updates the guide without changing detection or th
 test('Android browser fallback and embedded-browser instructions match the actual browser', () => {
   for (const [userAgent, expected] of [
     [`${ANDROID_CHROME} SamsungBrowser/27.0`, /Samsung Internet/],
-    ['Mozilla/5.0 (Android 14; Mobile; rv:132.0) Gecko/132.0 Firefox/132.0', /In Firefox/],
-    [`${IPHONE_SAFARI} Instagram 355.0.0.0`, /Paste it into Safari/]
+    ['Mozilla/5.0 (Android 14; Mobile; rv:132.0) Gecko/132.0 Firefox/132.0', /Firefox/],
+    [`${IPHONE_SAFARI} Instagram 355.0.0.0`, /paste it into Safari/]
   ]) {
     const app = fixture({ userAgent });
     app.initialize();

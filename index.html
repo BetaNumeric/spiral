@@ -1591,7 +1591,7 @@
     <!-- A gentle reminder; the guide is always available from Settings. -->
     <aside id="a2hs-banner" aria-label="Install Spiral" hidden>
       <img src="icons/icon_192.png" alt="" width="36" height="36">
-      <div id="a2hs-text"><strong>Keep Spiral close</strong><span>Add it to your Home Screen</span></div>
+      <div id="a2hs-text">Add Spiral to your Home Screen</div>
       <button id="a2hs-install-btn" type="button">Install</button>
       <button id="a2hs-close-btn" type="button" aria-label="Dismiss installation reminder">&times;</button>
     </aside>
@@ -1599,21 +1599,15 @@
   </div>
 
     <div id="install-backdrop" aria-hidden="true" hidden></div>
-    <dialog id="install-guide" aria-labelledby="install-title" aria-describedby="install-intro">
+    <dialog id="install-guide" aria-labelledby="install-title">
       <div class="install-content">
         <header class="install-header">
-          <img src="icons/icon_192.png" alt="" width="48" height="48">
-          <div><p class="install-eyebrow">Your time, at a glance</p><h2 id="install-title" tabindex="-1">Install Spiral</h2></div>
+          <h2 id="install-title" tabindex="-1">Install Spiral</h2>
           <button id="install-close-btn" type="button" aria-label="Close installation guide">&times;</button>
         </header>
-        <p id="install-intro" class="install-intro">Keep your clock and calendar one tap away on your Home Screen.</p>
-        <ul class="install-benefits" aria-label="Installation benefits">
-          <li>Quick access</li><li>Works offline after first load</li><li>No app store needed</li>
-        </ul>
         <div class="install-device-row">
-          <p id="install-device"></p>
           <select id="install-platform" aria-label="Installation device">
-            <option value="auto">Detect my device</option>
+            <option id="install-platform-auto" value="auto">Detect my device</option>
             <option value="ios">iPhone / iPad</option>
             <option value="android">Android</option>
             <option value="desktop">Computer</option>
@@ -1623,14 +1617,14 @@
         <button id="install-native-btn" class="install-primary" type="button" hidden>Install Spiral</button>
         <ol id="install-steps"></ol>
         <section class="install-sharing" aria-label="Share the installation link">
-          <label for="install-link">Installation link</label>
-          <input id="install-link" type="text" readonly spellcheck="false" aria-label="Shareable installation link">
+          <label for="install-link">Share installation link</label>
           <div class="install-link-actions">
-            <button id="install-copy-btn" class="install-secondary" type="button">Copy link</button>
-            <button id="install-share-btn" class="install-secondary" type="button" hidden>Share link</button>
+            <input id="install-link" type="text" readonly spellcheck="false" aria-label="Shareable installation link">
+            <button id="install-copy-btn" class="install-secondary" type="button" aria-label="Copy installation link">Copy</button>
+            <button id="install-share-btn" class="install-secondary" type="button" aria-label="Share installation link" hidden>Share</button>
           </div>
           <p id="install-link-status" role="status" aria-live="polite"></p>
-          <figure id="install-qr-section" hidden><div id="install-qr"></div><figcaption>Scan to open this guide on your phone</figcaption></figure>
+          <figure id="install-qr-section" hidden><div id="install-qr"></div><figcaption>Scan to install on your phone</figcaption></figure>
         </section>
         <button id="install-continue-btn" type="button">Continue in browser</button>
       </div>

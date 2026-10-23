@@ -20,8 +20,6 @@
 #a2hs-banner[hidden] { display: none; }
 #a2hs-banner img { width: 36px; height: 36px; border-radius: 9px; }
 #a2hs-text { flex: 1; min-width: 0; }
-#a2hs-text strong, #a2hs-text span { display: block; }
-#a2hs-text span { margin-top: 2px; color: #556b76; font-size: 12px; }
 #a2hs-install-btn { padding: 10px 13px; border: 0; border-radius: 10px; background: #246b62; color: #fff; font: inherit; cursor: pointer; }
 #a2hs-close-btn { padding: 6px; border: 0; background: transparent; color: inherit; font: inherit; font-size: 23px; cursor: pointer; }
 
@@ -56,17 +54,11 @@
 #install-backdrop[hidden] { display: none; }
 #install-guide::backdrop { background: #0713208c; backdrop-filter: blur(3px); }
 .install-content { padding: 26px; }
-.install-header { display: flex; gap: 13px; align-items: center; margin-bottom: 12px; }
-.install-header > img { width: 48px; height: 48px; border-radius: 12px; }
+.install-header { display: flex; align-items: center; margin-bottom: 16px; }
 #install-title { margin: 0; font-size: 25px; line-height: 1.2; letter-spacing: -0.5px; }
 #install-title:focus { outline: none; }
-.install-eyebrow { margin: 0 0 3px; font-size: 11px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--install-muted); }
 #install-close-btn { margin-left: auto; align-self: flex-start; border: 0; background: transparent; color: var(--install-muted); padding: 0 5px; font-size: 26px; line-height: 1; min-width: 32px; min-height: 32px; cursor: pointer; }
-.install-intro { margin: 0 0 16px; color: var(--install-muted); }
-.install-benefits { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 19px; padding: 0; list-style: none; }
-.install-benefits li { padding: 4px 9px; border-radius: 20px; color: var(--install-muted); background: var(--install-soft); font-size: 12px; }
-.install-device-row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-#install-device { margin: 0; font-size: 15px; font-weight: 700; }
+.install-device-row { margin-bottom: 12px; }
 #install-platform { max-width: 100%; padding: 7px 9px; border: 1px solid var(--install-border); border-radius: 9px; background: var(--install-surface); color: var(--install-text); font: inherit; font-size: 12px; }
 #install-status { margin: 0 0 12px; color: var(--install-muted); font-size: 13px; }
 #install-guide button { font-family: inherit; }
@@ -81,12 +73,13 @@
 #install-steps p { margin: 3px 0 0; color: var(--install-muted); font-size: 13px; }
 .install-sharing { margin-top: 16px; padding-top: 17px; border-top: 1px solid var(--install-border); }
 .install-sharing > label { font-size: 12px; font-weight: 700; color: var(--install-muted); }
-#install-link { display: block; width: 100%; margin: 7px 0 10px; padding: 9px 10px; border: 1px solid var(--install-border); border-radius: 9px; background: var(--install-soft); color: var(--install-text); font: inherit; font-size: 12px; user-select: text; -webkit-user-select: text; }
-.install-link-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-#install-guide .install-secondary { padding: 9px 13px; border: 1px solid var(--install-border); border-radius: 10px; background: var(--install-soft); color: var(--install-text); font-size: 13px; cursor: pointer; }
-#install-link-status { margin: 5px 0 0; min-height: 1.3em; color: var(--install-muted); font-size: 12px; }
+#install-link { flex: 1; width: 0; min-width: 60px; padding: 9px 10px; border: 1px solid var(--install-border); border-radius: 9px; background: var(--install-soft); color: var(--install-text); font: inherit; font-size: 12px; user-select: text; -webkit-user-select: text; }
+.install-link-actions { display: flex; gap: 6px; margin-top: 7px; }
+#install-guide .install-secondary { padding: 9px 10px; border: 1px solid var(--install-border); border-radius: 9px; background: var(--install-soft); color: var(--install-text); font-size: 13px; cursor: pointer; }
+#install-link-status { margin: 5px 0 0; color: var(--install-muted); font-size: 12px; }
+#install-link-status:empty { display: none; }
 #install-qr-section { margin: 14px 0 0; text-align: center; }
-#install-qr { width: min(185px, 100%); margin: auto; padding: 8px; background: #fff; border-radius: 12px; }
+#install-qr { width: min(160px, 100%); margin: auto; padding: 6px; background: #fff; border-radius: 10px; }
 #install-qr svg { display: block; width: 100%; height: auto; }
 #install-qr-section figcaption { margin-top: 7px; color: var(--install-muted); font-size: 12px; }
 #install-continue-btn { width: 100%; margin-top: 17px; padding: 10px 8px; border: 0; border-radius: 10px; background: transparent; color: var(--install-muted); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
@@ -103,12 +96,9 @@ body.dark-mode #install-guide {
   --install-on-accent: #102e2b;
 }
 body.dark-mode #a2hs-banner { color: #e3ebf2; border-color: #465c6d; }
-body.dark-mode #a2hs-text span { color: #a4b5c4; }
 @media (max-width: 380px) {
   .install-content { padding: 19px; }
   #install-title { font-size: 23px; }
-  .install-benefits { gap: 5px; }
   .install-step-icon { flex-basis: 29px; height: 29px; }
   #a2hs-banner { gap: 7px; padding: 9px; }
-  #a2hs-text span { display: none; }
 }

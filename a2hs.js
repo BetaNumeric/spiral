@@ -65,45 +65,36 @@
   function stepsFor(platform, browser, inApp) {
     if (inApp) {
       const target = platform === 'ios' ? 'Safari' : 'Chrome';
-      return [
-        ['menu', 'Open your browser', `Use this app\u2019s menu to open the page in ${target}, if offered.`],
-        ['link', 'Or copy the link below', `Paste it into ${target} and open it. The installation guide will appear again.`],
-        ['home', 'Then add Spiral', 'Follow the installation steps in that browser.']
-      ];
+      return [['menu', `Open in ${target}`, `Use this app\u2019s menu, or copy the link below and paste it into ${target}.`]];
     }
     if (platform === 'ios') {
       const chrome = browser === 'chrome' || browser === 'edge' || browser === 'firefox';
       return [
-        ['share', 'Open the Share menu', chrome
-          ? 'Look for Share in your browser\u2019s menu. If Add to Home Screen is missing, open this link in Safari.'
-          : 'In Safari, tap Share. In some layouts, open the Page Menu first, then choose Share.'],
-        ['home', 'Choose Add to Home Screen', 'Scroll down the Share menu to find it. If missing in Safari, look under Edit Actions.'],
-        ['check', 'Add Spiral', 'Keep Open as Web App turned on if shown, then tap Add. Open Spiral from its Home Screen icon.']
+        ['share', 'Tap Share', chrome ? 'In your browser\u2019s menu.' : 'In Safari, open the Page Menu first if needed.'],
+        ['home', 'Choose Add to Home Screen', chrome ? 'If missing, open this link in Safari.' : ''],
+        ['check', 'Tap Add', 'Keep Open as Web App on, if shown.']
       ];
     }
     if (platform === 'android') {
-      const menu = browser === 'samsung' ? 'In Samsung Internet, open the menu and look for Add page to \u2192 Home screen.'
-        : browser === 'firefox' ? 'In Firefox, open the menu and look for Install or Add to Home screen.'
-        : 'Open your browser\u2019s three-dot menu and look for Install app or Add to Home screen. If missing, open the copied link in Chrome.';
+      const menu = browser === 'samsung' ? 'Open Samsung Internet\u2019s menu'
+        : browser === 'firefox' ? 'Open Firefox\u2019s menu' : 'Open the three-dot menu';
+      const action = browser === 'samsung' ? 'Add page to \u2192 Home screen'
+        : browser === 'firefox' ? 'Choose Install or Add to Home screen' : 'Choose Install app or Add to Home screen';
       return [
-        ['menu', 'Open the browser menu', menu],
-        ['home', 'Choose Install or Add', 'Follow your browser\u2019s confirmation. The exact wording depends on the browser.'],
-        ['check', 'Open Spiral', 'Use the new icon on your Home Screen or in your app list.']
+        ['menu', menu, ''],
+        ['home', action, ['chrome', 'samsung', 'firefox'].includes(browser) ? '' : 'If missing, open this link in Chrome.'],
+        ['check', 'Confirm, then open Spiral', '']
       ];
     }
-    return [
-      ['phone', 'Install on your phone', 'Scan the QR code below with your phone\u2019s camera to open this guide.'],
-      ['menu', 'Or install on this computer', 'Use Install Spiral above when available. Otherwise, look for Install in your browser menu, or Add to Dock in Safari on Mac.']
-    ];
+    return [['menu', 'Install on this computer', browser === 'safari'
+      ? 'In Safari on Mac, choose Add to Dock.' : 'Look for Install in your browser\u2019s menu.']];
   }
 
   const icons = {
     share: '<path d="M12 16V3m-4 4 4-4 4 4M7 11H4v10h16V11h-3"/>',
     home: '<path d="m3 11 9-8 9 8M5 10v11h14V10M9 21v-7h6v7"/>',
     menu: '<circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>',
-    check: '<path d="m5 12 4 4L19 6"/>',
-    phone: '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/>',
-    link: '<path d="m10 13 4-4m-6 6-1 1a4 4 0 0 1-6-6l5-5a4 4 0 0 1 6 0m0 4 1-1a4 4 0 0 1 6 6l-5 5a4 4 0 0 1-6 0"/>'
+    check: '<path d="m5 12 4 4L19 6"/>'
   };
 
   function renderSteps(platform, browser, inApp) {
@@ -117,9 +108,12 @@
       const content = document.createElement('div');
       const heading = document.createElement('strong');
       heading.textContent = title;
-      const text = document.createElement('p');
-      text.textContent = description;
-      content.append(heading, text);
+      content.append(heading);
+      if (description) {
+        const text = document.createElement('p');
+        text.textContent = description;
+        content.append(text);
+      }
       item.append(picture, content);
       elements.steps.append(item);
     }
@@ -132,23 +126,19 @@
     const browser = platform === env.platform ? env.browser : 'other';
     const inApp = platform === env.platform && env.inApp;
     const alreadyOpen = env.standalone || state.installedHere;
+    const nativeAvailable = !alreadyOpen && platform === env.platform && !!(state.prompt || state.installing);
     elements.entry.textContent = env.standalone ? 'Share Spiral' : 'Install Spiral';
     elements.title.textContent = env.standalone ? 'Share Spiral' : 'Install Spiral';
     elements.platform.hidden = alreadyOpen;
-    elements.steps.hidden = alreadyOpen;
-    elements.native.hidden = alreadyOpen || !(state.prompt || state.installing);
+    elements.steps.hidden = alreadyOpen || nativeAvailable;
+    elements.native.hidden = !nativeAvailable;
     elements.native.disabled = state.installing;
     elements.native.textContent = state.installing ? 'Opening installer\u2026' : 'Install Spiral';
     elements.native.setAttribute('aria-busy', String(state.installing));
-    const descriptions = {
-      ios: 'iPhone and iPad installation', android: 'Android installation', desktop: 'Install on your phone or computer'
-    };
-    elements.device.textContent = inApp ? 'Open in your browser to install' : descriptions[platform];
-    elements.device.hidden = alreadyOpen;
-    elements.status.textContent = env.standalone ? 'You\u2019re already using Spiral as an app. Share this link to install it on another device.'
-      : state.installedHere ? 'Installation accepted. Open Spiral from your Home Screen when its icon appears.'
-      : state.feedback || (inApp ? 'This browser may hide installation options. Copy the link to Safari or Chrome.'
-        : state.prompt ? 'Your browser is ready to install Spiral.' : 'Follow the steps below to add Spiral to your Home Screen.');
+    elements.platformAuto.textContent = { ios: 'iPhone / iPad', android: 'Android', desktop: 'Computer' }[env.platform] + ' (detected)';
+    elements.status.textContent = env.standalone ? 'Share this link to install Spiral on another device.'
+      : state.installedHere ? 'Spiral is installed. Open it from your Home Screen.' : state.feedback;
+    elements.status.hidden = !elements.status.textContent;
     renderSteps(platform, browser, inApp);
     elements.link.value = getInstallUrl();
     elements.share.hidden = typeof global.navigator.share !== 'function';
@@ -224,10 +214,9 @@
       await prompt.prompt();
       accepted = (await prompt.userChoice)?.outcome === 'accepted';
       if (!state.prompt && !state.installedHere) state.feedback = accepted
-        ? 'Installation requested. Look for Spiral on your Home Screen when its icon appears.'
-        : 'You can install later using your browser menu. The steps are below.';
+        ? 'Installation requested. Open Spiral when its icon appears.' : '';
     } catch (_) {
-      if (!state.prompt) state.feedback = 'Use your browser menu to install Spiral. The steps are below.';
+      if (!state.prompt) state.feedback = 'Could not open the installer. Use the steps below.';
     } finally {
       state.installing = false;
       render();
@@ -265,7 +254,7 @@
 
   function initialize() {
     if (state.ready) return;
-    const ids = { dialog: 'install-guide', app: 'app', backdrop: 'install-backdrop', title: 'install-title', device: 'install-device',
+    const ids = { dialog: 'install-guide', app: 'app', backdrop: 'install-backdrop', title: 'install-title', platformAuto: 'install-platform-auto',
       status: 'install-status', platform: 'install-platform', steps: 'install-steps', native: 'install-native-btn',
       link: 'install-link', copy: 'install-copy-btn', share: 'install-share-btn', linkStatus: 'install-link-status',
       qr: 'install-qr', qrSection: 'install-qr-section', banner: 'a2hs-banner', entry: 'installSpiralBtn' };
