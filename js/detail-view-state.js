@@ -71,6 +71,7 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   closeDetailView(options = {}) {
+    this.finishEventColorPreview?.(this.draftEvent);
     this._detailViewSelectionVersion = (this._detailViewSelectionVersion || 0) + 1;
     this.finishActiveDetailTextEditor({ redraw: false });
     this._cleanupRepeatedTimeChooser?.();
@@ -179,6 +180,7 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   cycleDetailViewEvent(direction = 1) {
+    this._eventClickSequence = null;
     this.finishActiveDetailTextEditor({ redraw: false });
     const detailEventState = this.getDetailViewEventState();
     if (!detailEventState || detailEventState.selectedEventCount < 2) {
@@ -187,7 +189,7 @@ Object.assign(SpiralCalendar.prototype, {
 
     const eventCount = detailEventState.selectedEventCount;
     const normalizedDirection = direction < 0 ? -1 : 1;
-    const nextIndex = (this.mouseState.selectedEventIndex + normalizedDirection + eventCount) % eventCount;
+    const nextIndex = (detailEventState.activeEventIndex + normalizedDirection + eventCount) % eventCount;
     this.mouseState.selectedEventIndex = nextIndex;
     return true;
   },
@@ -229,9 +231,12 @@ Object.assign(SpiralCalendar.prototype, {
     const choices = SpiralTime.possibleInstants(segmentStart, zone);
     const occurrence = part ? choices.findIndex(instant => segmentStart - instant === part.offsetMs) : undefined;
     const range = this.getDefaultEventRange(segmentStart, { occurrence });
+    const candidateColors = [];
     const colorState = this.createEventColorState({
       calendarName: 'Home',
-      eventDate: segmentStart
+      eventDate: segmentStart,
+      initialRange: range,
+      candidateColors
     });
 
     const draft = {
@@ -247,6 +252,7 @@ Object.assign(SpiralCalendar.prototype, {
     };
     this.normalizeRuntimeEvent(draft);
     draft.title = '';
+    this.startDraftEventColorPreview(draft, candidateColors);
     return draft;
   },
 

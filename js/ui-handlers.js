@@ -2,6 +2,15 @@
 Object.assign(SpiralCalendar.prototype, {
     setupEventHandlers() {
       const self = this;
+      // Controls, keyboard actions, and scrolling interrupt consecutive event clicks.
+      for (const type of ['pointerdown', 'click']) {
+        document.addEventListener(type, event => {
+          if (event.target !== this.canvas) this._eventClickSequence = null;
+        }, true);
+      }
+      for (const type of ['keydown', 'wheel', 'blur']) {
+        window.addEventListener(type, () => { this._eventClickSequence = null; }, { capture: true, passive: true });
+      }
       const sliderConfigs = [
         { 
           sliderId: 'daysSlider', 
@@ -906,11 +915,22 @@ Object.assign(SpiralCalendar.prototype, {
     });
     }
 
-      // Stacked overlap rendering toggle
-      const overlayStackModeCheckbox = document.getElementById('overlayStackMode');
-      if (overlayStackModeCheckbox) {
-        overlayStackModeCheckbox.addEventListener('change', (e) => {
-          this.state.overlayStackMode = e.target.checked;
+      const animateEventColorsToggle = document.getElementById('animateEventColorsToggle');
+      if (animateEventColorsToggle) {
+        animateEventColorsToggle.addEventListener('change', event => {
+          this.state.animateEventColors = event.target.checked;
+          this.finishEventColorPreview(this.draftEvent);
+          this.refreshAddEventColorSuggestion?.();
+          this.requestRender();
+          this.requestSettingsSave();
+        });
+      }
+
+      // Keep the saved boolean while presenting the two overlap layouts by name.
+      const overlapLayoutSelect = document.getElementById('overlayStackMode');
+      if (overlapLayoutSelect) {
+        overlapLayoutSelect.addEventListener('change', (e) => {
+          this.state.overlayStackMode = e.target.value === 'adaptive';
           this.requestRender();
           this.requestSettingsSave();
         });

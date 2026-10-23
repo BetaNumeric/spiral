@@ -44,22 +44,69 @@ function fixture(date = '2026-10-08', ranges = [
   return app;
 }
 
-test('repeated mouse and pen clicks select the painted event without advancing', () => {
+test('mouse and pen select an exact band first, then repeated hits on that band cycle every event', () => {
   for (const type of ['mouse', 'pen']) {
     const app = fixture();
     app.hitIndex = 1;
-    for (let tap = 0; tap < 4; tap++) {
-      app.click(type);
-      assert.equal(app.selected(), '1');
-    }
+    const actual = [];
+    for (let click = 0; click < 7; click++) { app.click(type); actual.push(app.selected()); }
+    assert.deepEqual(actual, ['1', '2', '0', '1', '2', '0', '1']);
     app.hitIndex = 2;
     app.click(type);
-    assert.equal(app.selected(), '2');
-    assert.equal(app.colors.length, 0);
+    assert.equal(app.selected(), '2', 'A different hit band selects directly.');
+    app.click(type);
+    assert.equal(app.selected(), '0');
     app.hitIndex = null;
     app.click(type);
-    assert.equal(app.selected(), '2');
+    assert.equal(app.selected(), '0', 'Empty space never advances a precise selection.');
+    app.hitIndex = 2;
+    app.click(type);
+    assert.equal(app.selected(), '2', 'An intervening gap interrupts repeated clicks.');
+    assert.equal(app.colors.length, 0);
+    assert.equal(app.persists, 0);
   }
+});
+
+test('a new hour, reopened details, or explicit cycling starts a fresh precise click sequence', () => {
+  const app = fixture();
+  app.hitIndex = 1;
+  app.click(); app.click();
+  assert.equal(app.selected(), '2');
+  app.pointSegment = app.getSegmentPositionFromId(11);
+  app.click();
+  assert.equal(app.selected(), '1');
+  app.click();
+  assert.equal(app.selected(), '2');
+  app.cycleDetailViewEvent(1);
+  app.click();
+  assert.equal(app.selected(), '1', 'Chevron cycling interrupts the preceding hit sequence.');
+  app.openDetailViewForSegment(app.pointSegment, { selectedEventIndex: 1 });
+  app.click();
+  assert.equal(app.selected(), '1', 'A reopened selection starts with a direct hit.');
+  app.click();
+  assert.equal(app.selected(), '2');
+});
+
+test('drag suppression interrupts repeated event clicks', () => {
+  const app = fixture();
+  app.hitIndex = 1;
+  app.click(); app.click();
+  app.mouseState.wasDragging = true;
+  app.click();
+  assert.equal(app.selected(), '2');
+  app.click();
+  assert.equal(app.selected(), '1');
+});
+
+test('a fast repeated click finishes the opening preview and cycles without reselecting the hit band', () => {
+  const app = fixture();
+  app.hitIndex = 1;
+  app.click();
+  app.state.detailViewDay = null;
+  app.isDetailViewPreviewActive = () => true;
+  app.completeModeTransitionImmediately = () => { app.state.detailViewDay = app.pointSegment.day; };
+  app.click();
+  assert.equal(app.selected(), '2');
 });
 
 test('keyboard event navigation follows chronology across hours and days, skipping hidden calendars', () => {
@@ -128,20 +175,29 @@ test('touch taps visit every event and wrap without resetting to a narrow band',
       app.click('touch');
       actual.push(app.selected());
     }
-    assert.deepEqual(actual, ['0', '1', '2', '0', '1', '2', '0']);
+    assert.deepEqual(actual, hits.map((_, index) => String((hits[0] + index) % 3)));
     assert.equal(app.colors.length, 0);
   }
 });
 
-test('touch starts from the first event when opening another hour', () => {
+test('touch starts from the hit event when opening another hour and cycles from there', () => {
   const app = fixture();
   app.hitIndex = 2;
   app.click('touch');
-  app.click('touch');
-  assert.equal(app.selected(), '1');
-  app.pointSegment = app.getSegmentPositionFromId(11);
+  assert.equal(app.selected(), '2');
   app.click('touch');
   assert.equal(app.selected(), '0');
+  app.pointSegment = app.getSegmentPositionFromId(11);
+  app.hitIndex = 1;
+  app.click('touch');
+  assert.equal(app.selected(), '1');
+  app.hitIndex = 0;
+  app.click('touch');
+  assert.equal(app.selected(), '2');
+  app.pointSegment = app.getSegmentPositionFromId(10);
+  app.hitIndex = null;
+  app.click('touch');
+  assert.equal(app.selected(), '0', 'A tap that misses a thin band still opens the hour.');
 });
 
 test('legacy touch clicks use the gesture origin and modern mouse clicks override it', () => {
@@ -150,13 +206,15 @@ test('legacy touch clicks use the gesture origin and modern mouse clicks overrid
   for (let tap = 0; tap < 3; tap++) {
     app._canvasPointerType = 'touch';
     app.click('');
-    assert.equal(app.selected(), String(tap));
+    assert.equal(app.selected(), String((2 + tap) % 3));
     assert.equal(app._canvasPointerType, null);
   }
   app._canvasPointerType = 'touch';
   app.hitIndex = 1;
   app.click('mouse');
   assert.equal(app.selected(), '1');
+  app.click('touch');
+  assert.equal(app.selected(), '1', 'Switching input type begins with a direct selection.');
   app.click('touch');
   assert.equal(app.selected(), '2');
 });
@@ -166,7 +224,7 @@ test('touch-origin compatibility clicks can identify their source without pointe
   app.hitIndex = 2;
   for (let tap = 0; tap < 3; tap++) {
     app.handleClick({ clientX: 80, clientY: 80, sourceCapabilities: { firesTouchEvents: true } });
-    assert.equal(app.selected(), String(tap));
+    assert.equal(app.selected(), String((2 + tap) % 3));
   }
 });
 
@@ -196,19 +254,51 @@ test('cycling remains available through the explicit previous and next controls'
   assert.equal(app.selected(), '0');
 });
 
-test('touch cycles only within the selected occurrence of a repeated hour', () => {
-  const app = fixture('2026-10-25', [
-    ['00:05:00Z', '00:55:00Z'], ['00:10:00Z', '00:50:00Z'],
-    ['01:05:00Z', '01:55:00Z'], ['01:10:00Z', '01:50:00Z']
-  ]);
-  app.pointSegment = { ...app.getSegmentPositionFromId(2), clockOffsetMs: 7200000 };
-  const first = [];
-  for (let tap = 0; tap < 3; tap++) { app.click('touch'); first.push(app.selected()); }
-  assert.deepEqual(first, ['0', '1', '0']);
-  app.pointSegment = { ...app.getSegmentPositionFromId(2), clockOffsetMs: 3600000 };
-  const second = [];
-  for (let tap = 0; tap < 3; tap++) { app.click('touch'); second.push(app.selected()); }
-  assert.deepEqual(second, ['2', '3', '2']);
+test('click, tap, and chevron cycling follow inner-to-outer lanes independently of saved event order', () => {
+  for (const reversed of [false, true]) for (const pointerType of ['mouse', 'pen', 'touch']) {
+    const app = fixture('2026-10-08', [
+      ['08:30:00Z', '09:30:00Z'], ['08:00:00Z', '10:00:00Z'], ['08:15:00Z', '09:45:00Z']
+    ]);
+    if (reversed) { app.events.reverse(); app._eventsVersion++; }
+    const before = JSON.stringify(app.events);
+    app.hitIndex = 1; // The middle visible lane, not the second saved record.
+    const actual = [];
+    for (let count = 0; count < 5; count++) { app.click(pointerType); actual.push(app.selected()); }
+    assert.deepEqual(actual, ['2', '0', '1', '2', '0']);
+    app.cycleDetailViewEvent(-1);
+    assert.equal(app.selected(), '2');
+    assert.equal(JSON.stringify(app.events), before);
+    assert.equal(app.persists, 0);
+  }
+});
+
+test('cycling after an event disappears advances from the event currently displayed', () => {
+  const app = fixture();
+  app.hitIndex = 2;
+  app.click();
+  app.events.pop();
+  app._eventsVersion++;
+  assert.equal(app.selected(), '1');
+  app.cycleDetailViewEvent(1);
+  assert.equal(app.selected(), '0');
+});
+
+test('mouse, pen, and touch sequences select and cycle only within one occurrence of a repeated hour', () => {
+  for (const pointerType of ['mouse', 'pen', 'touch']) {
+    const app = fixture('2026-10-25', [
+      ['00:05:00Z', '00:55:00Z'], ['00:10:00Z', '00:50:00Z'],
+      ['01:05:00Z', '01:55:00Z'], ['01:10:00Z', '01:50:00Z']
+    ]);
+    app.pointSegment = { ...app.getSegmentPositionFromId(2), clockOffsetMs: 7200000 };
+    app.hitIndex = 1;
+    const first = [];
+    for (let tap = 0; tap < 3; tap++) { app.click(pointerType); first.push(app.selected()); }
+    assert.deepEqual(first, ['1', '0', '1']);
+    app.pointSegment = { ...app.getSegmentPositionFromId(2), clockOffsetMs: 3600000 };
+    const second = [];
+    for (let tap = 0; tap < 3; tap++) { app.click(pointerType); second.push(app.selected()); }
+    assert.deepEqual(second, ['3', '2', '3']);
+  }
 });
 
 test('stationary taps near a handle cycle without editing or saving event times', () => {

@@ -160,8 +160,7 @@ test('a dense overlap group and its disconnected neighbors receive the same comp
   const c = add(app, '2026-10-25T09:30:00Z', '2026-10-25T10:30:00Z');
   const after = add(app, '2026-10-25T10:30:00Z', '2026-10-25T11:00:00Z');
   for (let i = 0; i < 300; i++) add(app, '2026-10-25T12:00:00Z', '2026-10-25T13:00:00Z');
-  const { eventToLane } = app.computePersistentEventLanesForWindow();
-  const { eventToComponent, componentLaneCount } = app.computeEventComponentsForWindow(eventToLane);
+  const { eventToLane, eventToComponent, componentLaneCount } = app.computeEventOverlapLayout();
   assert.equal(eventToComponent.get(a), eventToComponent.get(c));
   assert.equal(componentLaneCount.get(eventToComponent.get(b)), 2);
   assert.notEqual(eventToComponent.get(c), eventToComponent.get(after));
@@ -194,11 +193,13 @@ test('overlap components match independent pairwise connectivity for shuffled, n
     }
     group++;
   }
-  const { eventToLane } = app.computePersistentEventLanesForWindow();
-  const { eventToComponent } = app.computeEventComponentsForWindow(eventToLane);
+  const { eventToLane, eventToComponent } = app.computeEventOverlapLayout();
   for (let i = 0; i < records.length; i++) for (let j = i + 1; j < records.length; j++) {
     assert.equal(eventToComponent.get(records[i].displayInterval) === eventToComponent.get(records[j].displayInterval),
       groups.get(i) === groups.get(j));
+    if (records[i].startMs < records[j].endMs && records[j].startMs < records[i].endMs) {
+      assert.notEqual(eventToLane.get(records[i].displayInterval), eventToLane.get(records[j].displayInterval));
+    }
   }
 });
 
@@ -240,4 +241,93 @@ test('rendering resolves the device zone once per frame and refreshes it after c
   } finally {
     context.Intl = previousIntl;
   }
+});
+
+test('overlap lanes and fixed widths remain stable when their earlier neighbor leaves the visible window', () => {
+  const app = calendar();
+  const a = add(app, '2026-10-25T06:00:00Z', '2026-10-25T07:00:00Z', { timeModel: 'instant-v1' });
+  const b = add(app, '2026-10-25T06:30:00Z', '2026-10-25T09:00:00Z', { timeModel: 'instant-v1' });
+  const c = add(app, '2026-10-25T08:00:00Z', '2026-10-25T08:30:00Z', { timeModel: 'instant-v1' });
+  // After the fold, these canonical times correspond to 07:00, 07:30, and 09:00 locally.
+  let firstHour = 7;
+  app.visibleWindowStart = () => Time.parseWall(`2026-10-25T${String(firstHour).padStart(2, '0')}:00`);
+  app.visibleWindowEnd = () => Time.parseWall('2026-10-25T12:00');
+  const snapshot = () => {
+    app.ensureLayoutCache();
+    const { eventToLane, eventToComponent, componentLaneCount } = app.layoutCache;
+    return [b, c].map(event => [eventToLane.get(event), componentLaneCount.get(eventToComponent.get(event))]);
+  };
+  const before = snapshot();
+  assert.ok(before.every(([lane, count]) => Number.isInteger(lane) && count === 2));
+  firstHour = 8;
+  assert.deepEqual(snapshot(), before);
+  assert.ok(app.visibleWindowStart() >= app.getEventWallDate(a, 'end'));
+});
+
+test('identical event times use persistent identities to retain lane order across import order', () => {
+  const records = ['uid-z', 'uid-a', 'uid-m'].map(persistentUID => ({ persistentUID, timeModel: 'instant-v1',
+    start: '2026-10-25T08:00:00Z', end: '2026-10-25T10:00:00Z' }));
+  const snapshots = [records, [...records].reverse(), [records[1], records[0], records[2]]].map(order => {
+    const app = calendar();
+    for (const record of order) add(app, record.start, record.end, record);
+    const { eventToLane } = app.computeEventOverlapLayout();
+    return app.events.map(event => [event.persistentUID, eventToLane.get(event)]).sort((a, b) => a[0].localeCompare(b[0]));
+  });
+  assert.deepEqual(snapshots[1], snapshots[0]);
+  assert.deepEqual(snapshots[2], snapshots[0]);
+});
+
+test('draft time changes refresh shared lanes, and adding the draft retains its lane assignment', () => {
+  const app = calendar();
+  app.finishActiveDetailTextEditor = () => {};
+  const saved = add(app, '2026-10-25T08:00:00Z', '2026-10-25T08:30:00Z', { timeModel: 'instant-v1' });
+  const draft = app.normalizeRuntimeEvent({ title: 'Draft', timeModel: 'instant-v1', calendar: 'Home',
+    start: '2026-10-25T08:30:00Z', end: '2026-10-25T09:00:00Z' });
+  Object.assign(draft, { isDraft: true, segmentId: 9 });
+  app.draftEvent = draft;
+  app.mouseState.selectedSegmentId = 9;
+  const snapshot = events => {
+    app.ensureLayoutCache();
+    const { eventToLane, eventToComponent, componentLaneCount } = app.layoutCache;
+    return events.map(event => [eventToLane.get(event), componentLaneCount.get(eventToComponent.get(event))]);
+  };
+  assert.deepEqual(snapshot([saved, draft]), [[0, 1], [0, 1]]);
+  const version = app._eventsVersion;
+  // Handle drags can update the draft directly without changing the stored events version.
+  draft.start = new Date('2026-10-25T08:00:00Z');
+  const overlapping = snapshot([saved, draft]);
+  assert.equal(app._eventsVersion, version);
+  assert.ok(overlapping.every(([lane, count]) => Number.isInteger(lane) && count === 2));
+  assert.notEqual(overlapping[0][0], overlapping[1][0]);
+  app.mouseState.selectedSegmentId = null;
+  assert.deepEqual(snapshot([saved]), [[0, 1]], 'An inactive draft must stop occupying a lane.');
+  app.mouseState.selectedSegmentId = 9;
+  assert.deepEqual(snapshot([saved, draft]), overlapping);
+  const added = app.addDraftEvent();
+  assert.ok(added);
+  assert.equal(app.draftEvent, null);
+  assert.deepEqual(snapshot([saved, added]), overlapping);
+});
+
+test('all-day overlap follows calendar dates in the display zone rather than its original stored instants', () => {
+  const app = calendar();
+  const allDay = add(app, '2026-10-24T22:00:00Z', '2026-10-25T23:00:00Z', {
+    timeModel: 'instant-v1', allDay: true, startDate: '2026-10-25', endDate: '2026-10-26' });
+  const late = add(app, '2026-10-26T08:00:00Z', '2026-10-26T09:00:00Z', { timeModel: 'instant-v1' });
+  assert.ok(allDay.end <= late.start, 'The original canonical instants do not overlap.');
+  app.state.locationTimezoneId = 'Pacific/Honolulu';
+  const point = app.getSegmentPositionFromId(22);
+  assert.deepEqual(new Set(Array.from(app.getAllEventsForSegment(point.day, point.segment), entry => entry.event)),
+    new Set([allDay, late]), 'Both events occupy October 25 at 22:00 in the chosen display zone.');
+  app.ensureLayoutCache();
+  let { eventToLane, eventToComponent, componentLaneCount } = app.layoutCache;
+  assert.notEqual(eventToLane.get(allDay), eventToLane.get(late));
+  assert.equal(eventToComponent.get(allDay), eventToComponent.get(late));
+  assert.equal(componentLaneCount.get(eventToComponent.get(allDay)), 2);
+  app.state.locationTimezoneId = 'UTC';
+  app.ensureLayoutCache();
+  ({ eventToLane, eventToComponent, componentLaneCount } = app.layoutCache);
+  assert.notEqual(eventToComponent.get(allDay), eventToComponent.get(late));
+  assert.equal(componentLaneCount.get(eventToComponent.get(allDay)), 1);
+  assert.equal(componentLaneCount.get(eventToComponent.get(late)), 1);
 });

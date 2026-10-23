@@ -270,31 +270,19 @@ Object.assign(SpiralCalendar.prototype, {
       startup.animationId = requestAnimationFrame(step);
     },
 
-    ensureLayoutCache() {
-      const windowStartMs = this.visibleWindowStart().getTime();
-      const windowEndMs = this.visibleWindowEnd().getTime();
-      const calendarsKey = JSON.stringify([...this.state.visibleCalendars].sort());
-      const zone = this.getCalendarTimeZone();
-      const needRebuild = !this.layoutCache ||
-        this.layoutCache.windowStartMs !== windowStartMs ||
-        this.layoutCache.windowEndMs !== windowEndMs ||
-        this.layoutCache.calendarsKey !== calendarsKey ||
-        this.layoutCache.zone !== zone ||
-        this.layoutCache.eventsVersion !== this._eventsVersion;
-      if (!needRebuild) return;
+    getActiveLayoutDraft() {
+      return this.draftEvent && this.draftEvent.segmentId === this.mouseState?.selectedSegmentId
+        ? this.draftEvent : null;
+    },
 
-      const { eventToLane } = this.computePersistentEventLanesForWindow();
-      const { eventToComponent, componentLaneCount } = this.computeEventComponentsForWindow(eventToLane);
-      this.layoutCache = {
-        windowStartMs,
-        windowEndMs,
-        calendarsKey,
-        zone,
-        eventsVersion: this._eventsVersion,
-        eventToLane,
-        eventToComponent,
-        componentLaneCount,
-      };
+    ensureLayoutCache() {
+      const index = this.getEventIntervalIndex();
+      const draft = this.getActiveLayoutDraft();
+      const draftProjection = draft ? this.getEventProjection(draft) : null;
+      if (this.layoutCache?.index === index && this.layoutCache.draft === draft &&
+          this.layoutCache.draftProjection === draftProjection) return;
+      this.layoutCache = { index, draft, draftProjection,
+        ...this.computeEventOverlapLayout(index, draft, draftProjection) };
     },
 
     init() {
@@ -472,8 +460,9 @@ Object.assign(SpiralCalendar.prototype, {
     getAllEventsForSegment(day, segment) {
       const { startMs: segmentStartMs, endMs: segmentEndMs } = this.getSegmentHourRange(day, segment);
       const intervals = this.getEventIntervalIndex().query(segmentStartMs, segmentEndMs);
-      if (this.draftEvent && this.mouseState && this.draftEvent.segmentId === this.mouseState.selectedSegmentId) {
-        const event = this.draftEvent;
+      const draft = this.getActiveLayoutDraft();
+      if (draft) {
+        const event = draft;
         const projection = this.getEventProjection(event);
         for (const displayInterval of projection.intervals) intervals.push({ event, projection, displayInterval });
       }
@@ -503,10 +492,14 @@ Object.assign(SpiralCalendar.prototype, {
       const { startMs } = this.getSegmentHourRange(segment.day, segment.segment);
       const layout = SpiralEventProjection.repeatedHour(startMs, this.getCalendarTimeZone());
       const part = layout?.parts.find(part => part.offsetMs === segment.clockOffsetMs);
-      if (!part) return entries;
-      const from = startMs + part.startFraction * SpiralTime.HOUR;
-      const to = startMs + part.endFraction * SpiralTime.HOUR;
-      return entries.filter(entry => entry.startLayoutMs < to && entry.endLayoutMs > from);
+      const from = part ? startMs + part.startFraction * SpiralTime.HOUR : startMs;
+      const to = part ? startMs + part.endFraction * SpiralTime.HOUR : startMs + SpiralTime.HOUR;
+      this.ensureLayoutCache();
+      const lanes = this.layoutCache.eventToLane;
+      return entries.filter(entry => entry.startLayoutMs < to && entry.endLayoutMs > from)
+        .sort((a, b) => lanes.get(a.displayInterval) - lanes.get(b.displayInterval) ||
+          a.startLayoutMs - b.startLayoutMs || a.endLayoutMs - b.endLayoutMs ||
+          (a.event.persistentUID < b.event.persistentUID ? -1 : a.event.persistentUID > b.event.persistentUID ? 1 : 0));
     },
 
     getMaxOverlapForEventAcrossHours(targetEvent) {
@@ -526,147 +519,73 @@ Object.assign(SpiralCalendar.prototype, {
       return maximum;
     },
 
-    computeEventLanes(events) {
-      if (!events || events.length === 0) {
-        return { lanes: [], numLanes: 0 };
-      }
+    computeEventOverlapLayout(index = this.getEventIntervalIndex(), draft = this.getActiveLayoutDraft(),
+      draftProjection = draft ? this.getEventProjection(draft) : null) {
+      // Layout whole events, independent of the viewport. Display envelopes keep
+      // all-day dates in the viewing zone and join an event's DST pieces.
+      const records = new Map();
+      const include = (event, projection) => {
+        if (records.has(event)) return;
+        const startMs = Math.min(...projection.intervals.map(part => part.layoutStartMs));
+        const endMs = Math.max(...projection.intervals.map(part => part.layoutEndMs));
+        if (endMs > startMs) records.set(event, { event, projection, startMs, endMs });
+      };
+      for (const { event, projection } of index.entries) include(event, projection);
+      if (draft) include(draft, draftProjection);
+      const ordered = [...records.values()].sort((a, b) => a.startMs - b.startMs || b.endMs - a.endMs ||
+        (a.event.persistentUID < b.event.persistentUID ? -1 : a.event.persistentUID > b.event.persistentUID ? 1 : 0));
 
-      // Sort for stable, cross-hour ordering of the same events:
-      // 1) by totalDurationMinutes descending (longer events get stable priority)
-      // 2) by event global start time (earlier starts first)
-      // 3) by in-hour startMinute to keep a natural order within ties
-      const indexed = events.map((ev, idx) => ({ ev, idx }));
-      indexed.sort((a, b) => {
-        const adur = a.ev.totalDurationMinutes || 0;
-        const bdur = b.ev.totalDurationMinutes || 0;
-        if (bdur !== adur) return bdur - adur;
-        const aStart = a.ev.startUtcMs || 0;
-        const bStart = b.ev.startUtcMs || 0;
-        if (aStart !== bStart) return aStart - bStart;
-        if (a.ev.startMinute !== b.ev.startMinute) return a.ev.startMinute - b.ev.startMinute;
-        // Final tie-breaker: earlier end inside hour first
-        return a.ev.endMinute - b.ev.endMinute;
-      });
-
-      const laneEndMinutes = []; // laneEndMinutes[lane] = last end minute in that lane
-      const laneByOriginalIndex = new Array(events.length).fill(0);
-
-      for (const item of indexed) {
-        const start = item.ev.startMinute;
-        const end = item.ev.endMinute;
-        let assignedLane = -1;
-
-        // Find first lane whose last event ends at or before this start (no overlap)
-        for (let lane = 0; lane < laneEndMinutes.length; lane++) {
-          if (start >= laneEndMinutes[lane]) {
-            assignedLane = lane;
-            laneEndMinutes[lane] = end;
-            break;
+      // Two small heaps release ended lanes and reuse the innermost free lane.
+      const push = (heap, value, before) => {
+        let child = heap.length;
+        heap.push(value);
+        while (child > 0) {
+          const parent = (child - 1) >>> 1;
+          if (!before(value, heap[parent])) break;
+          heap[child] = heap[parent];
+          child = parent;
+        }
+        heap[child] = value;
+      };
+      const pop = (heap, before) => {
+        const first = heap[0], last = heap.pop();
+        if (heap.length) {
+          let parent = 0;
+          while (parent * 2 + 1 < heap.length) {
+            let child = parent * 2 + 1;
+            if (child + 1 < heap.length && before(heap[child + 1], heap[child])) child++;
+            if (!before(heap[child], last)) break;
+            heap[parent] = heap[child];
+            parent = child;
           }
+          heap[parent] = last;
         }
-
-        // If none fit, open a new lane
-        if (assignedLane === -1) {
-          assignedLane = laneEndMinutes.length;
-          laneEndMinutes.push(end);
+        return first;
+      };
+      const endsFirst = (a, b) => a.endMs < b.endMs || a.endMs === b.endMs && a.lane < b.lane;
+      const innerFirst = (a, b) => a < b;
+      const active = [], free = [];
+      const eventToLane = new Map(), eventToComponent = new Map(), componentLaneCount = new Map();
+      let component = -1, laneCount = 0, numLanes = 0;
+      for (const record of ordered) {
+        while (active.length && active[0].endMs <= record.startMs) {
+          push(free, pop(active, endsFirst).lane, innerFirst);
         }
-
-        laneByOriginalIndex[item.idx] = assignedLane;
-      }
-
-      return { lanes: laneByOriginalIndex, numLanes: laneEndMinutes.length };
-    },
-
-    computePersistentEventLanesForWindow() {
-      const windowStart = this.visibleWindowStart();
-      const windowEnd = this.visibleWindowEnd();
-      const windowStartMs = windowStart.getTime();
-      const windowEndMs = windowEnd.getTime();
-
-      // Build list of effective intervals within the window
-      const intervals = [];
-      for (const { event, displayInterval, projection } of this.getEventIntervalsForWindow()) {
-        const startMs = Math.max(displayInterval.layoutStartMs, windowStartMs);
-        const endMs = Math.min(displayInterval.layoutEndMs, windowEndMs);
-        intervals.push({ event, displayInterval, startMs, endMs,
-          totalDurationMinutes: (projection.endInstantMs - projection.startInstantMs) / 60000,
-          globalStartMs: displayInterval.startInstantMs });
-      }
-
-      // Sweep line: create points, ends before starts at same time
-      const points = [];
-      for (const it of intervals) {
-        points.push({ t: it.startMs, type: 'start', it });
-        points.push({ t: it.endMs, type: 'end', it });
-      }
-      points.sort((a, b) => {
-        if (a.t !== b.t) return a.t - b.t;
-        if (a.type !== b.type) return a.type === 'end' ? -1 : 1; // end before start
-        if (a.type === 'start') {
-          // longer events first, then earlier global start
-          if (b.it.totalDurationMinutes !== a.it.totalDurationMinutes) return b.it.totalDurationMinutes - a.it.totalDurationMinutes;
-          return a.it.globalStartMs - b.it.globalStartMs;
-        } else {
-          // ends: earlier ends first
-          return a.it.endMs - b.it.endMs;
+        if (!active.length) {
+          component++;
+          laneCount = 0;
+          free.length = 0;
         }
-      });
-
-      const eventToLane = new Map();
-      const freeLanes = [];
-      let maxLaneIndex = -1;
-
-      for (const p of points) {
-        const ev = p.it.displayInterval;
-        if (p.type === 'end') {
-          const lane = eventToLane.get(ev);
-          if (lane !== undefined) freeLanes.push(lane);
-        } else {
-          // assign lane
-          let lane;
-          if (freeLanes.length > 0) {
-            // use smallest available lane index
-            freeLanes.sort((x, y) => x - y);
-            lane = freeLanes.shift();
-          } else {
-            lane = ++maxLaneIndex;
-          }
-          eventToLane.set(ev, lane);
-          if (!eventToLane.has(p.it.event)) eventToLane.set(p.it.event, lane);
+        const lane = free.length ? pop(free, innerFirst) : laneCount++;
+        push(active, { endMs: record.endMs, lane }, endsFirst);
+        for (const key of [record.event, ...record.projection.intervals]) {
+          eventToLane.set(key, lane);
+          eventToComponent.set(key, component);
         }
+        componentLaneCount.set(component, laneCount);
+        numLanes = Math.max(numLanes, laneCount);
       }
-
-      return { eventToLane, numLanes: Math.max(0, maxLaneIndex + 1) };
-    },
-
-    computeEventComponentsForWindow(eventToLane) {
-      const from = this.visibleWindowStart().getTime();
-      const to = this.visibleWindowEnd().getTime();
-      const entries = this.getEventIntervalsForWindow().map(({ event, displayInterval: interval }) => ({ event, interval }));
-      const { find, unite } = createUnionFind(entries.length);
-      const points = entries.flatMap(({ interval }, index) => [
-        { t: Math.max(from, interval.layoutStartMs), index, delta: 1 },
-        { t: Math.min(to, interval.layoutEndMs), index, delta: -1 }
-      ]).sort((a, b) => a.t - b.t || a.delta - b.delta);
-      const active = new Set();
-      for (const point of points) {
-        if (point.delta < 0) active.delete(point.index);
-        else {
-          // Every active interval overlaps this start, so they already share a component.
-          if (active.size) unite(active.values().next().value, point.index);
-          active.add(point.index);
-        }
-      }
-      const eventToComponent = new Map();
-      const componentLaneCount = new Map();
-      entries.forEach(({ event, interval }, index) => {
-        const component = find(index);
-        eventToComponent.set(interval, component);
-        if (!eventToComponent.has(event)) eventToComponent.set(event, component);
-        componentLaneCount.set(component, Math.max(componentLaneCount.get(component) || 1,
-          (eventToLane.get(interval) || 0) + 1));
-      });
-      return { eventToComponent, componentLaneCount };
+      return { eventToLane, eventToComponent, componentLaneCount, numLanes };
     },
 
     getEventColorForSegment(day, segment) {

@@ -50,9 +50,20 @@ are saved only when you choose **Add Event**. **Home** and **Work** are the defa
 calendars, and you can add your own.
 
 To change an event's color, select it and tap its colored ring.
+New random colors favor different hues from overlapping events and neighbors
+up to two hours away, with more weight given to closer events.
+The next event after the new event ends is also considered, however far away it is.
+The initial choice stays fixed when events are edited or moved.
+New drafts briefly preview the color candidates before settling on the chosen color.
+Turn this off with **Settings > Show Dev Options > Animate new event colors**.
 Drag the start or end handle to change its duration directly on the spiral.
-Overlapping events stack. A mouse or pen click selects the event under the pointer.
-Touch taps select the hour; repeated taps cycle through its events. The chevrons
+Overlapping events share the coil's width. Under **Settings > Show Dev Options**,
+choose **Adaptive widths** to fill the available space as overlaps start and end,
+or **Fixed lanes** to keep each event's lane and width throughout its duration.
+A mouse or pen click selects the event under the pointer; consecutive clicks on
+that same event within the same hour cycle through the hour's events.
+The first touch tap selects the event under your finger; consecutive taps anywhere
+in that hour cycle from there, following the lanes from inner to outer. The chevrons
 in the details let you cycle with either input. **+ New** creates another event, and
 **Delete** removes the selected event.
 
@@ -139,7 +150,8 @@ thickness, guide lines, and labels. You can also adjust the day count with
 **Shift+scroll** or a three-finger pinch, and coil thickness with **Ctrl+scroll**
 or a four-finger pinch. A Radius value of 1 gives coils equal thickness; higher
 values make outer coils wider. The **+** panel includes a random-event generator
-for trying different calendars and overlaps.
+for trying different calendars and overlaps. Its progress bar includes **Cancel**;
+cancelling discards the unfinished batch and keeps existing events.
 
 **Study Session** records interactions for a study. Enter a participant ID,
 choose a phase, start and stop recording, then download the data. **Open Study

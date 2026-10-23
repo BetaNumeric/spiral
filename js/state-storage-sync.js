@@ -423,6 +423,7 @@ Object.assign(SpiralCalendar.prototype, {
       'showSegmentEdges',
       'showArcLines',
       'overlayStackMode',
+      'animateEventColors',
       'showEventBoundaryStrokes',
       'showAllEventBoundaryStrokes',
       'audioFeedbackEnabled',
@@ -973,8 +974,8 @@ Object.assign(SpiralCalendar.prototype, {
       { id: 'gradientOverlayToggle', value: this.state.showGradientOverlay },
       { id: 'segmentEdgesToggle', value: this.state.showSegmentEdges },
       { id: 'arcLinesToggle', value: this.state.showArcLines },
-      { id: 'overlayStackMode', value: this.state.overlayStackMode },
       { id: 'eventBoundaryStrokesToggle', value: this.state.showEventBoundaryStrokes },
+      { id: 'animateEventColorsToggle', value: this.state.animateEventColors },
       { id: 'eventBoundaryAllEdgesToggle', value: this.state.showAllEventBoundaryStrokes },
       { id: 'eventListCalendarButtonsToggle', value: this.state.showEventListCalendarButtons !== false },
       { id: 'longPressJoystickToggle', value: this.state.enableLongPressJoystick },
@@ -990,6 +991,10 @@ Object.assign(SpiralCalendar.prototype, {
         element.checked = checkbox.value;
       }
     });
+    const overlapLayoutSelect = document.getElementById('overlayStackMode');
+    if (overlapLayoutSelect) {
+      overlapLayoutSelect.value = this.state.overlayStackMode ? 'adaptive' : 'fixed';
+    }
     const useLocationTimezoneToggle = document.getElementById('useLocationTimezoneToggle');
     if (useLocationTimezoneToggle) {
       useLocationTimezoneToggle.checked = !!this.state.useLocationTimezone;
@@ -2365,21 +2370,13 @@ Object.assign(SpiralCalendar.prototype, {
 
     let rInner;
     let rOuter;
-    if (matchedSlice && matchedSlice.isCircleMode &&
-        typeof matchedSlice.innerRadius === 'number' &&
-        typeof matchedSlice.outerRadius === 'number') {
-      rInner = matchedSlice.innerRadius;
-      rOuter = matchedSlice.outerRadius;
+    if (matchedSlice) {
+      const bounds = SpiralGeometry.eventBoundsAtAngle(matchedSlice, th, true);
+      rInner = bounds.inner;
+      rOuter = bounds.outer;
     } else {
       rInner = radiusFunction(th);
       rOuter = radiusFunction(th + 2 * Math.PI);
-      if (matchedSlice) {
-        const h = rOuter - rInner;
-        const sliceStart = (matchedSlice.eventSliceStart != null) ? matchedSlice.eventSliceStart : 0;
-        const sliceEnd = (matchedSlice.eventSliceEnd != null) ? matchedSlice.eventSliceEnd : 1;
-        rInner = rInner + sliceStart * h;
-        rOuter = rInner + (sliceEnd - sliceStart) * h;
-      }
     }
 
     const rMid = (rInner + rOuter) * 0.5;

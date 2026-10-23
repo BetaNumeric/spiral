@@ -1334,6 +1334,7 @@ Object.assign(SpiralCalendar.prototype, {
     }
 
     if (touchUsedJoystick && e.touches.length === 0) {
+      this._eventClickSequence = null;
       this.touchState.joystickConsumedTouch = false;
       this.mouseState.isDragging = false;
       this.mouseState.hasMovedDuringDrag = false;
@@ -1360,7 +1361,7 @@ Object.assign(SpiralCalendar.prototype, {
         // A stationary finger near a handle is still a tap, not a resize.
         this.mouseState.wasDragging = false;
         this.handleClick({ clientX: touch.clientX, clientY: touch.clientY, pointerType: 'touch' });
-      }
+      } else this._eventClickSequence = null;
       if (e.cancelable) e.preventDefault();
       return;
     }
@@ -1467,9 +1468,11 @@ Object.assign(SpiralCalendar.prototype, {
     if (e.touches.length === 0) {
       const wasMultiTouch = !!this.touchState.wasMultiTouch;
       this.touchState.wasMultiTouch = false;
+      if (wasMultiTouch) this._eventClickSequence = null;
       
       if (this.mouseState.isDragging && this.mouseState.hasMovedDuringDrag) {
         this.mouseState.wasDragging = true;
+        this._eventClickSequence = null;
       }
       this.mouseState.isDragging = false;
       this.mouseState.hasMovedDuringDrag = false;

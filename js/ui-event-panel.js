@@ -160,6 +160,11 @@ Object.assign(SpiralCalendar.prototype, {
     };
     let addEventColorSeed = this.createEventColorSeed();
     let addEventColorManualOverride = false;
+    let finishAddEventColorPreview = null;
+    const settleAddEventColor = () => {
+      finishAddEventColorPreview?.();
+      finishAddEventColorPreview = null;
+    };
     const getAddEventSuggestedColor = () => {
       const calendarName = (this.selectedEventCalendar || this.state.selectedCalendar || 'Home').trim();
       if (this.state.colorMode === 'calendar') {
@@ -186,9 +191,17 @@ Object.assign(SpiralCalendar.prototype, {
       return eventColor.value;
     };
     const applyAddEventPaletteSuggestion = (options = {}) => {
+      settleAddEventColor();
       try {
+        const candidateColors = options.animate ? [] : null;
         if (options.resetSeed) {
-          addEventColorSeed = this.createEventColorSeed();
+          const calendarName = (this.selectedEventCalendar || this.state.selectedCalendar || 'Home').trim();
+          addEventColorSeed = this.createEventColorState({
+            calendarName,
+            eventDate: getAddPanelStartDate(),
+            initialRange: getPanelTimeRange(),
+            candidateColors
+          }).colorSeed;
         }
         if (options.resetManual || options.forceAuto) {
           addEventColorManualOverride = false;
@@ -200,6 +213,11 @@ Object.assign(SpiralCalendar.prototype, {
         const suggestedColor = getAddEventSuggestedColor();
         eventColor.value = suggestedColor;
         colorBox.style.background = suggestedColor;
+        if (candidateColors) {
+          finishAddEventColorPreview = this.animateEventColorCandidates(candidateColors, suggestedColor,
+            color => { colorBox.style.background = color; },
+            () => eventInputPanel.style.display === 'block' && !addEventColorManualOverride);
+        }
       } catch (_) {
         colorBox.style.background = eventColor.value;
       }
@@ -745,11 +763,7 @@ Object.assign(SpiralCalendar.prototype, {
       // Get event display color
       const isDarkMode = document.body.classList.contains('dark-mode');
       const displayColor = normalizeHexColor(this.getDisplayColorForEvent(ev));
-      const selectedEventsHere = this.mouseState.selectedSegment
-        ? this.getAllEventsForSegment(this.mouseState.selectedSegment.day, this.mouseState.selectedSegment.segment)
-        : [];
-      const selectedEventIndex = Math.min(this.mouseState.selectedEventIndex || 0, Math.max(0, selectedEventsHere.length - 1));
-      const selectedEvent = selectedEventsHere[selectedEventIndex] ? selectedEventsHere[selectedEventIndex].event : null;
+      const selectedEvent = this.getDetailViewEventState()?.detailEvent;
       const isSelectedEvent = selectedEvent === ev;
       const activeEventIds = this._eventListActiveIds || new Set();
       const eventId = ev.persistentUID;
@@ -2314,7 +2328,21 @@ Object.assign(SpiralCalendar.prototype, {
       return d;
     };
 
-    randGenerate.addEventListener('click', () => {
+    const randProgressControls = document.getElementById('randProgressControls');
+    const randProgress = document.getElementById('randProgress');
+    const randProgressCount = document.getElementById('randProgressCount');
+    const randStatus = document.getElementById('randStatus');
+    const randCancel = document.getElementById('randCancel');
+    let randomGenerationRunning = false;
+    let cancelRandomGeneration = false;
+    randCancel.addEventListener('click', () => {
+      cancelRandomGeneration = true;
+      randCancel.disabled = true;
+      randStatus.textContent = 'Cancelling…';
+    });
+    randGenerate.addEventListener('click', async () => {
+      if (randomGenerationRunning) return;
+      let disabledControls = [];
       try {
         const count = Math.max(1, Math.min(5000, parseInt(randCountRange.value || '0', 10)));
         const minMin = Math.max(5, Math.min(720, parseInt(randMinRange.value || '15', 10)));
@@ -2337,32 +2365,36 @@ Object.assign(SpiralCalendar.prototype, {
           return;
         }
 
-        if (randClear.checked) {
-          // Only clear previously generated random events, keep user-added ones
-          this.events = this.events.filter(ev => ev.calendar !== 'Random');
-          this._eventsVersion++;
-          
-          // Remove "Random" calendar if it exists (since we're clearing random events)
-          const randomCalendarIndex = this.state.calendars.indexOf('Random');
-          if (randomCalendarIndex !== -1) {
-            this.state.calendars.splice(randomCalendarIndex, 1);
-            // Also remove from visible calendars
-            const randomVisibleIndex = this.state.visibleCalendars.indexOf('Random');
-            if (randomVisibleIndex !== -1) {
-              this.state.visibleCalendars.splice(randomVisibleIndex, 1);
-            }
-            this.requestSettingsSave();
-          }
-        }
-
-        // Create "Random" calendar if it doesn't exist
-        if (!this.state.calendars.includes('Random')) {
-          this.state.calendars.push('Random');
-          // Make Random calendar visible by default
-          if (!this.state.visibleCalendars.includes('Random')) {
-            this.state.visibleCalendars.push('Random');
-          }
-          this.requestSettingsSave();
+        const clearExisting = randClear.checked;
+        const existingEvents = this.events.filter(event => !clearExisting || event.calendar !== 'Random');
+        const generated = [];
+        const zoneAtStart = this.getCalendarTimeZone();
+        randomGenerationRunning = true;
+        cancelRandomGeneration = false;
+        disabledControls = Array.from(document.querySelectorAll('#randomEventsSection input, #randomEventsSection button'))
+          .filter(control => control !== randCancel).map(control => [control, control.disabled]);
+        disabledControls.forEach(([control]) => { control.disabled = true; });
+        randProgressControls.hidden = false;
+        randProgress.hidden = false;
+        randProgress.max = count;
+        randProgress.value = 0;
+        randProgressCount.hidden = false;
+        randProgressCount.textContent = `0 / ${count}`;
+        randCancel.hidden = false;
+        randCancel.disabled = false;
+        randStatus.textContent = 'Generating events…';
+        let processed = 0;
+        let lastYield = 0;
+        const yieldGeneration = async () => {
+          randProgress.value = processed;
+          randProgressCount.textContent = `${processed} / ${count}`;
+          await new Promise(resolve => setTimeout(resolve, 0));
+          lastYield = performance.now();
+          return !cancelRandomGeneration && this.getCalendarTimeZone() === zoneAtStart;
+        };
+        if (!await yieldGeneration()) {
+          randStatus.textContent = 'Cancelled. No events added.';
+          return;
         }
 
         const rangeMs = endRange.getTime() - startRange.getTime();
@@ -2490,7 +2522,13 @@ Object.assign(SpiralCalendar.prototype, {
           return durationMinutes;
         };
         
-        for (let i = 0; i < count; i++) {
+        // Reuse the existing index throughout the batch; newly generated entries
+        // are tracked separately instead of rebuilding the index after each Add.
+        const colorNeighbors = { index: new SpiralEventIntervalIndex(this.getEventIntervalIndex().entries
+          .filter(entry => !clearExisting || entry.event.calendar !== 'Random')), addedEntries: [] };
+        generation: for (let i = 0; i < count; i++) {
+          processed = i;
+          if (performance.now() - lastYield >= 12 && !await yieldGeneration()) break;
           const stepsCount = Math.floor((maxMin - minMin) / step) + 1;
           let durMin = minMin + Math.floor(Math.random() * stepsCount) * step;
           
@@ -2510,6 +2548,7 @@ Object.assign(SpiralCalendar.prototype, {
           let foundNonOverlappingSlot = false;
           
           for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            if (performance.now() - lastYield >= 12 && !await yieldGeneration()) break generation;
             // Generate a random start time
             const startMs = startRange.getTime() + Math.floor(Math.random() * Math.max(1, (latestStartMs - startRange.getTime())));
             let candidateStartDate = new Date(startMs);
@@ -2547,7 +2586,7 @@ Object.assign(SpiralCalendar.prototype, {
             if (!candidateEvent) continue;
             startDate = candidateEvent.start;
             endDate = candidateEvent.end;
-            if (!hasOverlap(candidateEvent, this.events)) {
+            if (!hasOverlap(candidateEvent, existingEvents) && !hasOverlap(candidateEvent, generated)) {
               foundNonOverlappingSlot = true;
               break;
             }
@@ -2558,6 +2597,7 @@ Object.assign(SpiralCalendar.prototype, {
             // Fallback: place at a random time without overlap checking, but still respect day/night bias
             const fallbackAttempts = 50;
             for (let fallbackAttempt = 0; fallbackAttempt < fallbackAttempts; fallbackAttempt++) {
+              if (performance.now() - lastYield >= 12 && !await yieldGeneration()) break generation;
             const startMs = startRange.getTime() + Math.floor(Math.random() * Math.max(1, (latestStartMs - startRange.getTime())));
             startDate = new Date(startMs);
             startDate = roundToStepMinutes(startDate, step);
@@ -2591,16 +2631,11 @@ Object.assign(SpiralCalendar.prototype, {
           const validRange = normalizeGeneratedRange(startDate, endDate);
           if (!validRange) continue;
           ({ start: startDate, end: endDate } = validRange);
-          const colorState = this.createEventColorState({
-            calendarName: 'Random',
-            eventDate: startDate
-          });
           const ev = {
             title: `Random Event ${i + 1}`,
             description: '',
             start: startDate,
             end: endDate,
-            ...colorState,
             calendar: 'Random',
             addedToCalendar: false,
             lastModified: Date.now(),
@@ -2614,10 +2649,32 @@ Object.assign(SpiralCalendar.prototype, {
             })
           };
         this.initializeEventFromWallTimes(ev);
-        this.events.push(ev);
-        this._eventsVersion++;
+        Object.assign(ev, this.createEventColorState({
+          calendarName: 'Random',
+          eventDate: startDate,
+          initialRange: ev,
+          initialColorNeighbors: colorNeighbors
+        }));
+        generated.push(ev);
+        if (this.state.visibleCalendars.includes(ev.calendar) || !this.state.calendars.includes('Random')) {
+          for (const interval of this.getEventProjection(ev).intervals) {
+            colorNeighbors.addedEntries.push({ event: ev, startMs: interval.layoutStartMs, endMs: interval.layoutEndMs });
+          }
+        }
         }
 
+        if (cancelRandomGeneration || this.getCalendarTimeZone() !== zoneAtStart) {
+          randStatus.textContent = 'Cancelled. No events added.';
+          return;
+        }
+        // Commit once, preserving edits made while generation yielded to the UI.
+        this.events = this.events.filter(event => !clearExisting || event.calendar !== 'Random').concat(generated);
+        this.invalidateEventViews();
+        if (!this.state.calendars.includes('Random')) {
+          this.state.calendars.push('Random');
+          if (!this.state.visibleCalendars.includes('Random')) this.state.visibleCalendars.push('Random');
+          this.requestSettingsSave();
+        }
         // Save events to localStorage
         this.runWithStudyEventSource('random_generator', () => {
           this.saveEventsToStorage();
@@ -2625,8 +2682,16 @@ Object.assign(SpiralCalendar.prototype, {
 
         this.drawSpiral();
         renderEventList();
+        randStatus.textContent = `Generated ${generated.length} event${generated.length === 1 ? '' : 's'}.`;
       } catch (err) {
+        randStatus.textContent = 'Generation failed.';
         alert('Failed to generate events: ' + (err && err.message ? err.message : String(err)));
+      } finally {
+        randomGenerationRunning = false;
+        disabledControls.forEach(([control, disabled]) => { control.disabled = disabled; });
+        randCancel.hidden = true;
+        randProgress.hidden = true;
+        randProgressCount.hidden = true;
       }
     });
 
@@ -2698,6 +2763,7 @@ Object.assign(SpiralCalendar.prototype, {
     };
 
     const closeEventPanel = () => {
+      settleAddEventColor();
       restorePreviousCalendarVisibility();
       eventInputPanel.style.display = 'none';
       if (typeof this.clearTouchTapSequence === 'function') {
@@ -2738,7 +2804,7 @@ Object.assign(SpiralCalendar.prototype, {
       eventStart.value = SpiralTime.formatWall(SpiralTime.instantToWall(nextStart, zone));
       syncOccurrence('start', nextStart);
       populateDefaultEnd();
-      applyAddEventPaletteSuggestion({ resetSeed: true, resetManual: true, forceAuto: true });
+      applyAddEventPaletteSuggestion({ resetSeed: true, resetManual: true, forceAuto: true, animate: true });
       eventTitle.value = '';
       eventDescription.value = '';
       titleCharCount.textContent = '0';
@@ -2758,6 +2824,7 @@ Object.assign(SpiralCalendar.prototype, {
     };
 
     const openSettingsPanel = () => {
+      settleAddEventColor();
       if (!settingsPanel) return;
       restorePreviousCalendarVisibility();
       const eventPanelWasOpen = eventInputPanel.style.display === 'block';
@@ -2836,6 +2903,7 @@ Object.assign(SpiralCalendar.prototype, {
     }
     // Add event
     addEventBtn.addEventListener('click', () => {
+      settleAddEventColor();
       syncEventBoxes();
       if (addEventBtn.disabled) return;
       this.playFeedback(); // Add click sound
@@ -2899,6 +2967,7 @@ Object.assign(SpiralCalendar.prototype, {
     });
 
     eventColor.addEventListener('input', () => {
+      settleAddEventColor();
       // If user picks a color, reflect it unless we are in 'calendar' palette
       if (this.state.colorMode === 'calendar' || this.state.colorMode === 'seasonal') {
         addEventColorManualOverride = false;
@@ -2922,8 +2991,11 @@ Object.assign(SpiralCalendar.prototype, {
       }
     });
     colorBox.addEventListener('click', () => {
+      settleAddEventColor();
       eventColor.click();
     });
+    eventColor.addEventListener('pointerdown', settleAddEventColor);
+    eventColor.addEventListener('focus', settleAddEventColor);
     // Set initial color box background per current palette
     try {
       applyAddEventPaletteSuggestion();

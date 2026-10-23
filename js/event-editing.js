@@ -69,6 +69,7 @@ Object.assign(SpiralCalendar.prototype, {
 
   addDraftEvent(event = this.draftEvent) {
     if (!event?.isDraft || event !== this.draftEvent) return false;
+    this.finishEventColorPreview?.(event);
     this.finishActiveDetailTextEditor({ redraw: false });
     const added = this.addCalendarEvent(event);
     if (added) this.draftEvent = null;
@@ -87,6 +88,9 @@ Object.assign(SpiralCalendar.prototype, {
 
   finishEventHandleDrag() {
     const drag = this.handleDragState;
+    if (drag && (drag.touchMoved || drag.event.start - drag.originalStart || drag.event.end - drag.originalEnd)) {
+      this._eventClickSequence = null;
+    }
     this.mouseState.wasDragging = true;
     this.mouseState.isHandleDragging = false;
     this.mouseState.draggingHandle = null;

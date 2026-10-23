@@ -1539,9 +1539,15 @@ Object.assign(SpiralCalendar.prototype, {
       this.drawMidnightLines();
       
       // Draw overlays on top of everything
-      this.drawGradientOverlays();
-      this.drawDayOverlays();
-      this.drawNightOverlays();
+      this.ctx.save();
+      try {
+        this.clipSelectedEventOverlays();
+        this.drawGradientOverlays();
+        this.drawDayOverlays();
+        this.drawNightOverlays();
+      } finally {
+        this.ctx.restore();
+      }
       
       // Calculate color for selected segment before drawing highlighted segments
       if (this.mouseState.selectedSegment) {

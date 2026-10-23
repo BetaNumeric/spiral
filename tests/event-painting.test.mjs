@@ -12,14 +12,21 @@ const eventEdgeWidth = vm.runInContext('CONFIG.EVENT_EDGE_STROKE_WIDTH', context
 function canvasContext() {
   const styles = ['fillStyle', 'strokeStyle', 'lineWidth', 'lineCap', 'lineJoin', 'globalAlpha'];
   const ctx = { fillStyle: '#abcdef', strokeStyle: '#fedcba', lineWidth: 7, lineCap: 'round',
-    lineJoin: 'bevel', globalAlpha: 0.75, stack: [], paints: [], scopes: 0, path: [] };
+    lineJoin: 'bevel', globalAlpha: 0.75, stack: [], paints: [], scopes: 0, path: [], clips: [],
+    translation: { x: 0, y: 0 } };
   ctx.styles = () => Object.fromEntries(styles.map(key => [key, ctx[key]]));
-  ctx.save = () => { ctx.scopes++; ctx.stack.push(ctx.styles()); };
+  ctx.save = () => { ctx.scopes++; ctx.stack.push({ ...ctx.styles(), translation: { ...ctx.translation } }); };
   ctx.restore = () => { assert.ok(ctx.stack.length); Object.assign(ctx, ctx.stack.pop()); };
   ctx.beginPath = () => { ctx.path = []; };
-  for (const method of ['moveTo', 'lineTo', 'arc', 'closePath']) {
-    ctx[method] = (...args) => ctx.path.push([method, ...args]);
+  for (const method of ['moveTo', 'lineTo', 'arc', 'closePath', 'rect']) {
+    ctx[method] = (...args) => {
+      if (args.length >= 2) { args[0] += ctx.translation.x; args[1] += ctx.translation.y; }
+      ctx.path.push([method, ...args]);
+    };
   }
+  ctx.translate = (x, y) => { ctx.translation.x += x; ctx.translation.y += y; };
+  ctx.resetTransform = () => { ctx.translation = { x: 0, y: 0 }; };
+  ctx.clip = rule => ctx.clips.push({ rule, path: ctx.path.slice() });
   for (const method of ['fill', 'stroke']) {
     ctx[method] = () => ctx.paints.push({ method, path: ctx.path.slice(), ...ctx.styles() });
   }
@@ -66,6 +73,120 @@ test('event painting preserves color order, inherited caps, deferred boundaries,
   assert.equal(app.ctx.paints.at(-1).lineCap, 'square');
   assert.ok(app.ctx.paints.length - lastFill > 2);
   assert.ok(app.ctx.scopes <= 2, 'Drawing event pieces should not create a Canvas scope per piece.');
+});
+
+// Read actual even-odd clipping coverage. Arcs are flattened only in this test
+// reader, independently of production's curve sampling and lane calculations.
+function overlayCoversPoint(clip, x, y) {
+  const polygons = [];
+  let polygon = [];
+  const finish = () => { if (polygon.length) polygons.push(polygon); polygon = []; };
+  for (const [command, ...args] of clip.path) {
+    if (command === 'rect') {
+      finish();
+      const [left, top, width, height] = args;
+      polygons.push([[left, top], [left + width, top], [left + width, top + height], [left, top + height]]);
+      continue;
+    }
+    if (command === 'moveTo') { finish(); polygon.push(args); }
+    if (command === 'lineTo') polygon.push(args);
+    if (command === 'arc') {
+      const [cx, cy, radius, start, end, anticlockwise] = args;
+      const turn = 2 * Math.PI;
+      let sweep = end - start;
+      if (anticlockwise) { while (sweep > 0) sweep -= turn; }
+      else { while (sweep < 0) sweep += turn; }
+      const count = Math.max(2, Math.ceil(Math.abs(sweep) / 0.002));
+      for (let index = 0; index <= count; index++) {
+        const angle = start + sweep * index / count;
+        polygon.push([cx + radius * Math.cos(angle), cy + radius * Math.sin(angle)]);
+      }
+    }
+    if (command === 'closePath') finish();
+  }
+  finish();
+  let inside = false;
+  for (const points of polygons) {
+    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+      const [xi, yi] = points[i], [xj, yj] = points[j];
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function overlayProbe(clip, theta, radius) {
+  const angle = -theta + vm.runInContext('CONFIG.INITIAL_ROTATION_OFFSET', context);
+  return !overlayCoversPoint(clip, 400 + radius * Math.cos(angle), 400 + radius * Math.sin(angle));
+}
+
+test('selection protects all pieces of one event, including distinct repeated-hour projections', () => {
+  for (const circle of [false, true]) {
+    const app = calendar(), selected = {}, other = {};
+    app.canvas = { width: 800, height: 800 };
+    app.ctx.translate(400, 400);
+    app.mouseState = { selectedSegment: { day: 0, segment: 1 } };
+    app.getDetailViewEventState = () => ({ detailEvent: selected });
+    const radius = theta => 100 + theta * 10;
+    const make = (event, start, end, interval) => piece(circle, '#123456', {
+      event, timeStartTheta: start, timeEndTheta: end, displayInterval: interval,
+      originalRadiusFunction: radius
+    });
+    app.eventSegments = [make(selected, 0.5, 0.6, { offsetMs: 7200000 }),
+      make(other, 0.6, 0.7, {}), make(selected, 0.7, 0.8, { offsetMs: 3600000 })];
+    app.clipSelectedEventOverlays();
+    assert.equal(app.ctx.clips.length, 1);
+    const clip = app.ctx.clips[0];
+    assert.equal(clip.rule, 'evenodd');
+    assert.ok(clip.path.some(([command]) => command === 'rect'), 'Keep the surrounding canvas shaded.');
+    assert.equal(overlayCoversPoint(clip, 5, 5), true, 'The clip retains the full canvas despite the clock transform.');
+    assert.equal(overlayCoversPoint(clip, 805, 805), false);
+    assert.deepEqual(app.ctx.translation, { x: 400, y: 400 }, 'Clipping preserves the clock transform.');
+    for (const theta of [0.55, 0.75]) {
+      const probeRadius = circle ? 125 : radius(theta) + (radius(theta + 2 * Math.PI) - radius(theta)) * 0.25;
+      assert.equal(overlayProbe(clip, theta, probeRadius), true, 'Every selected projection is exempt.');
+    }
+    assert.equal(overlayProbe(clip, 0.65, circle ? 125 : 125), false, 'A neighboring event keeps its shading.');
+    assert.equal(overlayProbe(clip, 0.4, 125), false, 'Unoccupied time keeps its shading.');
+  }
+});
+
+test('overlay exclusion follows the visible overlap lane instead of the underlying event fill', () => {
+  for (const circle of [false, true]) {
+    const app = calendar(), selected = {}, other = {};
+    app.canvas = { width: 800, height: 800 };
+    app.ctx.translate(400, 400);
+    app.mouseState = { selectedSegment: { day: 0, segment: 1 } };
+    app.getDetailViewEventState = () => ({ detailEvent: selected });
+    const radius = theta => 100 + theta * 10;
+    app.eventSegments = [piece(circle, '#123456', { event: selected, originalRadiusFunction: radius }),
+      piece(circle, '#abcdef', { event: other, originalRadiusFunction: radius,
+        innerRadius: 150, outerRadius: 200, edgeInnerRadius: 150, edgeOuterRadius: 200,
+        eventSliceStart: 0.5, eventSliceEnd: 1, edgeSliceStart: 0.5, edgeSliceEnd: 1 })];
+    app.clipSelectedEventOverlays();
+    const clip = app.ctx.clips[0], theta = 0.55;
+    const inner = circle ? 100 : radius(theta);
+    const outer = circle ? 200 : radius(theta + 2 * Math.PI);
+    assert.equal(overlayProbe(clip, theta, inner + (outer - inner) * 0.25), true);
+    assert.equal(overlayProbe(clip, theta, inner + (outer - inner) * 0.75), false,
+      'The event stacked on top must retain its own shading.');
+    assert.equal(overlayProbe(clip, theta, inner - 10), false);
+    assert.equal(overlayProbe(clip, theta, outer + 10), false);
+  }
+});
+
+test('empty selection and unsaved drafts do not exempt persisted event bands', () => {
+  for (const selection of [null, { day: 0, segment: 1 }]) {
+    for (const detailEvent of [null, { isDraft: true }]) {
+      const app = calendar();
+      app.canvas = { width: 800, height: 800 };
+      app.mouseState = { selectedSegment: selection };
+      app.getDetailViewEventState = () => ({ detailEvent });
+      app.eventSegments = [piece(true, '#123456', { event: {} })];
+      app.clipSelectedEventOverlays();
+      assert.equal(app.ctx.clips.length, 0, 'Unrelated persisted events keep normal shading.');
+    }
+  }
 });
 
 test('shared curve samples refresh between frames and distinguish ranges and radius functions', () => {

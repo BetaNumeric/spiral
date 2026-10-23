@@ -588,6 +588,8 @@ Object.assign(SpiralCalendar.prototype, {
         (event.sourceCapabilities?.firesTouchEvents ? 'touch' : this._canvasPointerType);
       this._canvasPointerType = null;
       const isTouch = pointerType === 'touch';
+      const previousClick = this._eventClickSequence;
+      this._eventClickSequence = null;
 
       // Don't handle click if we just finished dragging
       if (this.mouseState.wasDragging) {
@@ -841,31 +843,48 @@ Object.assign(SpiralCalendar.prototype, {
       const segment = this.findSegmentAtPoint(canvasX, canvasY);
 
       if (segment) {
-        // Fingers select the hour as a whole; mouse and pen can target a band.
-        const hitIndex = isTouch ? null : this.findEventEntryAtSegmentPoint(segment);
+        const hitIndex = this.findEventEntryAtSegmentPoint(segment);
+        const hitEvent = hitIndex !== null ? this.getEventsForClockSegment(segment)[hitIndex]?.event : null;
         // Check if this is the same segment that's already selected
         const isSameSegment = this.mouseState.selectedSegment && 
                              this.mouseState.selectedSegment.day === segment.day && 
                              this.mouseState.selectedSegment.segment === segment.segment &&
                              this.mouseState.selectedSegment.clockOffsetMs === segment.clockOffsetMs;
+        const rememberClick = () => {
+          this._eventClickSequence = { day: segment.day, segment: segment.segment,
+            clockOffsetMs: segment.clockOffsetMs, isTouch, hitEvent,
+            version: this._detailViewSelectionVersion,
+            selectedEvent: this.getDetailViewEventState()?.detailEvent };
+        };
         
         if (isSameSegment) {
+          if (this.isDetailViewPreviewActive?.()) this.completeModeTransitionImmediately();
           // Clicked the same segment again
           if (this.state.detailViewDay !== null) {
+            const detailEventState = this.getDetailViewEventState();
+            const repeatedClick = previousClick && previousClick.isTouch === isTouch &&
+              previousClick.day === segment.day && previousClick.segment === segment.segment &&
+              previousClick.clockOffsetMs === segment.clockOffsetMs &&
+              previousClick.version === this._detailViewSelectionVersion &&
+              previousClick.selectedEvent === detailEventState?.detailEvent &&
+              (isTouch || hitEvent && previousClick.hitEvent === hitEvent);
+            if (detailEventState?.selectedEventCount > 1 && repeatedClick) {
+              if (this.cycleDetailViewEvent(1)) this.drawSpiral();
+              rememberClick();
+              return;
+            }
             if (hitIndex !== null && hitIndex !== this.mouseState.selectedEventIndex) {
               this.finishActiveDetailTextEditor({ redraw: false });
               this.mouseState.selectedEventIndex = hitIndex;
               this.drawSpiral();
+              rememberClick();
               return;
             }
-            const detailEventState = this.getDetailViewEventState();
             const selectedEventCount = detailEventState ? detailEventState.selectedEventCount : 0;
             const activeEvent = detailEventState ? detailEventState.activePersistedEvent : null;
             if (selectedEventCount > 1) {
-              if (isTouch && this.cycleDetailViewEvent(1)) {
-                this.drawSpiral();
-              }
-              return; // Precise clicks keep the hit event selected; taps cycle.
+              rememberClick();
+              return;
             } else if (selectedEventCount === 1 && activeEvent) {
               // Single event: open color picker for that event, keep detail view open
               this.openColorPicker(activeEvent, { clientX: event.clientX, clientY: event.clientY });
@@ -899,6 +918,7 @@ Object.assign(SpiralCalendar.prototype, {
         
         // Play feedback for event selection
         this.playFeedback(0.12, 8);
+        rememberClick();
       } else {
         // Clicked outside of any segment - deselect current selection
         const hadSelection = this.state.detailViewDay !== null || this.mouseState.selectedSegment !== null;
@@ -1158,6 +1178,7 @@ Object.assign(SpiralCalendar.prototype, {
         this.mouseState.isDragging = false;
         this.mouseState.hasMovedDuringDrag = false;
         this.mouseState.wasDragging = true;
+        this._eventClickSequence = null;
         this.refreshCanvasCursor();
         this.drawSpiral();
         return;
@@ -1245,6 +1266,7 @@ Object.assign(SpiralCalendar.prototype, {
       }
       if (this.mouseState.isDragging && this.mouseState.hasMovedDuringDrag) {
         this.mouseState.wasDragging = true;
+        this._eventClickSequence = null;
       }
       this.mouseState.isDragging = false;
       this.mouseState.hasMovedDuringDrag = false;

@@ -271,8 +271,14 @@ Object.assign(SpiralCalendar.prototype, {
     const calendarName = options.calendarName || event?.calendar || 'Home';
     const eventDate = options.eventDate || (event ? this.getEventWallDate(event, 'start') : SpiralTime.instantToWall(new Date(), this.getCalendarTimeZone()));
     const seedSource = event || `${calendarName}|${eventDate instanceof Date ? eventDate.toISOString() : String(eventDate || '')}|${Date.now()}|${Math.random()}`;
-    const colorSeed = this.normalizeEventColorSeed(options.colorSeed, seedSource);
+    let colorSeed = this.normalizeEventColorSeed(options.colorSeed, seedSource);
     const manualColor = this.normalizeEventColorHex(options.customColor, '');
+
+    // Only creation opts in. Stored seeds, imports, and manual colors are never reselected.
+    if (options.initialRange && !event && options.colorSeed == null && !manualColor) {
+      colorSeed = this.chooseInitialEventColorSeed(colorSeed, calendarName, eventDate,
+        options.initialRange, options.initialColorNeighbors, options.candidateColors);
+    }
 
     if (manualColor) {
       return {
@@ -287,6 +293,207 @@ Object.assign(SpiralCalendar.prototype, {
       colorSeed,
       colorIsCustom: false
     };
+  },
+
+  chooseInitialEventColorSeed(seed, calendarName, eventDate, range, batch = null, candidateColors = null) {
+    const mode = this.state?.colorMode || 'random';
+    if (mode === 'single' || mode === 'seasonal'
+      || (mode === 'calendar' && this.state.calendarColors?.[calendarName])) return seed;
+
+    const neighborGapMs = 2 * 60 * 60 * 1000;
+    const projection = this.getEventProjection(range);
+    const neighbors = new Map();
+    const addNeighbor = (entry, includeDistant = false) => {
+      if (entry.event === range) return;
+      // Timed events use elapsed time; all-day dates use their display dates.
+      const gap = !range.allDay && !entry.event.allDay
+        ? Math.max(0, projection.startInstantMs - entry.event.end.getTime(),
+          entry.event.start.getTime() - projection.endInstantMs)
+        : projection.intervals.reduce((minimum, interval) => Math.min(minimum,
+          Math.max(0, interval.layoutStartMs - entry.endMs, entry.startMs - interval.layoutEndMs)), Infinity);
+      if ((gap <= neighborGapMs || includeDistant) && gap < (neighbors.get(entry.event) ?? Infinity)) {
+        neighbors.set(entry.event, gap);
+      }
+    };
+    const windows = projection.intervals.map(interval => ({
+      startMs: interval.layoutStartMs - neighborGapMs, endMs: interval.layoutEndMs + neighborGapMs
+    }));
+    if (!range.allDay) {
+      // Expanding actual instants also finds neighbors across a skipped hour.
+      const expanded = this.getEventProjection({
+        start: new Date(projection.startInstantMs - neighborGapMs),
+        end: new Date(projection.endInstantMs + neighborGapMs)
+      });
+      for (const interval of expanded.intervals) {
+        if (!windows.some(window => window.startMs === interval.layoutStartMs && window.endMs === interval.layoutEndMs)) {
+          windows.push({ startMs: interval.layoutStartMs, endMs: interval.layoutEndMs });
+        }
+      }
+    }
+    const index = batch?.index || this.getEventIntervalIndex();
+    for (const window of windows) {
+      // The index has exclusive ends; include neighbors exactly two hours away.
+      for (const entry of index.query(window.startMs - 1, window.endMs + 1)) {
+        addNeighbor(entry);
+      }
+      for (const entry of batch?.addedEntries || []) {
+        if (entry.startMs <= window.endMs && entry.endMs >= window.startMs) addNeighbor(entry);
+      }
+    }
+    for (const entry of this.getNextEventColorNeighbors(index, range, batch?.addedEntries)) {
+      addNeighbor(entry, true);
+    }
+    if (!neighbors.size && !candidateColors) return seed;
+
+    const neighborProfiles = Array.from(neighbors, ([event, gap]) => {
+      const calendar = event.calendar || 'Home';
+      const date = this.getEventWallDate(event, 'start');
+      // Derive the displayed color without modifying any existing event.
+      const color = event.colorIsCustom
+        ? (this.state.paletteAffectsCustomColors
+          ? this.generatePaletteColorFromCustomColor(event.color, calendar, date, event)
+          : event.color)
+        : this.generatePaletteColorFromSeed(this.normalizeEventColorSeed(event.colorSeed, event), calendar, date);
+      return { profile: this.getPaletteProfileFromColor(color, event),
+        weight: 1 - 0.5 * Math.min(gap, neighborGapMs) / neighborGapMs };
+    });
+    let bestSeed = seed;
+    let bestScore = -Infinity;
+    for (let candidate = 0; candidate < 12; candidate++) {
+      const candidateSeed = candidate === 0 ? seed : this.createEventColorSeed();
+      const color = this.generatePaletteColorFromSeed(candidateSeed, calendarName, eventDate);
+      candidateColors?.push(color);
+      const profile = this.getPaletteProfileFromColor(color);
+      // Gapped neighbors exert less influence than events that overlap or touch.
+      const score = neighborProfiles.reduce((minimum, neighbor) => Math.min(minimum,
+        1 - (1 - this.getEventColorDifference(profile, neighbor.profile)) * neighbor.weight), Infinity);
+      if (score > bestScore) {
+        bestSeed = candidateSeed;
+        bestScore = score;
+      }
+    }
+    return bestSeed;
+  },
+
+  getNextEventColorNeighbors(index, range, addedEntries = []) {
+    const zone = this.getCalendarTimeZone();
+    const startInstant = event => event.allDay
+      ? SpiralTime.wallToInstant(this.getEventWallDate(event, 'start'), zone).getTime()
+      : event.start.getTime();
+    // The interval index changes after event edits or calendar filtering. Cache
+    // whole-event starts with it so DST continuation pieces are never "next" events.
+    if (index.colorEventStarts?.zone !== zone) {
+      const events = new Map();
+      for (const entry of index.entries) {
+        if (!events.has(entry.event)) events.set(entry.event,
+          { entry, startMs: startInstant(entry.event) });
+      }
+      index.colorEventStarts = { zone,
+        entries: Array.from(events.values()).sort((a, b) => a.startMs - b.startMs) };
+    }
+    const endMs = range.allDay
+      ? SpiralTime.wallToInstant(this.getEventWallDate(range, 'end'), zone).getTime()
+      : range.end.getTime();
+    const starts = index.colorEventStarts.entries;
+    let from = 0, to = starts.length;
+    while (from < to) {
+      const middle = (from + to) >>> 1;
+      if (starts[middle].startMs < endMs) from = middle + 1;
+      else to = middle;
+    }
+    let nextStart = Infinity;
+    let next = [];
+    for (let i = from; i < starts.length; i++) {
+      const record = starts[i];
+      if (record.startMs > nextStart) break;
+      if (record.entry.event === range) continue;
+      nextStart = record.startMs;
+      next.push(record.entry);
+    }
+    // Generated events are not in the saved index until the batch is committed.
+    for (const entry of addedEntries) {
+      if (entry.event === range) continue;
+      const startMs = startInstant(entry.event);
+      if (startMs < endMs || startMs > nextStart) continue;
+      if (startMs < nextStart) { nextStart = startMs; next = []; }
+      next.push(entry);
+    }
+    return next;
+  },
+
+  getEventColorDifference(a, b) {
+    const hueDelta = Math.abs(a.hue - b.hue);
+    const hueDistance = Math.min(hueDelta, 360 - hueDelta) / 180;
+    // Hue dominates colorful palettes; gray colors have no meaningful hue.
+    return 0.8 * hueDistance * Math.min(a.saturationUnit, b.saturationUnit)
+      + 0.15 * Math.abs(a.lightnessUnit - b.lightnessUnit)
+      + 0.05 * Math.abs(a.saturationUnit - b.saturationUnit);
+  },
+
+  animateEventColorCandidates(colors, finalColor, onColor, isActive = () => true) {
+    const candidates = colors.filter((color, index) => index === 0 || color !== colors[index - 1]);
+    const reducedMotion = () => typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let frame = null;
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = null;
+      onColor(finalColor, true);
+    };
+    if (this.state.animateEventColors === false || candidates.length < 2 || typeof requestAnimationFrame !== 'function' || reducedMotion()) {
+      finish();
+      return finish;
+    }
+
+    const start = performance.now();
+    const duration = 300;
+    let lastIndex = 0;
+    const step = now => {
+      if (finished) return;
+      frame = null;
+      if (this.state.animateEventColors === false || !isActive() || reducedMotion() || now - start >= duration) { finish(); return; }
+      const progress = Math.max(0, (now - start) / duration);
+      const index = Math.min(candidates.length - 1, Math.floor(progress ** 0.75 * candidates.length));
+      if (index !== lastIndex) {
+        lastIndex = index;
+        onColor(candidates[index], false);
+      }
+      if (!finished) frame = requestAnimationFrame(step);
+    };
+    onColor(candidates[0], false);
+    frame = requestAnimationFrame(step);
+    return finish;
+  },
+
+  startDraftEventColorPreview(event, candidates) {
+    this.finishEventColorPreview(event);
+    const previews = this._eventColorPreviews || (this._eventColorPreviews = new WeakMap());
+    const preview = { color: event.color, finalColor: event.color, seed: event.colorSeed,
+      mode: this.state.colorMode, finish: null };
+    previews.set(event, preview);
+    let animated = false;
+    preview.finish = this.animateEventColorCandidates(candidates, event.color, (color, finished) => {
+      if (previews.get(event) !== preview) return;
+      if (finished) previews.delete(event);
+      else { preview.color = color; animated = true; }
+      if (animated) this.requestRender();
+    }, () => this.draftEvent === event && !event.colorIsCustom && event.colorSeed === preview.seed
+      && this.state.colorMode === preview.mode && this.generatePaletteColorFromSeed(event.colorSeed,
+        event.calendar, this.getEventWallDate(event, 'start')) === preview.finalColor);
+  },
+
+  finishEventColorPreview(event) {
+    this._eventColorPreviews?.get(event)?.finish?.();
+  },
+
+  getEventPreviewColor(event, finalColor) {
+    const preview = this._eventColorPreviews?.get(event);
+    return preview && this.draftEvent === event && !event.colorIsCustom && event.colorSeed === preview.seed
+      && this.state.colorMode === preview.mode && finalColor === preview.finalColor
+      ? preview.color : finalColor;
   },
 
   syncEventAutoColor(event) {
@@ -338,6 +545,7 @@ Object.assign(SpiralCalendar.prototype, {
     if (!event || typeof event !== 'object') {
       return '#888888';
     }
+    this.finishEventColorPreview(event);
     this.ensureEventColorMetadata(event);
     if (event.colorIsCustom) {
       return this.normalizeEventColorHex(event.color, '#888888');
@@ -377,6 +585,9 @@ Object.assign(SpiralCalendar.prototype, {
     } catch (_) {
     }
 
+    // Candidate colors are a temporary display effect, never event metadata.
+    finalColor = this.getEventPreviewColor(event, finalColor);
+
     if (event && event.isDraft) {
       if (typeof finalColor === 'string' && finalColor.startsWith('#')) {
         // Opaque blending prevents seams between neighboring draft pieces.
@@ -395,7 +606,7 @@ Object.assign(SpiralCalendar.prototype, {
     const draftEventActive = this.draftEvent && this.draftEvent.segmentId === segmentId;
     
     if (draftEventActive) {
-      return this.draftEvent.color;
+      return this.getEventPreviewColor(this.draftEvent, this.draftEvent.color);
     } else if (eventInfo) {
       return eventInfo.color;
     } else if (segmentColor === CONFIG.BLANK_COLOR) {
@@ -579,6 +790,44 @@ Object.assign(SpiralCalendar.prototype, {
       }
       this.ctx.restore();
     },
+
+  clipSelectedEventOverlays() {
+    if (!this.mouseState.selectedSegment) return;
+    const selectedEvent = this.getDetailViewEventState()?.detailEvent;
+    if (!selectedEvent) return;
+    const pieces = this.eventSegments.filter(piece => piece.event === selectedEvent);
+    if (!pieces.length) return;
+
+    // Keep shading everywhere except the selected event's visible lanes. In
+    // overlay stack mode, the rest of its fill lies underneath other events.
+    this.ctx.beginPath();
+    this.ctx.save();
+    this.ctx.resetTransform();
+    this.ctx.rect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.restore();
+    for (const piece of pieces) {
+      if (piece.isCircleMode) {
+        this.traceCircleBandPath(piece.edgeInnerRadius, piece.edgeOuterRadius,
+          -piece.timeStartTheta + CONFIG.INITIAL_ROTATION_OFFSET,
+          -piece.timeEndTheta + CONFIG.INITIAL_ROTATION_OFFSET, true);
+      } else {
+        const curve = this.getEventSpiralSamples(piece.timeStartTheta, piece.timeEndTheta, piece.originalRadiusFunction);
+        if (curve.length < 2) continue;
+        const bounds = point => SpiralGeometry.radialRange(point.inner, point.outer, piece.edgeSliceStart, piece.edgeSliceEnd);
+        for (let i = 0; i < curve.length; i++) {
+          const point = curve[i], radius = bounds(point).inner;
+          if (i === 0) this.ctx.moveTo(radius * point.cos, radius * point.sin);
+          else this.ctx.lineTo(radius * point.cos, radius * point.sin);
+        }
+        for (let i = curve.length - 1; i >= 0; i--) {
+          const point = curve[i], radius = bounds(point).outer;
+          this.ctx.lineTo(radius * point.cos, radius * point.sin);
+        }
+        this.ctx.closePath();
+      }
+    }
+    this.ctx.clip('evenodd');
+  },
 
   drawEventSegments() {
     this._pendingSpiralOverlapEdges = [];
@@ -1928,8 +2177,9 @@ Object.assign(SpiralCalendar.prototype, {
       }
     },
 
-  traceCircleBandPath(innerRadius, outerRadius, startAngle, endAngle) {
-      this.ctx.beginPath();
+  traceCircleBandPath(innerRadius, outerRadius, startAngle, endAngle, append = false) {
+      if (!append) this.ctx.beginPath();
+      this.ctx.moveTo(outerRadius * Math.cos(startAngle), outerRadius * Math.sin(startAngle));
       
       // Outer arc
       this.ctx.arc(0, 0, outerRadius, startAngle, endAngle, true);

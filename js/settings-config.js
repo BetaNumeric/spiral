@@ -57,6 +57,7 @@ const APP_SETTINGS_DEFAULTS = {
   showSegmentEdges: false,
   showArcLines: true,
   overlayStackMode: true,
+  animateEventColors: true,
   showEventBoundaryStrokes: true,
   showAllEventBoundaryStrokes: false,
 
@@ -110,6 +111,7 @@ const APP_DEV_OPTIONS_CONFIG = {
     'segmentEdgesToggle',
     'arcLinesToggle', 'showMonthLinesToggle',
     'overlayStackMode',
+    'animateEventColorsToggle',
     'eventBoundaryStrokesToggle',
     'eventBoundaryStrokeControls',
     'eventListCalendarButtonsToggle',

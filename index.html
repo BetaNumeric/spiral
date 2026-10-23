@@ -130,7 +130,8 @@
     
     body.dark-mode .dt-box { background: var(--dark-bg-secondary) !important; color: var(--dark-text-primary) !important; border-color: var(--dark-border) !important; }
     body.dark-mode #eventStartOccurrence,
-    body.dark-mode #eventEndOccurrence { background: var(--dark-bg-secondary); color: var(--dark-text-primary); border-color: var(--dark-border); color-scheme: dark; }
+    body.dark-mode #eventEndOccurrence,
+    body.dark-mode #overlayStackMode { background: var(--dark-bg-secondary); color: var(--dark-text-primary); border-color: var(--dark-border); color-scheme: dark; }
     body.dark-mode button { color: var(--dark-text-primary) !important; }
     
     /* Dark mode button styling */
@@ -1141,12 +1142,20 @@
           
           <label style="display:flex; align-items:center; gap:0.5em;">
             <input type="checkbox" id="randClear" checked/>
-            <span>Clear existing events</span>
+            <span>Clear existing random events</span>
           </label>
           
           <div style="display: flex; gap: 0.5em;">
             <button id="randGenerate" class="event-panel-action-btn" style="flex: 1; padding: 0.35em; background: #666; color: white; border: none; border-radius: 0.3em; cursor: pointer;">Generate</button>
             <button id="randDeleteRandom" class="event-panel-action-btn" style="padding: 0.35em; background: #d32f2f; color: white; border: none; border-radius: 0.3em; cursor: pointer;" title="Delete only random events">Delete</button>
+          </div>
+          <div id="randProgressControls" hidden style="margin-top: 0.5em;">
+            <progress id="randProgress" value="0" max="100" aria-label="Event generation" style="width: 100%;"></progress>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5em;">
+              <span id="randProgressCount"></span>
+              <button id="randCancel" type="button" class="event-panel-action-btn">Cancel</button>
+            </div>
+            <span id="randStatus" role="status"></span>
           </div>
         </div>
       </div>
@@ -1466,7 +1475,13 @@
         <label><input type="checkbox" id="showMonthLinesToggle" checked> Show month lines</label>
 
 
-        <label><input type="checkbox" id="overlayStackMode" checked> Stacked overlaps</label>
+        <label style="flex-wrap: wrap; gap: 0.5em;">Overlapping events
+          <select id="overlayStackMode" style="padding: 0.3em; font: inherit; max-width: 100%;">
+            <option value="adaptive" selected>Adaptive widths</option>
+            <option value="fixed">Fixed lanes</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="animateEventColorsToggle" checked> Animate new event colors</label>
         <label><input type="checkbox" id="eventBoundaryStrokesToggle" checked> Event separator strokes</label>
         <div id="eventBoundaryStrokeControls" style="display: none; margin-left: 1em; padding-left: 0.5em; border-left: 2px solid #ccc;">
           <label><input type="checkbox" id="eventBoundaryAllEdgesToggle"> Add outline strokes to all events</label>
@@ -1693,6 +1708,7 @@
             'segmentEdgesToggle',
             'arcLinesToggle',
             'overlayStackMode',
+            'animateEventColorsToggle',
             'dayOverlayToggle', 'dayOverlayOpacityControls',
             'gradientOverlayToggle', 'gradientOverlayOpacityControls',
             'tooltipToggle'

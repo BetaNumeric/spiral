@@ -477,17 +477,17 @@ test('projection discovers half-hour offset changes without assuming a one-hour 
   ]);
 });
 
-test('consecutive occurrences of one event share a lane and do not form an overlap component', () => {
+test('consecutive occurrences of one event share one lane and one single-lane component', () => {
   const app = calendar();
   app.referenceTime = wall('2026-10-25T00:00');
   app.state.rotation = 0;
   const e = app.normalizeRuntimeEvent({ start: '2026-10-24T23:30:00Z', end: '2026-10-25T02:30:00Z' });
   app.events = [e];
   const pieces = app.getEventProjection(e).intervals;
-  const { eventToLane } = app.computePersistentEventLanesForWindow();
+  const { eventToLane } = app.computeEventOverlapLayout();
   assert.equal(eventToLane.get(pieces[0]), eventToLane.get(pieces[1]));
-  const { eventToComponent, componentLaneCount } = app.computeEventComponentsForWindow(eventToLane);
-  assert.notEqual(eventToComponent.get(pieces[0]), eventToComponent.get(pieces[1]));
+  const { eventToComponent, componentLaneCount } = app.computeEventOverlapLayout();
+  assert.equal(eventToComponent.get(pieces[0]), eventToComponent.get(pieces[1]));
   assert.equal(componentLaneCount.get(eventToComponent.get(pieces[0])), 1);
   assert.equal(app.getMaxOverlapForEventAcrossHours(e), 1);
 });
@@ -707,7 +707,7 @@ test('genuine simultaneous events still stack within their own repeated-hour sec
   const overlap = app.normalizeRuntimeEvent({ start: '2026-10-25T00:20:00Z', end: '2026-10-25T00:40:00Z' });
   const second = app.normalizeRuntimeEvent({ start: '2026-10-25T01:10:00Z', end: '2026-10-25T01:50:00Z' });
   app.events = [first, overlap, second];
-  const { eventToLane } = app.computePersistentEventLanesForWindow();
+  const { eventToLane } = app.computeEventOverlapLayout();
   assert.notEqual(eventToLane.get(first), eventToLane.get(overlap));
   assert.equal(app.getMaxOverlapForEventAcrossHours(first), 2);
   assert.equal(app.getMaxOverlapForEventAcrossHours(second), 1);
@@ -829,20 +829,21 @@ test('visible layout windows follow navigation, include partial hours and suppor
   }
 });
 
-test('layout cache rebuilds for distant browsing and calendar filters but remains stable within an hour', () => {
+test('layout cache survives navigation and refreshes when visible calendars change', () => {
   const app = calendar();
   let builds = 0;
-  app.computePersistentEventLanesForWindow = () => { builds++; return { eventToLane: new Map() }; };
-  app.computeEventComponentsForWindow = () => ({ eventToComponent: new Map(), componentLaneCount: new Map() });
+  const compute = app.computeEventOverlapLayout.bind(app);
+  app.computeEventOverlapLayout = (...args) => { builds++; return compute(...args); };
   app.ensureLayoutCache();
-  app.state.rotation += 0.01;
-  app.ensureLayoutCache(); // An exact-hour window grows by one partial hour.
+  const layout = app.layoutCache;
   app.state.rotation += 0.01;
   app.ensureLayoutCache();
-  assert.equal(builds, 2);
   app.state.rotation += 30 * 2 * Math.PI;
   app.ensureLayoutCache();
+  assert.equal(app.layoutCache, layout);
+  assert.equal(builds, 1);
   app.state.visibleCalendars = ['Home'];
   app.ensureLayoutCache();
-  assert.equal(builds, 4);
+  assert.notEqual(app.layoutCache, layout);
+  assert.equal(builds, 2);
 });

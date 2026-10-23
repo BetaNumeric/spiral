@@ -243,3 +243,101 @@ test('all-day events fill every calendar hour including both occurrences of a re
     assert.equal(slice.eventSliceEnd, 1);
   }
 });
+
+test('an overlapping draft and saved event remain individually painted and selectable in both layouts and views', () => {
+  for (const circle of [false, true]) for (const stack of [false, true]) {
+    const app = calendar();
+    app.state.overlayStackMode = stack;
+    const saved = app.add('Saved', '09:00', '09:30');
+    const draft = app.initializeEventFromWallTimes({ title: 'Draft', calendar: 'Home',
+      start: Time.parseWall('2026-10-08T09:00'), end: Time.parseWall('2026-10-08T10:00') });
+    Object.assign(draft, { isDraft: true, segmentId: 9 });
+    app.draftEvent = draft;
+    app.mouseState.selectedSegmentId = 9;
+    const geometry = collect(app, 9, circle);
+    const angle = Geometry.angleAtFraction(geometry.rawStartAngle, geometry.rawEndAngle, 0.25);
+    assert.ok(app.eventSegments.some(slice => slice.event === saved && slice.drawStartEdge),
+      'The saved event keeps its ending separator where it overlaps the draft.');
+    const slices = app.eventSegments.filter(slice => slice.timeStartTheta < angle && slice.timeEndTheta > angle);
+    assert.deepEqual(new Set(slices.map(slice => slice.event)), new Set([saved, draft]));
+    const edges = slice => circle ? [(slice.edgeInnerRadius - 100) / 100, (slice.edgeOuterRadius - 100) / 100]
+      : [slice.edgeSliceStart, slice.edgeSliceEnd];
+    const ordered = slices.map(edges).sort((a, b) => a[0] - b[0]);
+    near(ordered[0][0], 0);
+    near(ordered[0][1], ordered[1][0]);
+    near(ordered[1][1], 1);
+    for (const slice of slices) {
+      const [inner, outer] = edges(slice);
+      assert.ok(outer > inner);
+      const radius = circle ? (slice.edgeInnerRadius + slice.edgeOuterRadius) / 2
+        : geometry.radiusFunction(angle) + (slice.edgeSliceStart + slice.edgeSliceEnd) / 2 * 100;
+      const point = { day: geometry.day, segment: geometry.segment,
+        angle: circle ? angle + geometry.day * turn : angle, radius };
+      const hit = app.findEventEntryAtSegmentPoint(point);
+      assert.notEqual(hit, null);
+      assert.equal(app.getEventsForClockSegment(point)[hit].event, slice.event);
+    }
+  }
+});
+
+test('fixed lanes keep the same event width before and through both parts of a repeated hour', () => {
+  for (const circle of [false, true]) {
+    const app = calendar();
+    app.referenceTime = Time.parseWall('2026-10-25T00:00');
+    app.state.overlayStackMode = false;
+    const long = app.normalizeRuntimeEvent({ title: 'Long', timeModel: 'instant-v1',
+      start: '2026-10-24T23:00:00Z', end: '2026-10-25T02:00:00Z' });
+    const short = app.normalizeRuntimeEvent({ title: 'First 02:00 only', timeModel: 'instant-v1',
+      start: '2026-10-25T00:00:00Z', end: '2026-10-25T00:30:00Z' });
+    app.events = [long, short];
+    const bounds = [];
+    for (const hour of [1, 2]) {
+      collect(app, hour, circle);
+      for (const slice of app.eventSegments.filter(slice => slice.event === long)) {
+        bounds.push([slice.eventSliceStart, slice.eventSliceEnd]);
+      }
+    }
+    assert.ok(bounds.length >= 3, 'Includes both occurrences of the repeated hour.');
+    for (const bound of bounds) {
+      assert.deepEqual(bound, bounds[0]);
+      near(bound[1] - bound[0], 0.5);
+    }
+  }
+});
+
+test('start and end handles sit at the center of the rendered visible lane in both layouts and views', () => {
+  for (const circle of [false, true]) for (const stack of [false, true]) {
+    const app = calendar();
+    app.state.overlayStackMode = stack;
+    app.add('Earlier', '08:00', '09:30');
+    const selected = app.add('Selected', '09:00', '12:00');
+    app.add('Third', '09:00', '09:30');
+    app.add('Later', '11:00', '12:30');
+    app.mouseState.selectedSegment = app.getSegmentPositionFromId(9);
+    for (const isEnd of [false, true]) {
+      const date = app.getEventWallDate(selected, isEnd ? 'end' : 'start');
+      const d = app._normalizeHandleDate(date, isEnd);
+      const hour = d.getUTCHours();
+      const geometry = collect(app, hour, circle);
+      const pieces = app.eventSegments.filter(piece => piece.event === selected);
+      const theta = Geometry.angleAtFraction(geometry.rawStartAngle, geometry.rawEndAngle,
+        (d - Time.parseWall(`2026-10-08T${String(hour).padStart(2, '0')}:00`)) / Time.HOUR);
+      const piece = pieces.find(piece => theta >= piece.timeStartTheta && theta <= piece.timeEndTheta);
+      assert.ok(piece);
+      const bounds = circle ? [piece.edgeInnerRadius, piece.edgeOuterRadius] : [
+        geometry.radiusFunction(theta) + 100 * piece.edgeSliceStart,
+        geometry.radiusFunction(theta) + 100 * piece.edgeSliceEnd];
+      const position = app._computeSelectedEventHandlePosition(selected, {
+        visibilityRange: { min: -Infinity, max: Infinity }, segmentAngle: step,
+        totalVisibleSegments: app.getTotalVisibleSegments(), selectedEventSegments: pieces,
+        // A newly constructed detail-view curve must not override the rendered curve.
+        radiusFunction: angle => geometry.radiusFunction(angle) + 500,
+        offsetMs: pieces[0].displayInterval.offsetMs
+      }, date, isEnd);
+      const expectedRadius = (bounds[0] + bounds[1]) / 2;
+      const angle = -theta + vm.runInContext('CONFIG.INITIAL_ROTATION_OFFSET', context);
+      near(position.x, expectedRadius * Math.cos(angle));
+      near(position.y, expectedRadius * Math.sin(angle));
+    }
+  }
+});

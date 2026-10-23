@@ -23,10 +23,15 @@
     return { inner: inner + from * height, outer: inner + to * height };
   }
 
-  function eventBoundsAtAngle(slice, angle) {
-    if (slice.isCircleMode) return { inner: slice.innerRadius, outer: slice.outerRadius };
+  function eventBoundsAtAngle(slice, angle, visibleOnly = false) {
+    if (slice.isCircleMode) return {
+      inner: visibleOnly ? slice.edgeInnerRadius ?? slice.innerRadius : slice.innerRadius,
+      outer: visibleOnly ? slice.edgeOuterRadius ?? slice.outerRadius : slice.outerRadius
+    };
     const radius = slice.originalRadiusFunction;
-    return radialRange(radius(angle), radius(angle + TURN), slice.eventSliceStart ?? 0, slice.eventSliceEnd ?? 1);
+    const from = visibleOnly ? slice.edgeSliceStart ?? slice.eventSliceStart : slice.eventSliceStart;
+    const to = visibleOnly ? slice.edgeSliceEnd ?? slice.eventSliceEnd : slice.eventSliceEnd;
+    return radialRange(radius(angle), radius(angle + TURN), from ?? 0, to ?? 1);
   }
 
   function overlapGroups(events) {
@@ -81,7 +86,18 @@
     },
 
     createVisibleEventBoundaryLookup() {
-      return this.getEventIntervalIndex().boundaryLookup;
+      const lookup = this.getEventIntervalIndex().boundaryLookup;
+      const draft = this.getActiveLayoutDraft();
+      if (!draft) return lookup;
+      const pieces = this.getEventProjection(draft).intervals;
+      return {
+        isEventOverlappedAtLayout: (event, time) => lookup.isEventOverlappedAtLayout(event, time) ||
+          event !== draft && pieces.some(piece => piece.layoutStartMs <= time && piece.layoutEndMs > time),
+        isEventTouchingAtStartLayout: (event, time) => lookup.isEventTouchingAtStartLayout(event, time) ||
+          event !== draft && pieces.some(piece => piece.layoutEndMs === time),
+        isEventTouchingAtEndLayout: (event, time) => lookup.isEventTouchingAtEndLayout(event, time) ||
+          event !== draft && pieces.some(piece => piece.layoutStartMs === time)
+      };
     },
 
     annotateSegmentClock(segment) {
@@ -126,13 +142,11 @@
       if (events.length === 0) return [];
       this.ensureLayoutCache();
       const { eventToLane, eventToComponent, componentLaneCount } = this.layoutCache;
-      const { lanes: hourLanes, numLanes: hourLaneCount } = this.computeEventLanes(events);
-      const laneAt = i => eventToLane.get(events[i].displayInterval) ?? hourLanes[i] ?? 0;
+      const laneAt = i => eventToLane.get(events[i].displayInterval);
       const laneCountFor = entry => {
-        if (!CONFIG.UNIFORM_EVENT_THICKNESS) return Math.max(1, hourLaneCount);
+        if (!CONFIG.UNIFORM_EVENT_THICKNESS) return Math.max(1, ...events.map(entry => eventToLane.get(entry.displayInterval) + 1));
         const component = eventToComponent?.get(entry.displayInterval);
-        const count = component !== undefined ? componentLaneCount?.get(component) : undefined;
-        return Number.isFinite(count) && count > 0 ? count : this.getMaxOverlapForEventAcrossHours(entry.event);
+        return componentLaneCount.get(component);
       };
       const slices = [];
       if (this.state.overlayStackMode) {

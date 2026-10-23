@@ -53,6 +53,7 @@ class SpiralCalendar {
         showSegmentEdges: false,
         showArcLines: true,
         overlayStackMode: true,
+        animateEventColors: true,
         showEventBoundaryStrokes: true,
         showAllEventBoundaryStrokes: false,
         audioFeedbackEnabled: true,
@@ -159,6 +160,7 @@ class SpiralCalendar {
         showSegmentEdges: this.defaultSettings.showSegmentEdges,
         showArcLines: this.defaultSettings.showArcLines,
         overlayStackMode: this.defaultSettings.overlayStackMode,
+        animateEventColors: this.defaultSettings.animateEventColors,
         showEventBoundaryStrokes: this.defaultSettings.showEventBoundaryStrokes,
         showAllEventBoundaryStrokes: this.defaultSettings.showAllEventBoundaryStrokes,
         audioFeedbackEnabled: this.defaultSettings.audioFeedbackEnabled,
@@ -191,7 +193,7 @@ class SpiralCalendar {
 
       // Event/layout cache
       this._eventsVersion = 0;
-      this.layoutCache = null; // { windowStartMs, windowEndMs, eventsVersion, eventToLane, eventToComponent, componentLaneCount }
+      this.layoutCache = null; // Whole-event lanes, keyed by the interval index and active draft projection.
 
     // Anchor the coordinates to the current calendar day, not the UTC date.
       const now = new Date();
