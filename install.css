@@ -79,6 +79,7 @@
 #install-link-status { margin: 5px 0 0; color: var(--install-muted); font-size: 12px; }
 #install-link-status:empty { display: none; }
 #install-qr-section { margin: 14px 0 0; text-align: center; }
+#install-qr-toggle { margin-top: 10px; padding: 7px 0; border: 0; background: transparent; color: var(--install-muted); font: inherit; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 #install-qr { width: min(160px, 100%); margin: auto; padding: 6px; background: #fff; border-radius: 10px; }
 #install-qr svg { display: block; width: 100%; height: auto; }
 #install-qr-section figcaption { margin-top: 7px; color: var(--install-muted); font-size: 12px; }

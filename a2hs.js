@@ -5,7 +5,7 @@
   const DISMISS_KEY = 'a2hsDismissed';
   const REMINDER_DELAY = 7 * 24 * 60 * 60 * 1000;
   const state = { ready: false, prompt: null, installing: false, installedHere: false,
-    requestedOpen: false, platform: 'auto', feedback: '', previousFocus: null, dismissedAt: 0, qrUrl: '',
+    requestedOpen: false, platform: 'auto', feedback: '', previousFocus: null, dismissedAt: 0, qrUrl: '', qrExpanded: false,
     fallback: false, previousInert: false, previousAriaHidden: null };
   let elements;
 
@@ -142,7 +142,6 @@
     renderSteps(platform, browser, inApp);
     elements.link.value = getInstallUrl();
     elements.share.hidden = typeof global.navigator.share !== 'function';
-    elements.qrSection.hidden = platform !== 'desktop' && !env.standalone;
     if (isOpen() && state.qrUrl !== getInstallUrl()) {
       try {
         elements.qr.innerHTML = global.SpiralInstallQR.toSvg(getInstallUrl());
@@ -151,6 +150,11 @@
         elements.qrSection.hidden = true;
       }
     }
+    const showQr = platform === 'desktop' || env.standalone || state.qrExpanded;
+    elements.qrSection.hidden = !showQr || state.qrUrl !== getInstallUrl();
+    elements.qrToggle.hidden = platform === 'desktop' || env.standalone || state.qrUrl !== getInstallUrl();
+    elements.qrToggle.textContent = state.qrExpanded ? 'Hide QR code' : 'Show QR code';
+    elements.qrToggle.setAttribute('aria-expanded', String(!elements.qrSection.hidden));
     renderBanner();
   }
 
@@ -257,7 +261,7 @@
     const ids = { dialog: 'install-guide', app: 'app', backdrop: 'install-backdrop', title: 'install-title', platformAuto: 'install-platform-auto',
       status: 'install-status', platform: 'install-platform', steps: 'install-steps', native: 'install-native-btn',
       link: 'install-link', copy: 'install-copy-btn', share: 'install-share-btn', linkStatus: 'install-link-status',
-      qr: 'install-qr', qrSection: 'install-qr-section', banner: 'a2hs-banner', entry: 'installSpiralBtn' };
+      qr: 'install-qr', qrSection: 'install-qr-section', qrToggle: 'install-qr-toggle', banner: 'a2hs-banner', entry: 'installSpiralBtn' };
     elements = Object.fromEntries(Object.entries(ids).map(([name, id]) => [name, document.getElementById(id)]));
     if (Object.values(elements).some(element => !element)) return;
     state.ready = true;
@@ -269,6 +273,7 @@
     elements.native.addEventListener('click', install);
     elements.copy.addEventListener('click', copyLink);
     elements.share.addEventListener('click', shareLink);
+    elements.qrToggle.addEventListener('click', () => { state.qrExpanded = !state.qrExpanded; render(); });
     elements.platform.addEventListener('change', () => { state.platform = elements.platform.value; state.feedback = ''; render(); });
     elements.dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
     elements.backdrop.addEventListener('click', close);

@@ -85,7 +85,7 @@ function fixture({ userAgent = ANDROID_CHROME, platform = 'Linux armv8l', maxTou
     'install-guide', 'install-platform', 'install-steps', 'install-status', 'install-native-btn',
     'install-copy-btn', 'install-share-btn', 'install-link', 'install-qr', 'installSpiralBtn',
     'install-close-btn', 'install-continue-btn', 'install-title', 'install-platform-auto',
-    'install-link-status', 'install-qr-section', 'app', 'install-backdrop'];
+    'install-link-status', 'install-qr-section', 'install-qr-toggle', 'app', 'install-backdrop'];
   for (const id of ids) {
     const tag = id === 'install-guide' ? 'dialog' : id === 'install-platform' ? 'select' :
       id === 'install-link' ? 'input' : /btn$/i.test(id) ? 'button' : 'div';
