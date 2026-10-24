@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Spiral Study Facilitator</title>
+  <link rel="icon" href="icons/icon_192.png">
+  <link rel="stylesheet" href="facilitator.css">
+</head>
+<body>
+  <main class="facilitator-page">
+    <header class="page-header">
+      <div><h1>Study facilitator</h1><p>Connect phones once, then guide the study from here.</p></div>
+      <nav aria-label="Study pages"><a href="./">Open Spiral</a><a href="study-analysis.html">Study Analysis</a></nav>
+    </header>
+
+    <section id="createStudyConnection" class="panel">
+      <h2>Connect study phones</h2>
+      <p>Each phone keeps its own recording. You can switch phases and tasks for each phone separately.</p>
+      <button id="createStudyConnectionBtn" type="button" class="primary">Create connection</button>
+    </section>
+    <p id="facilitatorStatus" class="status" role="status" aria-live="polite"></p>
+
+    <section id="studyPairingPanel" class="panel" hidden aria-labelledby="pairingTitle">
+      <div class="section-heading">
+        <h2 id="pairingTitle">Add phones</h2>
+        <button id="forgetStudyConnectionBtn" type="button">Forget connection</button>
+      </div>
+      <div class="pairing-layout">
+        <div>
+          <p>Scan the QR code with each phone, or enter this code in Spiral's <strong>Connect facilitator</strong> controls.</p>
+          <p id="studyPairingCode" class="pairing-code" aria-label="Pairing code"></p>
+          <p id="studyPairingExpiry" class="muted"></p>
+          <p id="studyLocalAddressWarning" class="muted" hidden>This address opens only on this computer. Use the hosted HTTPS study address to connect real phones.</p>
+          <button id="refreshPairingCodeBtn" type="button">New pairing code</button>
+          <p id="studyConnectionStorageWarning" class="muted" hidden></p>
+        </div>
+        <div id="studyPairingQR" class="pairing-qr"></div>
+      </div>
+      <p class="muted">Keep this page open. Refreshing the code preserves phones already connected.</p>
+    </section>
+
+    <div id="studyDeviceWorkspace" class="workspace" hidden>
+      <aside class="panel phone-panel" aria-labelledby="phonesTitle">
+        <h2 id="phonesTitle">Phones</h2>
+        <p id="studyPhoneEmpty" class="muted">Connected phones will appear here.</p>
+        <div id="studyPhoneList" class="phone-list" aria-label="Connected study phones"></div>
+      </aside>
+      <section class="panel control-panel" aria-labelledby="selectedPhoneTitle">
+        <h2 id="selectedPhoneTitle">Select a phone</h2>
+        <p id="studyPhoneConnection" class="muted"></p>
+        <div id="studySelectedPhone" hidden>
+          <dl class="phone-summary">
+            <div><dt>Participant</dt><dd id="studyPhoneParticipant">—</dd></div>
+            <div><dt>Phase</dt><dd id="studyPhonePhase">—</dd></div>
+            <div><dt>Task</dt><dd id="studyPhoneTask">—</dd></div>
+            <div><dt>Session time</dt><dd id="studyPhoneElapsed">—</dd></div>
+            <div><dt>Task time</dt><dd id="studyPhoneTaskElapsed">—</dd></div>
+            <div><dt>Recording</dt><dd id="studyPhoneSave">—</dd></div>
+          </dl>
+          <div class="control-buttons">
+            <button id="studyRemoteStartBtn" type="button" class="primary">Start exploring</button>
+            <div id="studyRemotePhaseControls" class="phase-buttons" role="group" aria-label="Study phase">
+              <button id="studyRemoteExploreBtn" type="button">Explore</button>
+              <button id="studyRemoteTasksBtn" type="button">Tasks</button>
+              <button id="studyRemoteDebriefBtn" type="button">Debrief</button>
+            </div>
+            <button id="studyRemoteNextTaskBtn" type="button">Next task</button>
+            <div class="button-row">
+              <button id="studyRemotePauseBtn" type="button">Pause</button>
+              <button id="studyRemoteFinishBtn" type="button">Finish study</button>
+            </div>
+          </div>
+          <p id="studyCommandStatus" class="status" role="status" aria-live="polite"></p>
+          <details class="facilitator-tools">
+            <summary>Notes and task results</summary>
+            <div class="tool-fields">
+              <label for="studyRemoteOutcome">Task result (optional)</label>
+              <div class="button-row">
+                <select id="studyRemoteOutcome">
+                  <option value="unrated">Not rated</option><option value="success">Success</option>
+                  <option value="partial">Partial</option><option value="failure">Failure</option>
+                  <option value="skipped">Skipped</option>
+                </select>
+                <button id="studyRemoteOutcomeBtn" type="button">Set result</button>
+              </div>
+              <label for="studyRemoteNote">Note (optional)</label>
+              <textarea id="studyRemoteNote" rows="3" maxlength="2000"></textarea>
+              <div class="button-row">
+                <button id="studyRemoteNoteBtn" type="button">Add note</button>
+                <button id="studyRemoteHelpBtn" type="button">Log help given</button>
+              </div>
+            </div>
+          </details>
+          <h3>Recent activity</h3>
+          <ol id="studyRecentActivity" class="activity-list"></ol>
+          <p class="muted">Activity shows recorded actions. Phone recordings remain the source for analysis.</p>
+        </div>
+      </section>
+    </div>
+    <footer><a href="docs/study.md">Facilitator guide</a></footer>
+  </main>
+  <script src="js/vendor/qrcodegen.js"></script>
+  <script src="js/vendor/install-qr.js"></script>
+  <script src="js/study-facilitator.js"></script>
+</body>
+</html>

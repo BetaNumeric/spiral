@@ -77,6 +77,15 @@ function offlineWorker() {
   };
 }
 
+test('remote study status and commands always bypass the offline cache', () => {
+  const worker = offlineWorker();
+  for (const method of ['GET', 'POST', 'DELETE']) {
+    assert.equal(worker.request('https://example.test/study-api/rooms/private-room', { method, mode: 'cors' }), undefined);
+  }
+  assert.equal(worker.matches.length, 0);
+  assert.equal(worker.network.length, 0, 'The browser performs the request directly when the worker does not intercept it.');
+});
+
 test('installed launch and shareable installation links resolve to the cached document offline', async () => {
   const worker = offlineWorker();
   for (const path of ['', 'index.html', 'install.html']) {

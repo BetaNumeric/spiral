@@ -299,11 +299,12 @@ Object.assign(SpiralCalendar.prototype, {
     if ((typeof STUDY_MODE !== 'undefined' && !STUDY_MODE) || !this.getStudyStorage().writer || !session.isRecording
       || (session.isPaused && !options.allowWhenPaused)) return false;
     const task = this.currentStudyTask();
+    const remote = options.actor === 'facilitator' ? this._studyRemoteCommand : null;
     session.interactions.push({ index: session.interactions.length, type, phase: session.sessionPhase,
       timestamp: new Date().toISOString(), offsetMs: this.getStudyElapsedMs(),
-      actor: options.actor || 'participant', inputMethod: options.inputMethod || this.ensureStudyRuntimeState().inputMethod,
-      source: options.source || this.inferStudyEventSource(), taskId: task?.taskId || null, attemptId: task?.attemptId || null,
-      payload: this.cloneStudyValue(payload) });
+      actor: options.actor || 'participant', inputMethod: options.inputMethod || (remote ? 'remote' : this.ensureStudyRuntimeState().inputMethod),
+      source: options.source || (remote ? 'study_remote' : this.inferStudyEventSource()), taskId: task?.taskId || null, attemptId: task?.attemptId || null,
+      payload: this.cloneStudyValue(remote ? { ...payload, remoteCommandId: remote.id } : payload) });
     this.saveStudySessionDraft();
     this.syncStudySessionUI();
     return true;
@@ -885,15 +886,15 @@ Object.assign(SpiralCalendar.prototype, {
     document.getElementById('closeSettingsPanelBtn')?.click();
   },
 
-  async startSimpleStudySession(participantId) {
+  async startSimpleStudySession(participantId, { returnToCalendar = true } = {}) {
     const saved = await this.startStudySession(participantId || this.getNextStudyParticipantId(), 'explore', {
       fixtureId: this._studyFixture?.fixtureId || ''
     });
-    if (saved) this.returnToStudyCalendar();
+    if (saved && returnToCalendar) this.returnToStudyCalendar();
     return saved;
   },
 
-  async changeStudyMode(phase, { nextTask = false } = {}) {
+  async changeStudyMode(phase, { nextTask = false, returnToCalendar = true } = {}) {
     const session = this.ensureStudySessionState();
     if (this._studyBusy || this._studyFlowBusy || !session.isRecording) return false;
     if (session.isPaused || !this.getStudyStorage().writer) {
@@ -909,7 +910,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (mode === 'task' && !this.currentStudyTask() && !this.startNextStudyTask()) return false;
       this.saveStudySessionDraft();
       const saved = await this.flushStudySession();
-      if (saved) this.returnToStudyCalendar();
+      if (saved && returnToCalendar) this.returnToStudyCalendar();
       return saved;
     } finally { this._studyFlowBusy = false; this.syncStudySessionUI(); }
   },
@@ -932,7 +933,7 @@ Object.assign(SpiralCalendar.prototype, {
     const session = this.ensureStudySessionState(), task = this.currentStudyTask();
     const get = id => document.getElementById(id);
     const show = (id, visible) => { if (get(id)) get(id).hidden = !visible; };
-    const busy = !!this._studyBusy || !!this._studyFlowBusy || !this._studyInitialized;
+    const busy = !!this._studyBusy || !!this._studyFlowBusy || !!this._studyRemoteBusy || !this._studyInitialized;
     const recording = session.isRecording, owner = !!this.studyStorage?.writer;
     show('studyParticipantSetup', !recording); show('studyModeControls', recording);
     show('pauseRecordingBtn', recording); show('studyTaskControls', recording && session.sessionPhase === 'task');
@@ -1034,6 +1035,7 @@ Object.assign(SpiralCalendar.prototype, {
     try { await this.restoreStudySessionDraft(); }
     catch (error) { this._studyMessage = `Study archive could not be read: ${error.message}`; }
     this._studyInitialized = true;
+    this.setupStudyRemoteControls?.();
     this._studyHeartbeat = setInterval(() => {
       if (this.studySession?.isRecording && this.getStudyStorage().writer) {
         this.flushStudyObservations(); this.saveStudySessionDraft(); void this.flushStudySession();

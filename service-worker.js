@@ -12,6 +12,8 @@ const ASSETS = [
   './install.html',
   './install.css',
   './study-analysis.html',
+  './facilitator.html',
+  './facilitator.css',
   './a2hs.js',
   './js/vendor/qrcodegen.js',
   './js/vendor/install-qr.js',
@@ -45,6 +47,8 @@ const ASSETS = [
   './js/touch-time-orientation.js',
   './js/study-storage.js',
   './js/study-session.js',
+  './js/study-remote.js',
+  './js/study-facilitator.js',
   './js/study-analysis-page.js',
   './tools/study-analysis-core.mjs',
   './js/bootstrap.js',
@@ -111,6 +115,8 @@ function getDocumentCacheKey(request) {
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
+  // Remote commands and status must always reach the relay, including after reconnect.
+  if (new URL(req.url).pathname.startsWith('/study-api/')) return;
   const cacheKey = getDocumentCacheKey(req);
   event.respondWith(
     caches.match(cacheKey).then((cached) =>

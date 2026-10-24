@@ -312,7 +312,7 @@ try {
         tools:document.getElementById('studyFacilitatorTools').open};`), {settings:'none',study:'none',tools:false});
     };
     await openControls();
-    assert.equal(await run(page, `return document.querySelectorAll('#studySessionContent input').length;`),1);
+    assert.equal(await run(page, `return document.querySelectorAll('#studyParticipantSetup input').length;`),1);
     assert.equal(await run(page, `return document.getElementById('participantId').value;`),'P04');
     await run(page, `document.getElementById('participantId').value='P04-dom';document.getElementById('startRecordingBtn').click();`);
     await until(page,'spiralCalendar.studySession?.participantId==="P04-dom" && spiralCalendar.studySession.isRecording && !spiralCalendar._studyBusy','DOM Start did not finish');

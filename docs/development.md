@@ -2,7 +2,8 @@
 
 Spiral is a static HTML, CSS, and JavaScript app. Canvas draws the calendar, browser
 storage holds events and settings, and a service worker caches the app for offline
-use. There is no build step or application backend.
+use. There is no build step. The calendar needs no backend; remote study controls
+use the optional standalone service described below.
 
 ## Run locally
 
@@ -45,6 +46,13 @@ It creates a temporary browser profile and checks recording, tasks, resets,
 cross-tab ownership, recovery, imports, and phone-width layouts. Set `CHROME_PATH`
 if Chrome is installed elsewhere. Add `--screenshots` to save previews in the
 system temporary directory.
+
+Remote control has a separate browser check using an actual relay, a facilitator
+page, and two phones with independent browser storage:
+
+```powershell
+node tools/check-study-remote-browser.mjs
+```
 
 ## Code map
 
@@ -93,6 +101,20 @@ numbers. It returns to the calendar after a mode change. Results, assistance,
 notes, resets, and exports are optional facilitator tools. An ended task has an
 `unrated` outcome unless the facilitator marks a result; it still has a measured
 duration and is separate from an incomplete attempt.
+
+Remote control is isolated in `facilitator.html`, `facilitator.css`,
+`js/study-facilitator.js`, `js/study-remote.js`, and `tools/study-relay.mjs`.
+The relay serves the existing app and uses small authenticated HTTP messages and
+one-second polling. It has no package dependencies or recording database.
+The [service guide](study-remote-server.md) explains local/HTTPS hosting, connection
+expiry, and removal after the study. Study recording remains on the phone.
+
+Commands identify the expected session, phase, task attempt, and pause state.
+Phone receipts prevent replay after reload, and acknowledgements follow durable
+study saves. Participant actions retain their original actor; remote control
+records use `source: study_remote`, `inputMethod: remote`, and the command ID.
+The service worker bypasses `/study-api/` so commands and status cannot come from
+the offline cache. There is no remote command queue for disconnected phones.
 
 `js/study-storage.js` keeps an IndexedDB archive with session metadata and an
 interaction journal. Recording requires a single writer; save failures appear in

@@ -1629,6 +1629,19 @@
                   <button id="downloadDataBtn" type="button" hidden>Export session</button>
                   <button id="downloadStudyArchiveBtn" type="button">Export all sessions</button>
                 </div>
+                <details id="studyRemoteTools">
+                  <summary>Remote facilitator</summary>
+                  <div class="study-fields">
+                    <a href="facilitator.html" target="_blank" rel="noopener">Open facilitator page</a>
+                    <label for="studyRemoteCode">Connection code</label>
+                    <input id="studyRemoteCode" type="text" maxlength="9" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Code from the facilitator">
+                    <div class="study-buttons">
+                      <button id="studyRemoteConnectBtn" type="button">Connect</button>
+                      <button id="studyRemoteDisconnectBtn" type="button" hidden>Disconnect</button>
+                    </div>
+                    <small id="studyRemoteStatus" role="status" aria-live="polite"></small>
+                  </div>
+                </details>
                 <small id="studyArchiveCount">0 saved sessions</small>
                 <a id="studyAnalysisLink" href="study-analysis.html?study=1" target="_blank" rel="noopener">Open Study Analysis</a>
                 <a href="docs/study.md" target="_blank" rel="noopener">Facilitator guide</a>
@@ -1726,6 +1739,7 @@
   <script src="js/touch-time-orientation.js"></script>
   <script src="js/study-storage.js"></script>
   <script src="js/study-session.js"></script>
+  <script src="js/study-remote.js"></script>
   <script src="js/bootstrap.js"></script>
   <script>
     if (typeof APP_VERSION !== 'undefined') {

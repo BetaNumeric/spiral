@@ -28,6 +28,31 @@ Event description text is omitted.
 The participant can switch modes themselves, or hand the phone to the facilitator
 at these boundaries. There are no study prompts or controls over the calendar.
 
+## Control the study from a laptop
+
+The optional [connection service](study-remote-server.md) lets one facilitator
+control several phones separately. Open `facilitator.html` at the service address
+and create a connection. On each phone, scan its QR code, or open **Facilitator
+tools → Remote facilitator** and enter the connection code. Pair once before
+participants begin; a pairing code can connect multiple phones.
+
+Select a phone on the laptop to start a participant, switch phases, move to the
+next task, pause, or finish. The dashboard also accepts notes, help markers, and
+optional task results. It shows phase/task timing, save status, and recent actions.
+Participant codes are assigned across connected phones. Remote phase changes keep
+the participant's open calendar panels in place.
+
+Wait for the dashboard's confirmation from the phone before treating a command as complete.
+If the connection drops, local recording continues. Unconfirmed commands are not
+automatically resent. After a phone reload, resume its recovered recording locally
+before using remote controls again. The dashboard shows activity rather than a
+live screen mirror; full recordings are still exported from each phone.
+
+Phones and the dashboard must use the service's HTTPS address, or the relay must
+be proxied under the app's existing origin. A different address has separate
+browser storage: prepare the test calendar there before the study. The service
+guide includes laptop testing and hosting instructions.
+
 ## Optional facilitator tools
 
 - **Pause / Resume** for interruptions.

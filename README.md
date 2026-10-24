@@ -158,12 +158,15 @@ and task numbering. Switch modes or move to the next task from Settings, then
 return to the normal calendar. Optional facilitator tools provide notes, help
 markers, starting-calendar resets, and exports. **Study Analysis** shows saved
 sessions and task timings. See the [facilitator guide](docs/study.md).
+For remote control from a laptop, the optional [study connection service](docs/study-remote-server.md)
+pairs multiple phones with one facilitator page. Phone recordings remain local.
 Study Session and Dev Options are visible by default, with their controls collapsed.
 
 ## Developing Spiral
 
 Spiral is a static web app with Canvas rendering and a service worker for offline
-use. There is no build step or application backend.
+use. There is no build step; the calendar works without a backend. Remote study
+control uses a separate optional Node service.
 
 - [Development guide](docs/development.md): run locally, tests, module map, provider configuration, and study tools.
 - [Time and import guide](docs/time-model.md): event identity, time zones, clock changes, and import limits.
