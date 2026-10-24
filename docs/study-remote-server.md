@@ -1,7 +1,8 @@
 # Study relay setup
 
-The optional relay serves Spiral, the facilitator page, and a small JSON API from
-one address. It uses Node's built-in modules, so there is no dependency install or
+The optional relay provides a small JSON API and can also serve Spiral and the
+facilitator page. The app can stay on GitHub Pages and connect to a separate HTTPS
+relay. It uses Node's built-in modules, so there is no dependency install or
 database setup. Start it from this checkout with a current Node release:
 
 ```powershell
@@ -13,13 +14,64 @@ an HTTPS address with a certificate it trusts. Ordinary HTTP at a laptop's Wi-Fi
 address does not provide the secure browser APIs the app uses for recording and
 recorder ownership.
 
+Keep the terminal open while using it. The bare address opens the calendar;
+`/facilitator.html` opens the facilitator controls. `127.0.0.1` works only on the
+computer running Node, not on a separate phone. If Node reports **address already
+in use**, a server is already using that port. Try the existing facilitator page
+first, or run `node tools/study-relay.mjs --port 8081` and use port 8081 instead.
+
+## Keep the app on GitHub Pages
+
+GitHub Pages hosts the static app and dashboard; it cannot run the Node service.
+For this project the dashboard is
+`https://betanumeric.github.io/spiral/facilitator.html`.
+
+1. Publish the updated app files to GitHub Pages.
+2. Run the relay at an HTTPS address, using a host or tunnel as described below.
+   Allow the app's origin when starting the relay:
+
+   ```powershell
+   node tools/study-relay.mjs --allow-origin https://betanumeric.github.io
+   ```
+
+   Use the origin without `/spiral/`. `ALLOWED_ORIGINS` is the equivalent environment
+   variable; it accepts a comma-separated list of exact origins.
+3. Open the GitHub Pages facilitator page and enter the relay's HTTPS origin in
+   **Study service address**, for example `https://study.example.org`. Create the
+   connection. If a previous connection exists, forget it before changing services.
+4. Scan its QR code on each phone, check the service address, and tap **Connect**.
+   The QR opens the GitHub Pages app and pre-fills the address and pairing code.
+   In an already installed app, enter both in **Remote facilitator** instead.
+
+Recordings and the calendar stay in the GitHub Pages app's browser storage.
+Credentials are bound to the paired service; entering another address does not
+send an existing connection's credentials there. Cross-origin requests are allowed
+only for configured origins and still require the room/device credentials.
+
+### Temporary HTTPS from the laptop
+
+For a pilot, a [Cloudflare Quick Tunnel](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)
+provides an HTTPS address without a Cloudflare account. Install
+[`cloudflared`](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/)
+first. Keep the Node command above running, then open a second terminal:
+
+```powershell
+cloudflared tunnel --url http://127.0.0.1:8080
+```
+
+Paste the printed `https://…trycloudflare.com` origin into the GitHub Pages
+facilitator page. Keep both terminals running. The address changes after restarting
+the tunnel and stops when the tunnel closes. Quick Tunnels are testing tools with
+no uptime guarantee; use a stable hosted service or tunnel for the study and pilot
+the full workflow on the actual phones first.
+
 ## Hosted HTTPS
 
 Run the same server behind an HTTPS reverse proxy or on a Node host that provides
 HTTPS. Use this start command when the host expects a public listener:
 
 ```powershell
-node tools/study-relay.mjs --host 0.0.0.0
+node tools/study-relay.mjs --host 0.0.0.0 --allow-origin https://betanumeric.github.io
 ```
 
 The server reads the host's `PORT` environment variable. Set `PUBLIC_ORIGIN` to
@@ -31,12 +83,12 @@ The host needs the whole static app checkout, including `facilitator.html`, the
 Use one running instance for the study: room state is held in that process's
 memory, so multiple uncoordinated instances cannot share a connection.
 
-Calendar, facilitator, and `/study-api/` must share an origin. The relay does not
-allow arbitrary cross-origin requests. If the existing Spiral site is hosted
-separately, either open the calendar served by the relay or proxy `/study-api/`
-under the existing site's origin. Browser recordings and the saved starting
-calendar belong to that origin; prepare the study calendar at the address that
-participants will use.
+Calendar and facilitator can use the relay's own address or an explicitly allowed
+origin such as GitHub Pages. `PUBLIC_ORIGIN` identifies the relay's public address;
+`ALLOWED_ORIGINS` identifies other app origins that may connect to it. The relay
+does not allow arbitrary cross-origin requests. Browser recordings and the starting
+calendar belong to the app's origin, so keep using the same app address throughout
+the study.
 
 ## HTTPS on the laptop
 
@@ -80,7 +132,7 @@ counts, request sizes, and retained command history.
 
 Stop the relay to disable remote control; the calendar and local recordings still
 work. To remove its UI entirely, archive `facilitator.html`, `facilitator.css`,
-`js/study-facilitator.js`, `js/study-remote.js`, the relay/browser-check tools, and
+`js/study-facilitator.js`, `js/study-remote.js`, `js/study-connection.js`, the relay/browser-check tools, and
 their tests. Remove the remote subsection/script from `index.html` and their
 entries from `service-worker.js`, then bump the app version. The optional
 `setupStudyRemoteControls?.()` hook can be removed too. Local Study Session and

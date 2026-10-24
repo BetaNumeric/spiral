@@ -202,3 +202,33 @@ test('pairing expires independently of recordings and online state only follows 
   assert.equal(snapshot.devices.length, 1);
   assert.equal((await f.state(phone)).status, 200);
 });
+
+test('an explicitly allowed GitHub Pages origin can preflight and authenticate without wildcard access', async t => {
+  const origin = 'https://betanumeric.github.io';
+  const f = await fixture(t, { allowedOrigins: [origin] });
+  const preflight = await fetch(f.base + f.roomPath, { method: 'OPTIONS', headers: {
+    Origin: origin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'authorization,content-type'
+  } });
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get('access-control-allow-origin'), origin);
+  assert.equal(preflight.headers.get('access-control-allow-credentials'), null);
+  const permitted = await f.request(f.roomPath, { origin, token: f.room.controllerToken, headers: { 'Sec-Fetch-Site': 'cross-site' } });
+  assert.equal(permitted.status, 200);
+  assert.equal(permitted.headers.get('access-control-allow-origin'), origin);
+  assert.equal((await f.request(f.roomPath, { origin })).status, 401, 'CORS permission must not bypass room authentication.');
+  const rejected = await f.request(f.roomPath, { origin: 'https://unrelated.github.io', token: f.room.controllerToken });
+  assert.equal(rejected.status, 403);
+  assert.equal(rejected.headers.get('access-control-allow-origin'), null);
+});
+
+test('CORS preflights reject unrelated headers and configuration cannot allow arbitrary HTTP hosts', async t => {
+  const origin = 'https://betanumeric.github.io';
+  const f = await fixture(t, { allowedOrigins: [origin] });
+  const response = await fetch(f.base + '/study-api/pair', { method: 'OPTIONS', headers: {
+    Origin: origin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'X-Unrelated-Header'
+  } });
+  assert.equal(response.status, 403);
+  for (const value of ['*', 'http://external.example', 'https://betanumeric.github.io/spiral/', 'https://user:secret@example.org']) {
+    assert.throws(() => createStudyRelayServer({ allowedOrigins: [value] }), Error, value);
+  }
+});

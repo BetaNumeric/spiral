@@ -48,10 +48,11 @@ automatically resent. After a phone reload, resume its recovered recording local
 before using remote controls again. The dashboard shows activity rather than a
 live screen mirror; full recordings are still exported from each phone.
 
-Phones and the dashboard must use the service's HTTPS address, or the relay must
-be proxied under the app's existing origin. A different address has separate
-browser storage: prepare the test calendar there before the study. The service
-guide includes laptop testing and hosting instructions.
+The app and dashboard can stay on GitHub Pages: enter the separate HTTPS service
+address on the facilitator page and allow the GitHub Pages origin on the relay.
+The QR carries both the code and service address; confirm it once on each phone.
+The [service guide](study-remote-server.md#keep-the-app-on-github-pages) includes
+the commands. Keep using the same app address to preserve its browser storage.
 
 ## Optional facilitator tools
 

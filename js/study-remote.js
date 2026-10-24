@@ -27,12 +27,15 @@
       this.connected = false;
       this.serverOffset = 0;
       this.generation = 0;
+      this.relayOrigin = scope.SpiralStudyConnection.defaultRelay();
       this.onChange = options.onChange || (() => this.syncUI());
       try {
         this.storage ||= scope.sessionStorage;
         const saved = JSON.parse(this.storage.getItem(STORAGE_KEY) || 'null');
         if (saved?.pairing && ['roomId','deviceId','deviceToken'].every(key => typeof saved.pairing[key] === 'string')) {
+          this.relayOrigin = scope.SpiralStudyConnection.normalize(saved.pairing.relayOrigin || '');
           this.pairing = saved.pairing;
+          this.pairing.relayOrigin = this.relayOrigin;
           this.ledger = Array.isArray(saved.ledger) ? saved.ledger.slice(-64) : [];
           this.status = 'Reconnecting to facilitator…';
         }
@@ -47,7 +50,7 @@
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 5000);
       try {
-        const response = await this.fetch(`/study-api${path}`, {
+        const response = await this.fetch(scope.SpiralStudyConnection.apiURL(this.pairing?.relayOrigin || this.relayOrigin, path), {
           method: method || (body === undefined ? 'GET' : 'POST'), cache: 'no-store', credentials: 'omit', redirect: 'error',
           headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
             ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -55,25 +58,31 @@
         });
         let data;
         try { data = await response.json(); }
-        catch (_) { throw new Error('The study connection service is unavailable at this address.'); }
+        catch (_) { throw new Error('The study service is unavailable here. Enter the service address shown on the facilitator page.'); }
         if (!response.ok) {
           const error = new Error(data.error || 'Study connection failed.'); error.status = response.status; throw error;
         }
         return data;
+      } catch (error) {
+        if (error.name === 'TypeError' && (this.pairing?.relayOrigin || this.relayOrigin) !== scope.SpiralStudyConnection.pageOrigin()) {
+          throw new Error(`Cannot reach the service. Check its HTTPS address and that it allows ${scope.SpiralStudyConnection.pageOrigin()}.`);
+        }
+        throw error;
       } finally { clearTimeout(timer); }
     }
 
     devicePath() { return `/rooms/${encodeURIComponent(this.pairing.roomId)}/devices/${encodeURIComponent(this.pairing.deviceId)}`; }
 
-    async connect(code) {
+    async connect(code, serviceAddress = this.relayOrigin) {
       if (this.pairing || this.connecting) throw new Error('Disconnect the current facilitator before pairing again.');
       const normalized = String(code || '').toUpperCase().replace(/[\s-]/g, '');
       if (!/^[A-Z0-9]{8}$/.test(normalized)) throw new Error('Enter the eight-character code from the facilitator page.');
+      this.relayOrigin = scope.SpiralStudyConnection.normalize(serviceAddress);
       // Fail before pairing if reload receipts cannot be stored safely.
       this.persist(); this.connecting = true; this.onChange();
       try {
         const paired = await this.request('/pair', { code: normalized });
-        this.pairing = { roomId: paired.roomId, deviceId: paired.deviceId, deviceToken: paired.deviceToken };
+        this.pairing = { roomId: paired.roomId, deviceId: paired.deviceId, deviceToken: paired.deviceToken, relayOrigin: this.relayOrigin };
         this.ledger = []; this.persist(); this.generation++;
         this.status = 'Connecting…';
         this.start(); await this.publish();
@@ -236,6 +245,12 @@
       if (get('studyRemoteStatus')) get('studyRemoteStatus').textContent = this.status;
       if (get('studyRemoteConnectBtn')) get('studyRemoteConnectBtn').disabled = !!this.pairing || !!this.connecting;
       if (get('studyRemoteCode')) get('studyRemoteCode').disabled = !!this.pairing || !!this.connecting;
+      if (get('studyRemoteRelay')) {
+        get('studyRemoteRelay').disabled = !!this.pairing || !!this.connecting;
+        if (this.pairing || !get('studyRemoteRelay').value) {
+          get('studyRemoteRelay').value = this.relayOrigin === scope.SpiralStudyConnection.pageOrigin() ? '' : this.relayOrigin;
+        }
+      }
       if (get('studyRemoteDisconnectBtn')) {
         get('studyRemoteDisconnectBtn').hidden = !this.pairing;
         get('studyRemoteDisconnectBtn').disabled = !!this.processing;
@@ -250,17 +265,36 @@
       const remote = this.studyRemote = new SpiralStudyRemote(this);
       const get = id => document.getElementById(id);
       get('studyRemoteConnectBtn')?.addEventListener('click', () => {
-        remote.connect(get('studyRemoteCode')?.value).catch(error => { remote.status = error.message; remote.syncUI(); });
+        remote.connect(get('studyRemoteCode')?.value, get('studyRemoteRelay')?.value || '')
+          .catch(error => { remote.status = error.message; remote.syncUI(); });
       });
       get('studyRemoteDisconnectBtn')?.addEventListener('click', () => remote.disconnect());
       document.addEventListener('visibilitychange', () => { void remote.publish(); });
       const fragment = new URLSearchParams(location.hash.slice(1));
       const code = fragment.get('studyCode');
+      const service = fragment.get('studyRelay');
       if (code) {
         fragment.delete('studyCode');
+        fragment.delete('studyRelay');
         const query = new URL(location.href); query.searchParams.delete('studyConnect'); query.hash = fragment.toString();
         history.replaceState(history.state, '', query);
-        if (!remote.pairing) void remote.connect(code).catch(error => { remote.status = error.message; remote.syncUI(); });
+        if (!remote.pairing) {
+          try {
+            const relay = scope.SpiralStudyConnection.normalize(service || remote.relayOrigin);
+            if (relay === scope.SpiralStudyConnection.defaultRelay()) {
+              void remote.connect(code, relay).catch(error => { remote.status = error.message; remote.syncUI(); });
+            } else {
+              remote.relayOrigin = relay;
+              if (get('studyRemoteCode')) get('studyRemoteCode').value = code;
+              if (get('studyRemoteRelay')) get('studyRemoteRelay').value = relay;
+              remote.status = 'Check the service address, then tap Connect to pair with the facilitator.';
+              if (get('settingsPanel')?.style.display !== 'block') get('settingsPanelBtn')?.click();
+              if (get('studySessionContent')?.style.display !== 'flex') this.toggleStudySessionSection();
+              if (get('studyFacilitatorTools')) get('studyFacilitatorTools').open = true;
+              if (get('studyRemoteTools')) { get('studyRemoteTools').open = true; get('studyRemoteTools').scrollIntoView({ block: 'center' }); }
+            }
+          } catch (error) { remote.status = error.message; }
+        }
       }
       if (remote.pairing) remote.start();
       remote.syncUI();

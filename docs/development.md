@@ -52,6 +52,7 @@ page, and two phones with independent browser storage:
 
 ```powershell
 node tools/check-study-remote-browser.mjs
+node tools/check-study-remote-browser.mjs --separate-service
 ```
 
 ## Code map
@@ -103,9 +104,15 @@ notes, resets, and exports are optional facilitator tools. An ended task has an
 duration and is separate from an incomplete attempt.
 
 Remote control is isolated in `facilitator.html`, `facilitator.css`,
-`js/study-facilitator.js`, `js/study-remote.js`, and `tools/study-relay.mjs`.
+`js/study-facilitator.js`, `js/study-remote.js`, `js/study-connection.js`, and `tools/study-relay.mjs`.
 The relay serves the existing app and uses small authenticated HTTP messages and
 one-second polling. It has no package dependencies or recording database.
+An optional service origin supports a static GitHub Pages app with an independent
+relay. Exact origin allowlists and CORS preflights permit the browser connection;
+room authentication remains required. Credentials retain the service origin they
+were issued for. External service addresses received in a QR require confirmation.
+The separate-service browser check serves the app under `/spiral/` without any API
+and runs the relay on another origin, exercising real browser CORS and QR pairing.
 The [service guide](study-remote-server.md) explains local/HTTPS hosting, connection
 expiry, and removal after the study. Study recording remains on the phone.
 

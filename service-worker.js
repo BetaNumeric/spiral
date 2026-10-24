@@ -47,6 +47,7 @@ const ASSETS = [
   './js/touch-time-orientation.js',
   './js/study-storage.js',
   './js/study-session.js',
+  './js/study-connection.js',
   './js/study-remote.js',
   './js/study-facilitator.js',
   './js/study-analysis-page.js',

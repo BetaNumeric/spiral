@@ -26,7 +26,7 @@ a { color: #155ea4; }
 .status { min-height: 1.5em; overflow-wrap: anywhere; }
 .status:empty { display: none; }
 .status.error { color: #a32b24; }
-button, select, textarea {
+button, select, textarea, input {
   font: inherit; color: inherit; border: 1px solid var(--border); border-radius: 7px;
 }
 button { min-height: 42px; padding: 8px 14px; background: var(--button); cursor: pointer; }
@@ -34,8 +34,9 @@ button:hover:not(:disabled) { filter: brightness(.96); }
 button:disabled { opacity: .52; cursor: default; }
 button.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
 button[aria-pressed="true"] { outline: 2px solid var(--primary); outline-offset: -2px; font-weight: 650; }
-button:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid #3987c9; outline-offset: 2px; }
-select, textarea { min-width: 0; padding: 9px; background: var(--panel); }
+button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible { outline: 3px solid #3987c9; outline-offset: 2px; }
+select, textarea, input { min-width: 0; padding: 9px; background: var(--panel); }
+input { display: block; width: 100%; margin: 8px 0; }
 textarea { width: 100%; resize: vertical; }
 .pairing-layout { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 24px; }
 .pairing-code { font-size: 2rem; font-family: ui-monospace, monospace; letter-spacing: .16em; font-weight: 700; }

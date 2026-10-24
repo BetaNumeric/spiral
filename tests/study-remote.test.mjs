@@ -9,6 +9,7 @@ function fixture() {
   const window = { sessionStorage: storage, fetch: async () => { throw new Error('offline'); } };
   const context = vm.createContext({ window, SpiralCalendar: class {}, document: { hidden: false },
     AbortController, setTimeout, clearTimeout, setInterval, clearInterval, URL, URLSearchParams });
+  vm.runInContext(fs.readFileSync(new URL('../js/study-connection.js', import.meta.url), 'utf8'), context);
   vm.runInContext(fs.readFileSync(new URL('../js/study-remote.js', import.meta.url), 'utf8'), context);
   const app = {
     _studyInitialized: true, studyStorage: { writer: true }, dirty: false, failSave: false,
@@ -149,4 +150,20 @@ test('disconnecting during an acknowledgement prevents a fetched command from ex
   remote.disconnect(); release();
   await pending;
   assert.equal(calls.length, 0);
+});
+
+test('phone requests use the paired service even if another service address is entered', async () => {
+  const { remote } = fixture();
+  remote.pairing.relayOrigin = 'https://paired.example';
+  remote.relayOrigin = 'https://other.example';
+  remote.request = Object.getPrototypeOf(remote).request;
+  let destination;
+  remote.fetch = async (url, options) => {
+    destination = url;
+    assert.equal(options.headers.Authorization, 'Bearer secret');
+    return { ok: true, json: async () => ({}) };
+  };
+  await remote.request('/rooms/room/devices/phone/state', { state: {} }, 'secret');
+  assert.equal(destination, 'https://paired.example/study-api/rooms/room/devices/phone/state');
+  await assert.rejects(remote.connect('ABCDEFGH', 'https://other.example'), /Disconnect/);
 });

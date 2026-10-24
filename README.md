@@ -159,7 +159,8 @@ return to the normal calendar. Optional facilitator tools provide notes, help
 markers, starting-calendar resets, and exports. **Study Analysis** shows saved
 sessions and task timings. See the [facilitator guide](docs/study.md).
 For remote control from a laptop, the optional [study connection service](docs/study-remote-server.md)
-pairs multiple phones with one facilitator page. Phone recordings remain local.
+pairs multiple phones with one facilitator page. The app can stay on GitHub Pages
+and connect to a separate HTTPS service. Phone recordings remain local.
 Study Session and Dev Options are visible by default, with their controls collapsed.
 
 ## Developing Spiral

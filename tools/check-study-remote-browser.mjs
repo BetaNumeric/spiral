@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
+import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { createStudyRelayServer } from './study-relay.mjs';
 
@@ -10,9 +12,29 @@ const chromePath = process.env.CHROME_PATH || (process.platform === 'win32'
   ? 'C:/Program Files/Google/Chrome/Application/chrome.exe'
   : process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : 'google-chrome');
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'spiral-study-remote-check-'));
-const relay = createStudyRelayServer({ commandTtlMs: 5000 });
+const separate = process.argv.includes('--separate-service');
+let staticApp, staticOrigin;
+if (separate) {
+  const root = fileURLToPath(new URL('../', import.meta.url));
+  const mime = { '.js': 'text/javascript', '.mjs': 'text/javascript', '.html': 'text/html', '.css': 'text/css',
+    '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.gif': 'image/gif' };
+  staticApp = http.createServer((request, response) => {
+    try {
+      const pathname = decodeURIComponent(new URL(request.url, 'http://local').pathname);
+      if (!pathname.startsWith('/spiral/')) { response.writeHead(404).end(); return; }
+      const file = path.resolve(root, pathname.slice('/spiral/'.length) || 'index.html');
+      if (!file.startsWith(path.resolve(root) + path.sep)) { response.writeHead(403).end(); return; }
+      response.writeHead(200, { 'Content-Type': mime[path.extname(file)] || 'application/octet-stream' });
+      response.end(fs.readFileSync(file));
+    } catch { response.writeHead(404).end(); }
+  });
+  await new Promise(resolve => staticApp.listen(0, '127.0.0.1', resolve));
+  staticOrigin = `http://127.0.0.1:${staticApp.address().port}`;
+}
+const relay = createStudyRelayServer({ commandTtlMs: 5000, allowedOrigins: staticOrigin ? [staticOrigin] : [] });
 await new Promise(resolve => relay.listen(0, '127.0.0.1', resolve));
-const appUrl = `http://127.0.0.1:${relay.address().port}/`;
+const serviceUrl = `http://127.0.0.1:${relay.address().port}/`;
+const appUrl = separate ? staticOrigin + '/spiral/' : serviceUrl;
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const chrome = spawn(chromePath, ['--headless=new', '--disable-gpu', '--disable-background-networking',
   '--disable-sync', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0',
@@ -59,7 +81,7 @@ async function until(callback, message, timeoutMs = 15000) {
   throw new Error(message);
 }
 async function api(route, { token, body, method = body === undefined ? 'GET' : 'POST' } = {}) {
-  const response = await fetch(new URL(`study-api/${route}`, appUrl), { method,
+  const response = await fetch(new URL(`study-api/${route}`, serviceUrl), { method,
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   const result = await response.json();
@@ -93,7 +115,7 @@ try {
       const localFetch = window.fetch.bind(window);
       window.fetch = (input, options) => {
         const url = new URL(typeof input === 'string' ? input : input.url, location.href);
-        if (url.origin !== location.origin) return Promise.reject(new TypeError('External data disabled in remote study checks.'));
+        if (url.origin !== location.origin && url.origin !== ${JSON.stringify(new URL(serviceUrl).origin)}) return Promise.reject(new TypeError('External data disabled in remote study checks.'));
         if (window.__studyTestRelayOffline && url.pathname.startsWith('/study-api/')) return Promise.reject(new TypeError('Simulated relay connection loss.'));
         return localFetch(input, options);
       };
@@ -140,15 +162,26 @@ try {
   }
 
   await check('facilitator pairs two isolated phones into one dashboard', async () => {
+    await evaluate(dashboard, `const originalQR=SpiralInstallQR.toSvg;window.SpiralInstallQR={toSvg:url=>{window.__studyPairURL=url;return originalQR(url);}};
+      if(${separate})document.getElementById('studyRelayAddress').value=${JSON.stringify(serviceUrl)};`);
     await evaluate(dashboard, `document.getElementById('createStudyConnectionBtn').click();`);
     await until(() => evaluate(dashboard, `!!sessionStorage.getItem('spiralStudyFacilitatorConnection')`), 'Facilitator room was not created.');
     controller = await evaluate(dashboard, `JSON.parse(sessionStorage.getItem('spiralStudyFacilitatorConnection'))`);
     const code = (await room()).pairingCode;
     phoneA = await newPage('?study=1', { phone: true });
-    phoneB = await newPage(`?study=1&studyConnect=1#studyCode=${code}`, { phone: true });
+    const pairURL = await evaluate(dashboard, 'window.__studyPairURL');
+    assert.ok(pairURL.startsWith(appUrl), 'The QR link must stay on the static app address.');
+    phoneB = await newPage(pairURL, { phone: true });
     for (const phone of [phoneA]) {
-      await run(phone, `document.getElementById('studyRemoteCode').value=${JSON.stringify(code)};document.getElementById('studyRemoteConnectBtn').click();`);
+      await run(phone, `document.getElementById('studyRemoteCode').value=${JSON.stringify(code)};
+        if(${separate})document.getElementById('studyRemoteRelay').value=${JSON.stringify(serviceUrl)};
+        document.getElementById('studyRemoteConnectBtn').click();`);
       await until(() => run(phone, `return !!app.studyRemote.pairing;`), 'Phone did not pair.');
+    }
+    if (separate) {
+      assert.equal(await run(phoneB, 'return app.studyRemote.pairing;'), null, 'A new external service requires confirmation before pairing.');
+      assert.equal(await evaluate(phoneB, 'document.getElementById("studyRemoteRelay").value'), new URL(serviceUrl).origin);
+      await evaluate(phoneB, 'document.getElementById("studyRemoteConnectBtn").click()');
     }
     await until(() => run(phoneB, `return !!app.studyRemote.pairing;`), 'Phone QR link did not pair.');
     assert.equal(await evaluate(phoneB, 'location.hash.includes("studyCode")'), false, 'Pairing code must be removed from phone history.');
@@ -311,11 +344,12 @@ try {
 
   for (const target of pages) assert.equal(target.events.filter(event => event.method === 'Runtime.exceptionThrown').length, 0,
     JSON.stringify(target.events.filter(event => event.method === 'Runtime.exceptionThrown')));
-  console.log(`${checks.length} remote study browser checks passed using isolated phone contexts.`);
+  console.log(`${checks.length} remote study browser checks passed using isolated phone contexts${separate ? ' and a separate service behind a static /spiral/ app' : ''}.`);
 } finally {
   for (const page of pages) page.close();
   if (browser) { await browser.call('Browser.close').catch(() => {}); browser.close(); }
   chrome.kill(); relay.close(); relay.closeAllConnections?.();
+  staticApp?.close(); staticApp?.closeAllConnections?.();
   if (chrome.exitCode === null && chrome.signalCode === null && !launchError) {
     await Promise.race([new Promise(resolve => chrome.once('exit', resolve)), delay(3000)]);
   }

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https: http://127.0.0.1:* http://localhost:*; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>Spiral Study Facilitator</title>
   <link rel="icon" href="icons/icon_192.png">
   <link rel="stylesheet" href="facilitator.css">
@@ -19,6 +19,9 @@
     <section id="createStudyConnection" class="panel">
       <h2>Connect study phones</h2>
       <p>Each phone keeps its own recording. You can switch phases and tasks for each phone separately.</p>
+      <label for="studyRelayAddress">Study service address</label>
+      <input id="studyRelayAddress" type="url" placeholder="https://study-service.example.org" autocomplete="url" spellcheck="false">
+      <p class="muted">For GitHub Pages, enter the separate HTTPS service address. When using the relay's own page, leave this blank.</p>
       <button id="createStudyConnectionBtn" type="button" class="primary">Create connection</button>
     </section>
     <p id="facilitatorStatus" class="status" role="status" aria-live="polite"></p>
@@ -104,6 +107,7 @@
   </main>
   <script src="js/vendor/qrcodegen.js"></script>
   <script src="js/vendor/install-qr.js"></script>
+  <script src="js/study-connection.js"></script>
   <script src="js/study-facilitator.js"></script>
 </body>
 </html>

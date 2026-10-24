@@ -137,6 +137,14 @@ export function createStudyRelayServer(options = {}) {
   const rooms = new Map(), pairingCodes = new Map(), limits = new Map();
   const publicOrigin = options.publicOrigin ? new URL(options.publicOrigin).origin : null;
   if (publicOrigin && new URL(publicOrigin).protocol !== 'https:') throw new Error('publicOrigin must use HTTPS.');
+  const allowedOrigins = new Set((options.allowedOrigins || []).map(value => {
+    const url = new URL(value);
+    if (url.username || url.password || url.pathname !== '/' || url.search || url.hash
+      || (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)))) {
+      throw new Error('Allowed origins must be HTTPS origins, such as https://name.github.io.');
+    }
+    return url.origin;
+  }));
 
   const limit = (key, count, interval) => {
     const current = now();
@@ -210,13 +218,6 @@ export function createStudyRelayServer(options = {}) {
     const method = request.method;
     const peer = request.socket.remoteAddress || 'unknown';
     limit(`api:${peer}`, 10000, 60000);
-    if (['POST', 'DELETE'].includes(method)) {
-      const origin = request.headers.origin;
-      const expected = publicOrigin || `${request.socket.encrypted ? 'https' : 'http'}://${request.headers.host}`;
-      if ((origin && origin !== expected) || request.headers['sec-fetch-site'] === 'cross-site') {
-        throw new RequestError(403, 'origin_rejected', 'Use the study page on this server.');
-      }
-    }
     if (pathname === '/study-api/rooms' && method === 'POST') {
       await readJson(request);
       limit(`create:${peer}`, 20, 60 * 60 * 1000);
@@ -343,6 +344,24 @@ export function createStudyRelayServer(options = {}) {
       sweep();
       const url = new URL(request.url, 'http://study.invalid');
       if (url.pathname.startsWith('/study-api/')) {
+        const origin = request.headers.origin;
+        const ownOrigin = publicOrigin || `${request.socket.encrypted ? 'https' : 'http'}://${request.headers.host}`;
+        const permitted = origin && (origin === ownOrigin || allowedOrigins.has(origin));
+        if ((origin && !permitted) || (!origin && request.headers['sec-fetch-site'] === 'cross-site')) {
+          throw new RequestError(403, 'origin_rejected', 'This app address is not allowed by the study service.');
+        }
+        response.setHeader('Vary', 'Origin');
+        if (permitted && origin !== ownOrigin) response.setHeader('Access-Control-Allow-Origin', origin);
+        if (request.method === 'OPTIONS') {
+          const headers = (request.headers['access-control-request-headers'] || '').toLowerCase().split(',').map(header => header.trim()).filter(Boolean);
+          if (!permitted || !['GET', 'POST', 'DELETE'].includes(request.headers['access-control-request-method'])
+            || headers.some(header => !['authorization', 'content-type', 'accept'].includes(header))) {
+            throw new RequestError(403, 'preflight_rejected', 'This study request is not allowed.');
+          }
+          response.writeHead(204, { 'Access-Control-Allow-Methods': 'GET, POST, DELETE',
+            'Access-Control-Allow-Headers': 'Authorization, Content-Type, Accept', 'Access-Control-Max-Age': '600' });
+          response.end(); return;
+        }
         const result = await api(request, url.pathname);
         response.writeHead(result.status || 200, { 'Content-Type': MIME['.json'] });
         response.end(JSON.stringify(result.value)); return;
@@ -375,10 +394,12 @@ export function createStudyRelayServer(options = {}) {
 
 function parseCli(argv) {
   const options = { host: process.env.HOST || '127.0.0.1', port: Number(process.env.PORT || 8080),
-    cert: process.env.TLS_CERT, key: process.env.TLS_KEY, publicOrigin: process.env.PUBLIC_ORIGIN };
+    cert: process.env.TLS_CERT, key: process.env.TLS_KEY, publicOrigin: process.env.PUBLIC_ORIGIN,
+    allowedOrigins: (process.env.ALLOWED_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean) };
   for (let index = 0; index < argv.length; index++) {
     const option = argv[index];
     if (option === '--help' || option === '-h') { options.help = true; continue; }
+    if (option === '--allow-origin' && argv[index + 1]) { options.allowedOrigins.push(argv[++index]); continue; }
     const name = { '--host': 'host', '--port': 'port', '--cert': 'cert', '--key': 'key', '--public-origin': 'publicOrigin' }[option];
     if (!name || !argv[index + 1]) throw new Error(`Unknown or incomplete option: ${option}`);
     options[name] = name === 'port' ? Number(argv[++index]) : argv[++index];
@@ -392,11 +413,15 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   try {
     const options = parseCli(process.argv.slice(2));
     if (options.help) {
-      console.log('Usage: node tools/study-relay.mjs [--host 127.0.0.1] [--port 8080] [--cert cert.pem --key key.pem] [--public-origin https://study.example.org]');
+      console.log('Usage: node tools/study-relay.mjs [--host 127.0.0.1] [--port 8080] [--cert cert.pem --key key.pem] [--public-origin https://study.example.org] [--allow-origin https://name.github.io]');
     } else {
       const tls = options.cert ? { cert: fs.readFileSync(options.cert), key: fs.readFileSync(options.key) } : null;
-      const server = createStudyRelayServer({ tls, publicOrigin: options.publicOrigin });
-      server.on('error', error => { console.error(`Study relay could not start: ${error.message}`); process.exitCode = 1; });
+      const server = createStudyRelayServer({ tls, publicOrigin: options.publicOrigin, allowedOrigins: options.allowedOrigins });
+      server.on('error', error => {
+        console.error(`Study relay could not start: ${error.message}`);
+        if (error.code === 'EADDRINUSE') console.error('That port is already in use. If the study relay is running, use its existing facilitator page; otherwise try --port 8081.');
+        process.exitCode = 1;
+      });
       server.listen(options.port, options.host, () => {
         const address = server.address();
         const local = `${tls ? 'https' : 'http'}://${options.host.includes(':') ? `[${options.host}]` : options.host}:${address.port}`;

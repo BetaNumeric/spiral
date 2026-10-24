@@ -22,6 +22,7 @@ function fixture() {
     sessionStorage: { getItem: key => stored.get(key) ?? null, setItem: (key, value) => stored.set(key, value),
       removeItem: key => stored.delete(key) } };
   context.window = window;
+  vm.runInContext(fs.readFileSync(new URL('../js/study-connection.js', import.meta.url), 'utf8'), context);
   vm.runInContext(source, context);
   const app = new window.SpiralStudyFacilitator({ now: () => clock.now });
   app.connection = { roomId: 'room-1', controllerToken: 'private-controller-token-1234' };
@@ -168,4 +169,26 @@ test('pairing and pending expiry use relay time when the laptop clock is wrong',
   clock.now += 17000;
   app.reconcileCommands();
   assert.equal(app.pending.has('phone-a'), false);
+});
+
+test('separate service requests stay bound to the stored connection and pairing links retain the app URL', async () => {
+  const { app, window, elements } = fixture();
+  app.relayOrigin = 'https://relay.example';
+  app.connection.relayOrigin = app.relayOrigin;
+  let request;
+  app.fetch = async (url, options) => { request = { url, options }; return { ok: true, json: async () => ({}) }; };
+  app.relayOrigin = 'https://unrelated.example';
+  await app.request('/rooms/room-1', { token: 'private-token' });
+  assert.equal(request.url, 'https://relay.example/study-api/rooms/room-1');
+  app.relayOrigin = app.connection.relayOrigin;
+  const qr = { hidden: false, innerHTML: '', replaceChildren() {} };
+  elements.set('studyPairingQR', qr);
+  let link;
+  window.SpiralInstallQR = { toSvg: value => { link = new URL(value); return '<svg></svg>'; } };
+  app.room.pairingCode = 'ABCDEFGH'; app.room.pairingExpiresAt = 200000;
+  app.renderPairing();
+  assert.equal(link.origin, 'https://study.example');
+  assert.equal(link.pathname, '/base/');
+  assert.equal(new URLSearchParams(link.hash.slice(1)).get('studyRelay'), 'https://relay.example');
+  assert.doesNotMatch(link.href, /private-token|controller/);
 });

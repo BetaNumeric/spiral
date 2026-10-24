@@ -39,6 +39,7 @@
       this.refreshPromise = null;
       this.stopped = false;
       this.serverOffset = 0;
+      this.relayOrigin = root.SpiralStudyConnection.defaultRelay();
     }
 
     get(id) { return this.document.getElementById(id); }
@@ -76,7 +77,7 @@
         const headers = { Accept: 'application/json' };
         if (token) headers.Authorization = 'Bearer ' + token;
         if (body !== undefined) headers['Content-Type'] = 'application/json';
-        const response = await this.fetch('/study-api' + path, {
+        const response = await this.fetch(root.SpiralStudyConnection.apiURL(this.connection?.relayOrigin || this.relayOrigin, path), {
           method, headers, cache: 'no-store', credentials: 'omit', redirect: 'error',
           signal: controller.signal, ...(body === undefined ? {} : { body: JSON.stringify(body) })
         });
@@ -84,7 +85,7 @@
         try { data = await response.json(); } catch (_) { data = null; }
         if (!response.ok) {
           const message = typeof data?.error === 'string' ? data.error : response.status === 404
-            ? 'The study connection service is unavailable here. Open the facilitator page at the study relay address.'
+            ? 'The study service is unavailable here. Enter its HTTPS address above; GitHub Pages cannot run the service itself.'
             : 'The connection service could not complete this request.';
           const error = new Error(message);
           error.status = response.status;
@@ -93,6 +94,11 @@
         if (!data || typeof data !== 'object') throw new Error('The connection service returned an unreadable response.');
         if (typeof data.serverTime === 'number' && Number.isFinite(data.serverTime)) this.serverOffset = data.serverTime - this.now();
         return data;
+      } catch (error) {
+        if (error.name === 'TypeError' && (this.connection?.relayOrigin || this.relayOrigin) !== root.SpiralStudyConnection.pageOrigin()) {
+          throw new Error(`Cannot reach the study service. Check its HTTPS address and that it allows ${root.SpiralStudyConnection.pageOrigin()}.`);
+        }
+        throw error;
       } finally { this.clearTimeout(timer); }
     }
 
@@ -105,7 +111,8 @@
         if (!saved) return;
         if (typeof saved.roomId !== 'string' || !saved.roomId || typeof saved.controllerToken !== 'string'
           || saved.controllerToken.length < 20) throw new Error('Invalid stored connection.');
-        this.connection = { roomId: saved.roomId, controllerToken: saved.controllerToken };
+        this.relayOrigin = root.SpiralStudyConnection.normalize(saved.relayOrigin || '');
+        this.connection = { roomId: saved.roomId, controllerToken: saved.controllerToken, relayOrigin: this.relayOrigin };
       } catch (_) {
         try { this.getStorage().removeItem(CONNECTION_KEY); } catch (_) {}
       }
@@ -120,15 +127,19 @@
     }
 
     async createConnection() {
-      if (this.creating) return false;
+      if (this.creating || this.connection) return false;
       this.creating = true;
       this.disable('createStudyConnectionBtn', true);
       this.setStatus('Creating connection…');
       try {
+        this.relayOrigin = root.SpiralStudyConnection.normalize(this.get('studyRelayAddress')?.value || this.relayOrigin);
+        if (new URL(root.location.href).hostname.endsWith('.github.io') && this.relayOrigin === root.SpiralStudyConnection.pageOrigin()) {
+          throw new Error('Enter the separate HTTPS study service address above. GitHub Pages hosts the app, but cannot run the service.');
+        }
         const created = await this.request('/rooms', { method: 'POST', body: {} });
         if (typeof created.roomId !== 'string' || typeof created.controllerToken !== 'string'
           || created.controllerToken.length < 20) throw new Error('The connection service did not provide a usable connection.');
-        this.connection = { roomId: created.roomId, controllerToken: created.controllerToken };
+        this.connection = { roomId: created.roomId, controllerToken: created.controllerToken, relayOrigin: this.relayOrigin };
         this.room = { ...created, devices: [] };
         this.pending.clear(); this.messages.clear(); this.noteDrafts.clear();
         this.selectedDeviceId = null;
@@ -276,6 +287,7 @@
           const url = new URL('./', root.location.href);
           url.search = '?study=1&studyConnect=1';
           url.hash = 'studyCode=' + encodeURIComponent(code);
+          if (this.relayOrigin !== root.SpiralStudyConnection.pageOrigin()) url.hash += '&studyRelay=' + encodeURIComponent(this.relayOrigin);
           qr.innerHTML = root.SpiralInstallQR.toSvg(url.href)
             .replace('Scan to open the Spiral installation guide', 'Scan to connect this phone to the study');
           this.qrCode = code;
@@ -367,6 +379,11 @@
     }
 
     render() {
+      const service = this.get('studyRelayAddress');
+      if (service) {
+        service.disabled = !!this.connection || this.creating;
+        if (this.connection || !service.value) service.value = this.relayOrigin === root.SpiralStudyConnection.pageOrigin() ? '' : this.relayOrigin;
+      }
       this.show('createStudyConnection', !this.connection);
       this.show('studyPairingPanel', !!this.connection); this.show('studyDeviceWorkspace', !!this.connection);
       this.disable('refreshPairingCodeBtn', !this.connected);
