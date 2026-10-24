@@ -1020,6 +1020,9 @@ Object.assign(SpiralCalendar.prototype, {
       }
       // If page is zoomed, let browser handle zoom and ignore canvas gesture
       if (this.pageZoomActive) return;
+      this.beginStudyNavigation?.('wheel', 'wheel');
+      clearTimeout(this._studyWheelEndTimer);
+      this._studyWheelEndTimer = setTimeout(() => this.endStudyNavigation?.('wheel', 'wheel'), 220);
       
       // If Shift key is held (but not Alt+Shift), adjust days slider instead of rotating
       // Alt+Shift is reserved for 7-day rotation scrolling
@@ -1616,6 +1619,7 @@ Object.assign(SpiralCalendar.prototype, {
 
   startKeyboardLoop() {
     if (this.keyboardState.loopId) return;
+    this.beginStudyNavigation?.('keyboard_navigation', 'keyboard');
     
     if (this.autoTimeAlignState && this.autoTimeAlignState.enabled) {
       this.autoTimeAlignState.enabled = false;
@@ -1717,6 +1721,7 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   stopKeyboardLoop() {
+    this.endStudyNavigation?.('keyboard_navigation', 'keyboard');
     if (this.keyboardState.loopId) {
       cancelAnimationFrame(this.keyboardState.loopId);
       this.keyboardState.loopId = null;

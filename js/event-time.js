@@ -110,7 +110,7 @@ Object.assign(SpiralCalendar.prototype, {
       Object.assign(event, candidate);
       if (!allDay) { delete event.allDay; delete event.startDate; delete event.endDate; }
       return true;
-    } catch (error) { alert(error.message); return false; }
+    } catch (error) { this.recordStudyValidationFailure?.('event_time_range', error, event); alert(error.message); return false; }
   },
 
   setEventHandleTime(event, type, wall, { preferredOffsetMs } = {}) {

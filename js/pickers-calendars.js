@@ -61,14 +61,18 @@ Object.assign(SpiralCalendar.prototype, {
       if (this._cleanupRepeatedTimeChooser === cleanup) this._cleanupRepeatedTimeChooser = null;
       if (previousFocus?.isConnected) previousFocus.focus();
     };
+    const cancelChooser = () => {
+      if (panel.isConnected) this.recordStudyAction?.('editor_cancelled', { eventId: event.persistentUID || null, field: type }, { source: 'repeated_time_chooser' });
+      cleanup();
+    };
     this._cleanupRepeatedTimeChooser = cleanup;
-    this.registerKeyboardDismissal(panel, cleanup);
-    cancel.addEventListener('click', cleanup);
+    this.registerKeyboardDismissal(panel, cancelChooser);
+    cancel.addEventListener('click', cancelChooser);
     apply.addEventListener('click', () => {
       if (this.applyEventDateTimeInputValue(event, type, value, { occurrence: Number(select.value) })) cleanup();
     });
     panel.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { e.preventDefault(); cleanup(); }
+      if (e.key === 'Escape') { e.preventDefault(); cancelChooser(); }
       else if (e.key === 'Enter') { e.preventDefault(); apply.click(); }
       else if (e.key === 'Tab') {
         const elements = [select, cancel, apply];
@@ -86,7 +90,10 @@ Object.assign(SpiralCalendar.prototype, {
   applyEventDateTimeInputValue(event, type, rawValue, { occurrence } = {}) {
     if (!this.isActiveEvent(event) || typeof rawValue !== 'string' || !rawValue.trim()) return false;
     const parsedValue = parseDateTimeLocalAsUTC(rawValue.trim());
-    if (!Number.isFinite(parsedValue.getTime())) return false;
+    if (!Number.isFinite(parsedValue.getTime())) {
+      this.recordStudyValidationFailure?.('date_time_editor', new Error('Invalid date/time'), event);
+      return false;
+    }
     const applied = this.editEvent(event, candidate => {
       const chosen = this.resolveEventWallTime(candidate, type, parsedValue, { occurrence });
       if (candidate.isDraft && candidate.autoEnd && type === 'start') {
@@ -207,7 +214,7 @@ Object.assign(SpiralCalendar.prototype, {
     let outsideCloseArmed = false;
     const handleDocumentPointerDown = (e) => {
       if (!outsideCloseArmed || panel.contains(e.target)) return;
-      cleanup();
+      cancelEditor();
     };
     const cleanup = () => {
       document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
@@ -217,7 +224,11 @@ Object.assign(SpiralCalendar.prototype, {
       if (panel.parentNode) panel.remove();
     };
     this._cleanupExtendedDateTimeEditor = cleanup;
-    this.registerKeyboardDismissal(panel, cleanup);
+    const cancelEditor = () => {
+      if (panel.isConnected) this.recordStudyAction?.('editor_cancelled', { eventId: event.persistentUID || null, field: type }, { source: 'extended_date_time_editor' });
+      cleanup();
+    };
+    this.registerKeyboardDismissal(panel, cancelEditor);
     const showInvalidState = () => {
       input.style.borderColor = '#e53935';
       hint.textContent = 'Invalid date/time. Use YYYY-MM-DDTHH:MM, for example 0000-01-01T00:00 or -0044-03-15T12:00.';
@@ -233,7 +244,7 @@ Object.assign(SpiralCalendar.prototype, {
       }
     };
 
-    cancelBtn.addEventListener('click', cleanup);
+    cancelBtn.addEventListener('click', cancelEditor);
     saveBtn.addEventListener('click', save);
     input.addEventListener('input', () => {
       input.style.borderColor = isDarkMode ? 'var(--dark-border)' : '#cfcfcf';
@@ -246,7 +257,7 @@ Object.assign(SpiralCalendar.prototype, {
         save();
       } else if (e.key === 'Escape') {
         e.preventDefault();
-        cleanup();
+        cancelEditor();
       }
     });
 
@@ -321,6 +332,7 @@ Object.assign(SpiralCalendar.prototype, {
     
     const handleCancel = () => {
       if (input.parentNode) {
+        this.recordStudyAction?.('editor_cancelled', { eventId: event.persistentUID || null, field: type }, { source: 'native_date_time_editor' });
         input.remove();
       }
     };
@@ -456,6 +468,7 @@ Object.assign(SpiralCalendar.prototype, {
 
     const handleCancel = () => {
       if (input.parentNode) {
+        this.recordStudyAction?.('editor_cancelled', { eventId: calendarEvent.persistentUID || null, field: 'color' }, { source: 'color_picker' });
         input.remove();
       }
     };

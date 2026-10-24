@@ -14,6 +14,20 @@
   <script src="js/suncalc.min.js"></script>
 
   <style>
+    #studySessionContent input:not([type="checkbox"]),
+    #studySessionContent select, #studySessionContent textarea {
+      width: 100%; min-width: 0; padding: 0.4em; font: inherit;
+    }
+    #studySessionContent button { padding: 0.45em 0.6em; font: inherit; cursor: pointer; }
+    #studySessionContent button:disabled { cursor: default; }
+    #studySessionContent summary { cursor: pointer; padding: 0.25em 0; }
+    .study-fields { display: flex; flex-direction: column; gap: 0.4em; padding-top: 0.4em; }
+    .study-buttons { display: flex; flex-wrap: wrap; gap: 0.4em; }
+    .study-buttons > button { flex: 1; }
+    #studySessionContent [hidden] { display: none !important; }
+    #studySessionContent [data-study-phase][aria-pressed="true"] { border: 2px solid currentColor; font-weight: bold; }
+    #studyTaskControls { align-items: center; }
+    #studyTaskStatus { flex: 1; }
     /* Basic reset and layout */
     *, *::before, *::after { box-sizing: border-box; }
     html, body {
@@ -124,6 +138,7 @@
     }
     body.dark-mode #a2hs-banner { background: var(--dark-bg-banner) !important; }
     body.dark-mode #settingsPanel { background: var(--dark-bg-panel) !important; color: var(--dark-text-primary) !important; }
+    body.dark-mode #studySessionSection a { color: #9ccaff; }
     body.dark-mode #eventInputPanel { background: var(--dark-bg-panel) !important; color: var(--dark-text-primary) !important; }
     body.dark-mode input, body.dark-mode textarea { background: var(--dark-bg-secondary); color: var(--dark-text-primary); border-color: var(--dark-border) !important; }
     body.dark-mode input[type="datetime-local"] { background: var(--dark-bg-secondary) !important; color: var(--dark-text-primary) !important; border-color: var(--dark-border) !important; }
@@ -1561,34 +1576,67 @@
           <p style="margin: 0.4em 0;">Selected events follow the visible event list in chronological order. When details are closed, Alt + arrows moves more precisely; Alt + Shift + Up/Down steps through weeks. Shortcuts pause while using form controls. Esc cancels a text edit or clears a search before closing its view.</p>
         </details>
 
-        <!-- Study Session Controls (STUDY_MODE only) -->
+        <!-- Study controls stay inside Settings and collapse when returning to the calendar. -->
         <div id="studySessionSection" style="margin-top: 0.8em; padding-top: 0.6em; border-top: 1px solid #ccc;">
-          <div id="studySessionToggle" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em; cursor: pointer;">
-            <span style="font-weight: bold;">Study Session</span>
-            <span id="studyToggleIcon" style="font-size: 1.2em; transition: transform 0.2s;">▼</span>
-          </div>
-          
-          <div id="studySessionContent" style="display: none; flex-direction: column; gap: 0.5em; max-width: 360px; overflow: hidden; transition: all 0.3s ease;">
-            <div style="margin-bottom: 0.5em;">
-              <input type="text" id="participantId" placeholder="Enter participant ID" style="width: 100%; padding: 0.3em; border: 1px solid #ccc; border-radius: 0.3em; font-size: 0.9em;">
+          <button id="studySessionToggle" type="button" aria-expanded="false" aria-controls="studySessionContent" style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 0; background: none; border: 0; color: inherit; font: inherit; cursor: pointer;">
+            <strong>Study Session</strong><span id="studyToggleIcon" aria-hidden="true">▼</span>
+          </button>
+          <div id="studySessionContent" style="display: none; flex-direction: column; gap: 0.6em; padding-top: 0.6em;">
+            <div id="studyParticipantSetup" class="study-fields">
+              <label for="participantId">Participant</label>
+              <input type="text" id="participantId" placeholder="P01" autocomplete="off">
+              <button id="startRecordingBtn" type="button">Start exploring</button>
             </div>
-            <div style="margin-bottom: 0.5em;">
-              <select id="studySessionPhase" style="width: 100%; padding: 0.3em; border: 1px solid #ccc; border-radius: 0.3em; font-size: 0.9em;">
-                <option value="explore">Explore</option>
-                <option value="task">Task</option>
-                <option value="debrief">Debrief</option>
-              </select>
+            <div id="studyModeControls" class="study-fields" hidden>
+              <div class="study-buttons" role="group" aria-label="Study phase">
+                <button id="studyExploreBtn" type="button" data-study-phase="explore">Explore</button>
+                <button id="studyTasksBtn" type="button" data-study-phase="task">Tasks</button>
+                <button id="studyDebriefBtn" type="button" data-study-phase="debrief">Debrief</button>
+              </div>
+              <div id="studyTaskControls" class="study-buttons" hidden>
+                <span id="studyTaskStatus" role="status"></span>
+                <button id="nextStudyTaskBtn" type="button">Next task</button>
+              </div>
+              <div class="study-buttons">
+                <button id="studyReturnBtn" type="button">Return to calendar</button>
+                <button id="stopRecordingBtn" type="button">Finish study</button>
+              </div>
             </div>
-            <div style="display: flex; gap: 0.3em; margin-bottom: 0.5em;">
-              <button id="startRecordingBtn" style="flex: 1; padding: 0.4em; background: #4CAF50; color: white; border: none; border-radius: 0.3em; cursor: pointer; font-size: 0.9em;">Start Recording</button>
-              <button id="stopRecordingBtn" style="flex: 1; padding: 0.4em; background: #f44336; color: white; border: none; border-radius: 0.3em; cursor: pointer; font-size: 0.9em; display: none;">Stop Recording</button>
-            </div>
-            <button id="downloadDataBtn" style="width: 100%; padding: 0.4em; background: #2196F3; color: white; border: none; border-radius: 0.3em; cursor: pointer; font-size: 0.9em; display: none;">Download Study Data</button>
-            <a id="studyAnalysisLink" href="study-analysis.html?study=1" style="display: block; width: 100%; box-sizing: border-box; padding: 0.4em; background: #455a64; color: white; border: none; border-radius: 0.3em; cursor: pointer; font-size: 0.9em; text-align: center; text-decoration: none;">Open Study Analysis</a>
-            <div id="recordingStatus" style="font-size: 0.8em; color: #666; margin-top: 0.3em; text-align: center;"></div>
+            <div id="recordingStatus" role="status" aria-live="polite" style="font-size: 0.85em;"></div>
+            <button id="retryStudySaveBtn" type="button" hidden>Retry saving</button>
+            <details id="studyFacilitatorTools">
+              <summary>Facilitator tools</summary>
+              <div class="study-fields">
+                <button id="pauseRecordingBtn" type="button" hidden>Pause</button>
+                <div id="studyTaskFinishControls" class="study-fields" hidden>
+                  <label for="studyTaskOutcome">Task result (optional)</label>
+                  <select id="studyTaskOutcome">
+                    <option value="unrated">Not rated</option><option value="success">Success</option>
+                    <option value="partial">Partial</option><option value="failure">Failure</option>
+                    <option value="skipped">Skipped</option>
+                  </select>
+                  <button id="studyHelpBtn" type="button">Log help given</button>
+                </div>
+                <div id="studyNoteControls" class="study-fields" hidden>
+                  <label for="studyNote">Note (optional)</label><textarea id="studyNote" rows="2"></textarea>
+                  <button id="studyAddNoteBtn" type="button">Add note</button>
+                </div>
+                <div id="studySetupControls" class="study-buttons">
+                  <button id="saveStudyFixtureBtn" type="button">Save starting calendar</button>
+                  <button id="resetStudyFixtureBtn" type="button">Restore starting calendar</button>
+                </div>
+                <div class="study-buttons">
+                  <button id="downloadDataBtn" type="button" hidden>Export session</button>
+                  <button id="downloadStudyArchiveBtn" type="button">Export all sessions</button>
+                </div>
+                <small id="studyArchiveCount">0 saved sessions</small>
+                <a id="studyAnalysisLink" href="study-analysis.html?study=1" target="_blank" rel="noopener">Open Study Analysis</a>
+                <a href="docs/study.md" target="_blank" rel="noopener">Facilitator guide</a>
+              </div>
+            </details>
           </div>
         </div>
-        
+
         <!-- Bottom Separator for Danger/System Actions -->
         <div style="margin-top: 1em; padding-top: 0.5em; border-top: 1px solid #ccc;"></div>
 
@@ -1676,6 +1724,7 @@
   <script src="js/event-storage-ui.js"></script>
   <script src="js/pickers-calendars.js"></script>
   <script src="js/touch-time-orientation.js"></script>
+  <script src="js/study-storage.js"></script>
   <script src="js/study-session.js"></script>
   <script src="js/bootstrap.js"></script>
   <script>

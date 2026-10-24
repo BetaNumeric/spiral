@@ -17,7 +17,10 @@ Object.assign(SpiralCalendar.prototype, {
     const openingFromClosed = this.state.detailViewDay === null;
     const nextSegment = { ...segment };
     const selectionVersion = this._detailViewSelectionVersion = (this._detailViewSelectionVersion || 0) + 1;
-    if (!options.preserveDraft && this.mouseState.selectedSegment?.clockOffsetMs !== nextSegment.clockOffsetMs) this.draftEvent = null;
+    if (!options.preserveDraft && this.mouseState.selectedSegment?.clockOffsetMs !== nextSegment.clockOffsetMs) {
+      this.recordStudyDraftDiscard?.(this.draftEvent, 'detail_hour_changed');
+      this.draftEvent = null;
+    }
     const shouldAutoSwitchToCircle = this.state.detailViewAutoCircleMode !== false && !this.state.circleMode;
     const shouldAnimate = options.animateTransition !== false &&
       openingFromClosed &&
@@ -49,6 +52,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (typeof this.recordStudyDetailViewOpened === 'function') {
         this.recordStudyDetailViewOpened(nextSegment);
       }
+      this.recordStudySelection?.(options.studySource || 'detail_view', options.inputMethod || 'unknown');
       if (shouldAutoZoomInward) {
         this.startDetailViewAutoZoomAnimation(nextSegment);
       }
@@ -100,6 +104,7 @@ Object.assign(SpiralCalendar.prototype, {
     }
 
     if (clearDraft) {
+      this.recordStudyDraftDiscard?.(this.draftEvent, 'detail_closed');
       this.draftEvent = null;
     }
 
@@ -179,7 +184,7 @@ Object.assign(SpiralCalendar.prototype, {
     finalizeClose();
   },
 
-  cycleDetailViewEvent(direction = 1) {
+  cycleDetailViewEvent(direction = 1, study = {}) {
     this._eventClickSequence = null;
     this.finishActiveDetailTextEditor({ redraw: false });
     const detailEventState = this.getDetailViewEventState();
@@ -191,6 +196,13 @@ Object.assign(SpiralCalendar.prototype, {
     const normalizedDirection = direction < 0 ? -1 : 1;
     const nextIndex = (detailEventState.activeEventIndex + normalizedDirection + eventCount) % eventCount;
     this.mouseState.selectedEventIndex = nextIndex;
+    this.recordStudyAction?.('overlap_cycle', {
+      direction: normalizedDirection,
+      fromEventId: detailEventState.detailEvent?.persistentUID || null,
+      eventId: detailEventState.segmentEventEntries[nextIndex]?.event?.persistentUID || null,
+      eventCount
+    }, { source: study.source || 'detail_chevron', inputMethod: study.inputMethod || 'unknown' });
+    this.recordStudySelection?.(study.source || 'detail_chevron', study.inputMethod || 'unknown');
     return true;
   },
 
@@ -203,7 +215,9 @@ Object.assign(SpiralCalendar.prototype, {
     const index = events.indexOf(detail.activePersistedEvent);
     if (index < 0) return false;
     const next = events[index + (direction < 0 ? -1 : 1)];
-    return next ? this.openEventAtStart(next) : false;
+    if (!next) return false;
+    const opened = this.openEventAtStart(next, { source: 'chronological_event_navigation', inputMethod: 'keyboard' });
+    return opened;
   },
 
   _getSelectedEventForHandleEditing() {
@@ -252,6 +266,9 @@ Object.assign(SpiralCalendar.prototype, {
     };
     this.normalizeRuntimeEvent(draft);
     draft.title = '';
+    this.recordStudyAction?.('draft_started', {
+      eventId: draft.persistentUID, start: draft.start.toISOString(), end: draft.end.toISOString(), segmentId
+    }, { source: 'detail_view' });
     this.startDraftEventColorPreview(draft, candidateColors);
     return draft;
   },
@@ -271,6 +288,7 @@ Object.assign(SpiralCalendar.prototype, {
     const activePersistedEvent = segmentEventEntries[activeEventIndex]?.event || null;
 
     if (ensureDraft && !activePersistedEvent && (!this.draftEvent || this.draftEvent.segmentId !== selectedSegmentId)) {
+      this.recordStudyDraftDiscard?.(this.draftEvent, 'detail_hour_changed');
       this.draftEvent = this.createDraftEventForSegmentId(selectedSegmentId, selectedSegment);
     }
 

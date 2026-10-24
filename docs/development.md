@@ -35,6 +35,17 @@ caching. The [time guide](time-model.md#manual-checks) includes manual clock-cha
 checks. The [performance guide](performance.md) explains the Node and Chrome
 benchmarks and their limits.
 
+The facilitated study workflow has an isolated Chrome check:
+
+```powershell
+node tools/check-study-browser.mjs
+```
+
+It creates a temporary browser profile and checks recording, tasks, resets,
+cross-tab ownership, recovery, imports, and phone-width layouts. Set `CHROME_PATH`
+if Chrome is installed elsewhere. Add `--screenshots` to save previews in the
+system temporary directory.
+
 ## Code map
 
 Paths below are relative to the repository root.
@@ -49,7 +60,7 @@ Paths below are relative to the repository root.
 | Forms, lists, and input | `js/ui-event-panel.js`, `js/ui-handlers.js`, `js/input-mouse.js`, `js/touch-time-orientation.js` |
 | Geometry, queries, and painting | `js/render-geometry.js`, `js/event-index.js`, `js/render-spiral.js`, `js/render-circle.js` |
 | Settings and location | `js/settings-config.js`, `js/state-storage-sync.js`, `js/pickers-calendars.js`, `js/location-search.js` |
-| Study recording and analysis | `js/study-session.js`, `js/study-analysis-page.js`, `tools/study-analysis-core.mjs` |
+| Study recording and analysis | `js/study-storage.js`, `js/study-session.js`, `js/study-analysis-page.js`, `tools/study-analysis-core.mjs` |
 | App version and offline cache | `js/app-version.js`, `service-worker.js`, `a2hs.js`, `manifest.json` |
 
 Keep event records canonical at storage and editing boundaries; derive display
@@ -72,22 +83,52 @@ The random-event generator in the Add Event panel can populate a date range with
 different durations, calendars, and overlaps. Its **Clear existing events** option
 replaces the current event set, so use a separate browser profile for sample data.
 
-## Study analysis
+## Study recording and analysis
 
-Open `study-analysis.html?study=1` from Study Session to analyze the session saved
-in the same browser, or import downloaded `study-session-*.json` files. Analysis
-runs locally and offers timelines, phase durations, summary CSV, interaction CSV,
-and a standalone HTML report.
+The [facilitator guide](study.md) covers preparing a baseline, running tasks,
+interruptions, participant resets, exports, and interpretation.
 
-The command-line analyzer uses the same shared analysis module:
+The study UI uses Explore, Tasks, and Debrief, with automatic participant and task
+numbers. It returns to the calendar after a mode change. Results, assistance,
+notes, resets, and exports are optional facilitator tools. An ended task has an
+`unrated` outcome unless the facilitator marks a result; it still has a measured
+duration and is separate from an incomplete attempt.
+
+`js/study-storage.js` keeps an IndexedDB archive with session metadata and an
+interaction journal. Recording requires a single writer; save failures appear in
+the study controls. The calendar's event/settings storage is independent, so a
+participant reset does not remove recordings. The legacy localStorage draft is
+preserved during migration.
+
+The recorder in `js/study-session.js` writes schema 6 sessions. Each session has a
+participant code, stable session ID and revision, study/protocol/condition/setup
+metadata, immutable starting event/view/settings snapshots, task attempts,
+interruptions, notes, and structured actions. Actions carry elapsed offsets,
+timestamps, actor, input method, source, task/attempt IDs, and relevant payloads.
+Calendar targets use canonical instants plus time-zone/wall-time/occurrence
+context. Description text is opt-in; titles and other study context remain in
+the export. Task targets and expected-state fields are context, not automatic
+grading rules.
+
+`study-analysis.html` reads the local archive or imported session/archive JSON.
+Browser and CLI analysis share `tools/study-analysis-core.mjs`: validation,
+session-ID/revision deduplication, frozen snapshot durations, task timing minus
+recorded interruptions, outcome/help counts, and descriptive charts. Original
+imports remain available alongside normalized analysis data. A named task's
+completion time differs from the broader Task phase's elapsed time.
 
 ```powershell
 node tools/analyze-study-sessions.mjs ./study-exports --out ./study-analysis
 ```
 
-It accepts explicit JSON files or directories. With no arguments, it scans the
-current directory for `study-session-*.json` and writes `summary.csv`,
-`interactions.csv`, and `report.html` to `study-analysis`.
+The CLI accepts explicit JSON files or directories containing
+`study-session-*.json`, `study-sessions-*.json`, or `study-archive-*.json`. With no
+arguments it scans the current directory. It writes `summary.csv`,
+`interactions.csv`, `tasks.csv`, `raw-archive.json`, and `report.html`; invalid
+files produce diagnostics without preventing valid sessions from being analyzed.
+Keep raw JSON for later measures and link questionnaire responses by participant,
+session, and task IDs as appropriate.
+
 
 ## Place-search provider
 

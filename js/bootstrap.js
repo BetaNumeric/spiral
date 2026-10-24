@@ -16,7 +16,8 @@ const flushPersistedCalendarState = () => {
 };
 window.addEventListener('beforeunload', (event) => {
   flushPersistedCalendarState();
-  if (!spiralCalendar._allowDiscardUnsavedEvents && spiralCalendar.hasUnsavedEventChanges()) {
+  if ((!spiralCalendar._allowDiscardUnsavedEvents && spiralCalendar.hasUnsavedEventChanges())
+    || spiralCalendar.hasUnsavedStudyChanges?.()) {
     event.preventDefault();
     event.returnValue = '';
   }

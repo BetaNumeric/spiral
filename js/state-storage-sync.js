@@ -720,8 +720,10 @@ Object.assign(SpiralCalendar.prototype, {
       if (typeof this.recordStudySettingsSnapshotDiff === 'function') {
         this.recordStudySettingsSnapshotDiff(settingsToSave);
       }
+      return true;
     } catch (error) {
       console.warn('Failed to save settings to localStorage:', error);
+      return false;
     }
   },
 

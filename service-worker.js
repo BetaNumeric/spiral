@@ -43,6 +43,7 @@ const ASSETS = [
   './js/event-storage-ui.js',
   './js/pickers-calendars.js',
   './js/touch-time-orientation.js',
+  './js/study-storage.js',
   './js/study-session.js',
   './js/study-analysis-page.js',
   './tools/study-analysis-core.mjs',

@@ -36,6 +36,7 @@ Object.assign(SpiralCalendar.prototype, {
       changed = SpiralEventModel.fingerprint(before) !== SpiralEventModel.fingerprint(after)
         || event.title !== candidate.title || event.color !== candidate.color || event.colorSeed !== candidate.colorSeed;
     } catch (error) {
+      this.recordStudyValidationFailure?.('event_edit', error, event);
       alert(error.message);
       return false;
     }
@@ -59,7 +60,10 @@ Object.assign(SpiralCalendar.prototype, {
     try {
       candidate = this.normalizeRuntimeEvent(this.serializeEventTime(event));
       SpiralEventModel.validateUnique([...this.events, candidate]);
-    } catch (error) { alert(error.message); return false; }
+    } catch (error) {
+      this.recordStudyValidationFailure?.('event_add', error, event);
+      alert(error.message); return false;
+    }
     this.events.push(candidate);
     this.invalidateEventViews();
     this.saveEventsToStorage();
@@ -86,8 +90,17 @@ Object.assign(SpiralCalendar.prototype, {
     return true;
   },
 
-  finishEventHandleDrag() {
+  finishEventHandleDrag({ cancelled = false } = {}) {
     const drag = this.handleDragState;
+    if (drag && (drag.touchMoved || drag.event.start - drag.originalStart || drag.event.end - drag.originalEnd)) {
+      this.recordStudyAction?.(cancelled ? 'handle_drag_cancelled' : 'handle_drag_completed', {
+        eventId: drag.event.persistentUID || null,
+        handle: this.mouseState.draggingHandle,
+        before: { start: drag.originalStart.toISOString(), end: drag.originalEnd.toISOString() },
+        after: { start: drag.event.start.toISOString(), end: drag.event.end.toISOString() },
+        result: cancelled ? 'interrupted_at_current_value' : 'completed'
+      }, { source: 'event_handle', inputMethod: drag.touchIdentifier != null ? 'touch' : this._studyMouseInputMethod || 'mouse' });
+    }
     if (drag && (drag.touchMoved || drag.event.start - drag.originalStart || drag.event.end - drag.originalEnd)) {
       this._eventClickSequence = null;
     }

@@ -153,11 +153,12 @@ values make outer coils wider. The **+** panel includes a random-event generator
 for trying different calendars and overlaps. Its progress bar includes **Cancel**;
 cancelling discards the unfinished batch and keeps existing events.
 
-**Study Session** records interactions for a study. Enter a participant ID,
-choose a phase, start and stop recording, then download the data. **Open Study
-Analysis** lets you inspect saved or imported sessions and export CSV summaries
-and an HTML report. The Study Session section and Dev Options button are visible
-by default, with their additional controls collapsed.
+**Study Session** records Explore, Tasks, and Debrief, with automatic participant
+and task numbering. Switch modes or move to the next task from Settings, then
+return to the normal calendar. Optional facilitator tools provide notes, help
+markers, starting-calendar resets, and exports. **Study Analysis** shows saved
+sessions and task timings. See the [facilitator guide](docs/study.md).
+Study Session and Dev Options are visible by default, with their controls collapsed.
 
 ## Developing Spiral
 

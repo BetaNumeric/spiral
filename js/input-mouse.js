@@ -588,6 +588,7 @@ Object.assign(SpiralCalendar.prototype, {
         (event.sourceCapabilities?.firesTouchEvents ? 'touch' : this._canvasPointerType);
       this._canvasPointerType = null;
       const isTouch = pointerType === 'touch';
+      const studyInputMethod = pointerType || 'mouse';
       const previousClick = this._eventClickSequence;
       this._eventClickSequence = null;
 
@@ -701,7 +702,7 @@ Object.assign(SpiralCalendar.prototype, {
 
           if (this.canvasClickAreas.prevEventChevron &&
               this.isPointInRect(mouseX, mouseY, this.canvasClickAreas.prevEventChevron)) {
-            if (this.cycleDetailViewEvent(-1)) {
+            if (this.cycleDetailViewEvent(-1, { source: 'detail_chevron', inputMethod: studyInputMethod })) {
               this.playFeedback(0.08, 6);
               this.drawSpiral();
             }
@@ -710,7 +711,7 @@ Object.assign(SpiralCalendar.prototype, {
 
           if (this.canvasClickAreas.nextEventChevron &&
               this.isPointInRect(mouseX, mouseY, this.canvasClickAreas.nextEventChevron)) {
-            if (this.cycleDetailViewEvent(1)) {
+            if (this.cycleDetailViewEvent(1, { source: 'detail_chevron', inputMethod: studyInputMethod })) {
               this.playFeedback(0.08, 6);
               this.drawSpiral();
             }
@@ -756,6 +757,7 @@ Object.assign(SpiralCalendar.prototype, {
               // "+ New" button clicked - create a draft event for editing
               if (addBtn.isAddAnotherButton) {
                 const selectedSegmentId = this.getSelectedSegmentId();
+                this.recordStudyDraftDiscard?.(this.draftEvent, 'new_draft_requested');
                 this.draftEvent = this.createDraftEventForSegmentId(selectedSegmentId, this.mouseState.selectedSegment);
                 
                 // Reset selected event index to show the virtual event interface
@@ -869,13 +871,14 @@ Object.assign(SpiralCalendar.prototype, {
               previousClick.selectedEvent === detailEventState?.detailEvent &&
               (isTouch || hitEvent && previousClick.hitEvent === hitEvent);
             if (detailEventState?.selectedEventCount > 1 && repeatedClick) {
-              if (this.cycleDetailViewEvent(1)) this.drawSpiral();
+              if (this.cycleDetailViewEvent(1, { source: 'repeated_hour_tap', inputMethod: studyInputMethod })) this.drawSpiral();
               rememberClick();
               return;
             }
             if (hitIndex !== null && hitIndex !== this.mouseState.selectedEventIndex) {
               this.finishActiveDetailTextEditor({ redraw: false });
               this.mouseState.selectedEventIndex = hitIndex;
+              this.recordStudySelection?.('canvas_event', studyInputMethod);
               this.drawSpiral();
               rememberClick();
               return;
@@ -905,11 +908,11 @@ Object.assign(SpiralCalendar.prototype, {
               }
             }
           } else {
-            this.openDetailViewForSegment(segment, { selectedEventIndex: hitIndex ?? 0 });
+            this.openDetailViewForSegment(segment, { selectedEventIndex: hitIndex ?? 0, studySource: 'canvas_event', inputMethod: studyInputMethod });
           }
         } else {
           // Clicked a different segment - select it and reset event index
-          this.openDetailViewForSegment(segment, { selectedEventIndex: hitIndex ?? 0 });
+          this.openDetailViewForSegment(segment, { selectedEventIndex: hitIndex ?? 0, studySource: 'canvas_event', inputMethod: studyInputMethod });
         }
         
         this.mouseState.selectedSegment = segment;
@@ -1034,6 +1037,8 @@ Object.assign(SpiralCalendar.prototype, {
       if (event.button !== 0 && event.button !== 1) {
         return;
       }
+      this._studyMouseInputMethod = event.pointerType || this._canvasPointerType || 'mouse';
+      this.beginStudyNavigation?.('canvas_drag', this._studyMouseInputMethod);
       if (typeof this.isDetailViewOpeningTransitionActive === 'function' &&
           this.isDetailViewOpeningTransitionActive()) {
         if (typeof this.completeModeTransitionImmediately === 'function') {
@@ -1163,6 +1168,7 @@ Object.assign(SpiralCalendar.prototype, {
     },
 
     handleMouseUp(event) {
+      this.endStudyNavigation?.('canvas_drag', this._studyMouseInputMethod || 'mouse');
       const mouseUsedJoystick = !!(
         this.touchState &&
         this.touchState.joystickConsumedTouch &&

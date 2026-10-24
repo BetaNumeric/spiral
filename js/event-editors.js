@@ -170,6 +170,7 @@ Object.assign(SpiralCalendar.prototype, {
         if (save) this.editEvent(event, {
           [field]: input.value.trim() || (isTitle ? 'Untitled Event' : '')
         }, { redraw: false });
+        else this.recordStudyAction?.('editor_cancelled', { eventId: event.persistentUID || null, field }, { source: 'detail_text_editor', inputMethod: 'keyboard' });
         if (redraw) this.drawSpiral();
       };
       this._finishDetailTextEditor = finish;

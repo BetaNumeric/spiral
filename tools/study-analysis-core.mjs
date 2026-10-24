@@ -37,6 +37,112 @@ export function safeArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+const isRecord = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+const validTime = (value) => typeof value === 'string' && Number.isFinite(Date.parse(value));
+const validOffset = (value) => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+export const TASK_OUTCOMES = ['unrated', 'success', 'partial', 'failure', 'skipped', 'abandoned'];
+
+export function expandStudyData(parsed) {
+  if (Array.isArray(parsed)) return parsed;
+  if (isRecord(parsed) && Array.isArray(parsed.sessions)) return parsed.sessions;
+  return [isRecord(parsed?.raw) ? parsed.raw : parsed];
+}
+
+// Analyze canonical sessions only. Retain the complete file once, including
+// archive provenance, invalid originals and conflicting recovery snapshots.
+export function buildStudyImportEntries(parsed, options = {}) {
+  const sessions = expandStudyData(parsed);
+  const originalText = options.originalText ?? JSON.stringify(parsed);
+  const { fileName = 'study-import.json', source = fileName, importedAt } = options;
+  if (!sessions.length) return [{ fileName, source, importedAt, raw: null, originalText,
+    importError: 'No canonical sessions found; the complete original file is retained for recovery.' }];
+  return sessions.map((raw, index) => ({ fileName: `${fileName}#${index + 1}`, source, importedAt, raw,
+    ...(index === 0 ? { originalText } : {}) }));
+}
+
+// Keep the original JSON for export; only the analysis copy drops malformed rows.
+export function validateStudySession(raw) {
+  const issues = [];
+  if (!isRecord(raw)) return { valid: false, issues: ['Session must be an object.'] };
+  if (!validTime(raw.startTime)) issues.push('Missing or invalid startTime.');
+  if (!Array.isArray(raw.interactions)) issues.push('Missing interactions array.');
+  if (raw.sessionPhase && !PHASES.includes(raw.sessionPhase)) issues.push('Unknown session phase.');
+  const backwardsClock = validTime(raw.endTime) && Date.parse(raw.endTime) < Date.parse(raw.startTime);
+  const hasMonotonicDuration = Number(raw.schemaVersion) >= 6 && validOffset(raw.sessionDurationMs);
+  if (backwardsClock && hasMonotonicDuration) issues.push('Device clock moved backwards; analysis uses recorded monotonic elapsed duration.');
+  else if (raw.endTime && (!validTime(raw.endTime) || backwardsClock)) issues.push('Invalid endTime.');
+  if (raw.sessionDurationMs != null && !validOffset(raw.sessionDurationMs)) issues.push('Invalid sessionDurationMs.');
+  if (raw.isRecording != null && typeof raw.isRecording !== 'boolean') issues.push('Invalid isRecording flag.');
+  for (const field of ['snapshotTime', 'exportTime']) if (raw[field] && !validTime(raw[field])) issues.push(`Invalid ${field}.`);
+  if (raw.tasks != null && !Array.isArray(raw.tasks)) issues.push('Invalid tasks array.');
+  if (raw.pauses != null && !Array.isArray(raw.pauses)) issues.push('Invalid pauses array.');
+  for (const pause of safeArray(raw.pauses)) {
+    if (!isRecord(pause) || !validOffset(pause.startOffsetMs)
+      || (pause.endOffsetMs != null && (!validOffset(pause.endOffsetMs) || pause.endOffsetMs < pause.startOffsetMs))) issues.push('Malformed interruption span.');
+  }
+  let previousOffset = -1;
+  safeArray(raw.interactions).forEach((row, index) => {
+    if (!validInteraction(row)) issues.push(`Interaction ${index + 1} is malformed (type, phase, timestamp or offset).`);
+    else {
+      if (row.offsetMs < previousOffset) issues.push(`Interaction ${index + 1} is out of chronological order.`);
+      previousOffset = row.offsetMs;
+    }
+  });
+  safeArray(raw.tasks).forEach((task, index) => {
+    if (!validTask(task)) issues.push(`Task attempt ${index + 1} is malformed.`);
+    else if (!task.outcome || task.endOffsetMs == null) issues.push(`Task attempt ${index + 1} is incomplete.`);
+  });
+  if (raw.isRecording) issues.push('Recording snapshot is incomplete; durations stop at the saved snapshot.');
+  if (!raw.sessionId) issues.push('Missing sessionId; cannot deduplicate this recording.');
+  return { valid: validTime(raw.startTime) && Array.isArray(raw.interactions)
+    && (!raw.sessionPhase || PHASES.includes(raw.sessionPhase))
+    && (!raw.endTime || (validTime(raw.endTime) && (!backwardsClock || hasMonotonicDuration))), issues };
+}
+
+function validInteraction(row) {
+  return isRecord(row) && typeof row.type === 'string' && !!row.type
+    && PHASES.includes(row.phase) && validTime(row.timestamp) && validOffset(row.offsetMs)
+    && (row.payload == null || isRecord(row.payload));
+}
+
+function validTask(task) {
+  return isRecord(task) && typeof task.taskId === 'string' && !!task.taskId && validOffset(task.startOffsetMs)
+    && (task.endOffsetMs == null || (validOffset(task.endOffsetMs) && task.endOffsetMs >= task.startOffsetMs))
+    && (!task.outcome || TASK_OUTCOMES.includes(task.outcome));
+}
+
+function snapshotRank(raw) {
+  const timestamps = [raw.snapshotTime, raw.exportTime, raw.updatedAt, raw.endTime, raw.startTime];
+  let latest = 0;
+  for (const value of timestamps) if (validTime(value)) latest = Math.max(latest, Date.parse(value));
+  for (const row of safeArray(raw.interactions)) if (validTime(row?.timestamp)) latest = Math.max(latest, Date.parse(row.timestamp));
+  return [Number(raw.revision ?? raw.saveRevision) || 0, latest,
+    safeArray(raw.interactions).length + safeArray(raw.tasks).length, raw.isRecording ? 0 : 1];
+}
+
+export function deduplicateStudyEntries(entries, options = {}) {
+  const chosen = new Map();
+  const anonymous = [];
+  for (const entry of safeArray(entries)) {
+    const raw = isRecord(entry?.raw) ? entry.raw : entry;
+    const validation = validateStudySession(raw);
+    if (!validation.valid) {
+      options.diagnostics?.push({ source: entry?.fileName || entry?.source || 'Session', severity: 'error', issues: entry?.importError ? [entry.importError, ...validation.issues] : validation.issues });
+      continue;
+    }
+    if (!raw.sessionId) { anonymous.push(entry); continue; }
+    const previous = chosen.get(raw.sessionId);
+    if (!previous) { chosen.set(raw.sessionId, entry); continue; }
+    const previousRaw = previous.raw || previous;
+    const before = snapshotRank(previousRaw);
+    const after = snapshotRank(raw);
+    const difference = after.map((value, i) => value - before[i]).find((value) => value !== 0) || 0;
+    if (difference > 0) chosen.set(raw.sessionId, entry);
+    options.diagnostics?.push({ source: entry?.fileName || raw.sessionId, severity: 'info', issues: [`Duplicate session ${raw.sessionId}: using the latest, most complete snapshot.`] });
+  }
+  return [...chosen.values(), ...anonymous];
+}
+
 export function createPhaseMap(factory = () => 0) {
   const map = {};
   PHASES.forEach((phase) => {
@@ -109,14 +215,18 @@ export function normalizeSegment(segment) {
   };
 }
 
-export function getDurationMs(session, nowMs = Date.now()) {
-  const directDuration = toNumber(session.sessionDurationMs, NaN);
-  if (Number.isFinite(directDuration) && directDuration >= 0 && !session.isRecording) {
+export function getDurationMs(session) {
+  const directDuration = validOffset(session.sessionDurationMs) ? session.sessionDurationMs : NaN;
+  if (Number.isFinite(directDuration) && directDuration >= 0) {
     return directDuration;
   }
 
   const start = Date.parse(session.startTime);
-  const end = session.endTime ? Date.parse(session.endTime) : (session.isRecording ? nowMs : NaN);
+  // An imported recording is a snapshot, never a timer running in the analyzer.
+  const recordedTimes = [session.endTime, session.snapshotTime, session.exportTime,
+    ...safeArray(session.interactions).map((item) => item?.timestamp)]
+    .map((value) => Date.parse(value)).filter(Number.isFinite);
+  const end = recordedTimes.length ? recordedTimes.reduce((latest, time) => Math.max(latest, time), 0) : NaN;
   if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
     return end - start;
   }
@@ -210,6 +320,16 @@ export function deriveMetrics(session, options = {}) {
     metrics.phaseDurationsText[phase] = formatDuration(metrics.phaseDurationsMs[phase]);
   });
 
+  const recordedInterruptionMs = getInterruptionSpans(session, durationMs).reduce((sum, [a, b]) => sum + b - a, 0);
+  metrics.activeDurationMs = validOffset(session.activeDurationMs) && session.activeDurationMs <= durationMs
+    ? session.activeDurationMs : Math.max(0, durationMs - recordedInterruptionMs);
+  metrics.interruptionMs = durationMs - metrics.activeDurationMs;
+  metrics.loggedActionsByActor = { participant: 0, facilitator: 0, system: 0, unspecified: 0 };
+  for (const action of interactions) {
+    const actor = action.actor || action.payload?.actor;
+    metrics.loggedActionsByActor[Object.hasOwn(metrics.loggedActionsByActor, actor) ? actor : 'unspecified'] += 1;
+  }
+
   return metrics;
 }
 
@@ -251,7 +371,8 @@ export function normalizeRawSession(raw, options = {}) {
   const session = {
     ...raw,
     sessionPhase: normalizePhase(raw.sessionPhase),
-    interactions: safeArray(raw.interactions)
+    interactions: safeArray(raw.interactions).filter(validInteraction).slice().sort((a, b) => a.offsetMs - b.offsetMs),
+    tasks: safeArray(raw.tasks).filter(validTask)
   };
 
   if (!session.participantId && options.participantId) {
@@ -268,8 +389,10 @@ export function normalizeRawSession(raw, options = {}) {
 }
 
 export function prepareSession(entry, options = {}) {
-  const raw = normalizeRawSession(entry && entry.raw ? entry.raw : entry, options);
-  if (!raw || !raw.startTime) return null;
+  const originalRaw = entry && entry.raw ? entry.raw : entry;
+  const validation = validateStudySession(originalRaw);
+  if (!validation.valid) return null;
+  const raw = normalizeRawSession(originalRaw, options);
 
   const fileName = entry && entry.fileName ? entry.fileName : `${raw.participantId || raw.sessionId || 'session'}.json`;
   const source = entry && entry.source ? entry.source : fileName;
@@ -279,6 +402,8 @@ export function prepareSession(entry, options = {}) {
     fileName,
     source,
     raw,
+    originalRaw,
+    issues: validation.issues,
     metrics,
     phaseWindows: derivePhaseWindows(raw, metrics),
     eventSourceCounts: deriveEventSourceCounts(raw.interactions)
@@ -286,10 +411,75 @@ export function prepareSession(entry, options = {}) {
 }
 
 export function analyzeSessions(entries, options = {}) {
-  return safeArray(entries)
+  return deduplicateStudyEntries(entries, options)
     .map((entry) => prepareSession(entry, options))
-    .filter(Boolean);
+    .filter(Boolean).map((session) => {
+      if (session.issues.length) options.diagnostics?.push({ source: session.fileName, severity: 'warning', issues: session.issues });
+      return session;
+    });
 }
+
+export function getInterruptionSpans(session, durationMs = getDurationMs(session)) {
+  const spans = [];
+  if (Array.isArray(session.pauses)) {
+    for (const pause of session.pauses) {
+      if (!isRecord(pause) || !validOffset(pause.startOffsetMs)) continue;
+      const end = pause.endOffsetMs == null ? durationMs : pause.endOffsetMs;
+      if (validOffset(end)) spans.push([Math.min(durationMs, pause.startOffsetMs), Math.min(durationMs, end)]);
+    }
+  } else {
+    const open = new Map();
+    for (const interaction of safeArray(session.interactions)) {
+      if (!validInteraction(interaction)) continue;
+      const reason = interaction.payload?.reason || 'facilitator';
+      if (interaction.type === 'session_paused' && !open.has(reason)) open.set(reason, interaction.offsetMs);
+      if (interaction.type === 'session_resumed' && open.has(reason)) {
+        spans.push([open.get(reason), interaction.offsetMs]); open.delete(reason);
+      }
+    }
+    for (const start of open.values()) spans.push([start, durationMs]);
+  }
+  const merged = [];
+  for (const [start, end] of spans.filter(([a, b]) => b > a).sort((a, b) => a[0] - b[0])) {
+    const previous = merged[merged.length - 1];
+    if (previous && start <= previous[1]) previous[1] = Math.max(previous[1], end);
+    else merged.push([start, end]);
+  }
+  return merged;
+}
+
+export function buildTaskRows(sessions) {
+  return sessions.flatMap(({ raw, metrics }) => safeArray(raw.tasks).map((task) => {
+    const complete = task.endOffsetMs != null && !!task.outcome;
+    const end = Math.min(metrics.durationMs, task.endOffsetMs ?? metrics.durationMs);
+    const elapsedMs = Math.max(0, end - task.startOffsetMs);
+    const interruptionFromSpans = getInterruptionSpans(raw, metrics.durationMs)
+      .reduce((sum, [a, b]) => sum + Math.max(0, Math.min(end, b) - Math.max(task.startOffsetMs, a)), 0);
+    const recordedTaskTime = task.taskDurationMs ?? task.activeDurationMs;
+    const taskDurationMs = validOffset(recordedTaskTime) && recordedTaskTime <= elapsedMs
+      ? recordedTaskTime : Math.max(0, elapsedMs - interruptionFromSpans);
+    const helpCount = safeArray(raw.interactions).filter((action) => action.type === 'task_assistance'
+      && (action.payload?.attemptId ? action.payload.attemptId === task.attemptId : action.payload?.taskId === task.taskId
+        && action.offsetMs >= task.startOffsetMs && action.offsetMs <= end)).length;
+    return {
+      participantId: raw.participantId || '', sessionId: raw.sessionId || '', studyId: raw.studyId || '',
+      condition: raw.condition || '', protocolVersion: raw.protocolVersion || '', fixtureId: raw.fixtureId || '',
+      taskId: task.taskId, taskVersion: task.taskVersion || '', attemptId: task.attemptId || '', attemptNumber: task.attemptNumber ?? '', label: task.label || '',
+      questionnaireRef: raw.questionnaireRef || '',
+      outcome: complete ? task.outcome : 'incomplete', assisted: task.assisted || helpCount > 0 || task.helpCount > 0 ? 'yes' : 'no',
+      helpCount: Math.max(helpCount, toNumber(task.helpCount, 0)),
+      startOffsetMs: task.startOffsetMs, endOffsetMs: task.endOffsetMs ?? '',
+      elapsedMs, interruptionMs: elapsedMs - taskDurationMs, taskDurationMs,
+      answer: task.answer == null ? '' : typeof task.answer === 'string' ? task.answer : JSON.stringify(task.answer),
+      notes: task.notes == null ? '' : typeof task.notes === 'string' ? task.notes : JSON.stringify(task.notes),
+      targetEventIdsJson: JSON.stringify(task.targetEventIds || []), expectedStateJson: JSON.stringify(task.expectedState ?? null)
+    };
+  }));
+}
+
+export const TASK_COLUMNS = ['participantId', 'sessionId', 'studyId', 'condition', 'protocolVersion', 'fixtureId',
+  'taskId', 'taskVersion', 'attemptId', 'attemptNumber', 'questionnaireRef', 'label', 'outcome', 'assisted', 'helpCount',
+  'startOffsetMs', 'endOffsetMs', 'elapsedMs', 'interruptionMs', 'taskDurationMs', 'answer', 'notes', 'targetEventIdsJson', 'expectedStateJson'];
 
 export function buildSummaryRows(sessions) {
   return sessions.map((session) => {
@@ -300,6 +490,12 @@ export function buildSummaryRows(sessions) {
       participantId: raw.participantId || '',
       sessionId: raw.sessionId || '',
       appVersion: raw.appVersion || '',
+      studyId: raw.studyId || '', protocolVersion: raw.protocolVersion || '', condition: raw.condition || '', fixtureId: raw.fixtureId || '',
+      questionnaireRef: raw.questionnaireRef || '',
+      activeDurationMs: metrics.activeDurationMs, interruptionMs: metrics.interruptionMs,
+      taskAttempts: safeArray(raw.tasks).length,
+      participantActions: metrics.loggedActionsByActor.participant, facilitatorActions: metrics.loggedActionsByActor.facilitator,
+      systemActions: metrics.loggedActionsByActor.system, unspecifiedActions: metrics.loggedActionsByActor.unspecified,
       finalPhase: normalizePhase(raw.sessionPhase),
       isRecording: raw.isRecording ? 'yes' : 'no',
       durationMs: metrics.durationMs,
@@ -346,6 +542,9 @@ export function buildInteractionRows(sessions) {
         participantId: session.raw.participantId || '',
         sessionId: session.raw.sessionId || '',
         appVersion: session.raw.appVersion || '',
+        studyId: session.raw.studyId || '', condition: session.raw.condition || '',
+        taskId: interaction.taskId || payload.taskId || '', attemptId: interaction.attemptId || payload.attemptId || '',
+        actor: interaction.actor || payload.actor || 'unspecified', inputMethod: interaction.inputMethod || payload.inputMethod || '',
         index: interaction.index,
         type: interaction.type || '',
         phase: normalizePhase(interaction.phase || session.raw.sessionPhase),
@@ -375,6 +574,8 @@ export function buildInteractionRows(sessions) {
 }
 
 export const SUMMARY_COLUMNS = [
+  'studyId', 'protocolVersion', 'condition', 'fixtureId', 'questionnaireRef', 'activeDurationMs', 'interruptionMs', 'taskAttempts',
+  'participantActions', 'facilitatorActions', 'systemActions', 'unspecifiedActions',
   'source', 'fileName', 'participantId', 'sessionId', 'appVersion', 'finalPhase', 'isRecording',
   'durationMs', 'durationText',
   'exploreMs', 'taskMs', 'debriefMs',
@@ -388,6 +589,7 @@ export const SUMMARY_COLUMNS = [
 ];
 
 export const INTERACTION_COLUMNS = [
+  'studyId', 'condition', 'taskId', 'attemptId', 'actor', 'inputMethod',
   'source', 'fileName', 'participantId', 'sessionId', 'appVersion',
   'index', 'type', 'phase', 'timestamp', 'offsetMs', 'sourceContext',
   'createdCount', 'updatedCount', 'deletedCount',
@@ -513,9 +715,9 @@ export function renderOverviewCards(sessions) {
   const recordingCount = sessions.filter((session) => session.raw.isRecording).length;
 
   const cards = [
-    { label: 'Sessions', value: sessions.length, subtext: recordingCount ? `${recordingCount} currently recording` : 'Loaded study sessions' },
+    { label: 'Sessions', value: sessions.length, subtext: recordingCount ? `${recordingCount} incomplete snapshots` : 'Loaded study sessions' },
     { label: 'Total Duration', value: formatDuration(totalDurationMs), subtext: 'Across loaded sessions' },
-    { label: 'Interactions', value: totalInteractions, subtext: 'All recorded interactions' },
+    { label: 'Logged Actions', value: totalInteractions, subtext: 'Includes system and facilitator actions' },
     { label: 'Event Changes', value: `${totalCreates}/${totalUpdates}/${totalDeletes}`, subtext: 'Created / updated / deleted' }
   ];
 
@@ -552,12 +754,15 @@ export function renderSessionTable(sessions) {
     return `
       <tr>
         <td>${escapeHtml(getSessionLabel(session))}<div class="table-subtext">${escapeHtml(session.source || '')}</div></td>
-        <td>${escapeHtml(raw.isRecording ? 'Recording' : 'Stopped')}</td>
+        <td>${escapeHtml(raw.isRecording ? 'Incomplete snapshot' : 'Stopped')}</td>
+        <td>${escapeHtml(raw.condition || '—')}</td>
         <td>${escapeHtml(metrics.durationText)}</td>
+      <td>${escapeHtml(formatDuration(metrics.activeDurationMs))}</td>
+        <td>${escapeHtml(formatDuration(metrics.interruptionMs))}</td>
         <td>${escapeHtml(metrics.phaseDurationsText.explore)}</td>
         <td>${escapeHtml(metrics.phaseDurationsText.task)}</td>
         <td>${escapeHtml(metrics.phaseDurationsText.debrief)}</td>
-        <td>${escapeHtml(metrics.interactionCount)}</td>
+        <td>${escapeHtml(metrics.interactionCount)}<div class="table-subtext">${escapeHtml(`${metrics.loggedActionsByActor.participant} participant / ${metrics.loggedActionsByActor.facilitator} facilitator / ${metrics.loggedActionsByActor.system} system / ${metrics.loggedActionsByActor.unspecified} unspecified`)}</div></td>
         <td>${escapeHtml(`${metrics.createdEventCount} / ${metrics.updatedEventCount} / ${metrics.deletedEventCount}`)}</td>
         <td>${escapeHtml(`${metrics.settingsInteractionCount} / ${metrics.settingsFieldChangeCount}`)}</td>
       </tr>
@@ -571,11 +776,14 @@ export function renderSessionTable(sessions) {
           <tr>
             <th>Session</th>
             <th>Status</th>
+            <th>Condition</th>
             <th>Duration</th>
+            <th>Time excluding recorded interruptions</th>
+            <th>Interruptions</th>
             <th>Explore</th>
             <th>Task</th>
             <th>Debrief</th>
-            <th>Interactions</th>
+            <th>Logged actions</th>
             <th>Events + / ~ / -</th>
             <th>Settings Int / Fields</th>
           </tr>
@@ -584,6 +792,39 @@ export function renderSessionTable(sessions) {
       </table>
     </div>
   `;
+}
+
+function renderTaskAnalysis(sessions) {
+  const rows = buildTaskRows(sessions);
+  const cells = (values) => values.map((value) => `<td>${escapeHtml(value)}</td>`).join('');
+  const groups = new Map();
+  for (const row of rows) {
+    const key = JSON.stringify([row.studyId, row.protocolVersion, row.fixtureId, row.condition, row.taskId, row.taskVersion]);
+    const group = groups.get(key) || { studyId: row.studyId, protocolVersion: row.protocolVersion, fixtureId: row.fixtureId, condition: row.condition, taskId: row.taskId, taskVersion: row.taskVersion,
+      attempts: 0, unrated: 0, success: 0, partial: 0, failure: 0, skipped: 0, abandoned: 0, incomplete: 0, assisted: 0, successfulTimes: [] };
+    group.attempts++; group[row.outcome]++; if (row.assisted === 'yes') group.assisted++;
+    if (row.outcome === 'success') group.successfulTimes.push(row.taskDurationMs);
+    groups.set(key, group);
+  }
+  return `<section class="report-section"><h2>Task Attempts</h2>
+    <p class="note">Switching tasks ends the attempt without rating its success. Outcomes are optional facilitator marks, not inferred accuracy. Task time excludes recorded pauses, background time and recovery gaps; quiet reading and thinking remain included. Incomplete attempts are shown separately. Counts are logged actions, not physical clicks.</p>
+    ${rows.length ? `<div class="table-scroll"><table><thead><tr><th>Participant / session</th><th>Condition</th><th>Task / attempt</th><th>Outcome</th><th>Elapsed</th><th>Interruptions</th><th>Task time</th><th>Assisted / help</th><th>Answer / notes</th></tr></thead><tbody>
+    ${rows.map((row) => `<tr>${cells([`${row.participantId} / ${row.sessionId}`, row.condition, `${row.taskId} / ${row.attemptId}`, row.outcome,
+      formatDuration(row.elapsedMs), formatDuration(row.interruptionMs), formatDuration(row.taskDurationMs), `${row.assisted} / ${row.helpCount}`, `${row.answer} ${row.notes}`])}</tr>`).join('')}
+    </tbody></table></div><h3>By Condition and Task</h3><div class="table-scroll"><table><thead><tr><th>Study / protocol / fixture</th><th>Condition</th><th>Task</th><th>Version</th><th>Attempts</th><th>Not rated</th><th>Success</th><th>Partial</th><th>Failure</th><th>Skipped</th><th>Abandoned</th><th>Incomplete</th><th>Assisted</th><th>Median successful task time</th></tr></thead><tbody>
+    ${[...groups.values()].map((group) => {
+      const times = group.successfulTimes.sort((a, b) => a - b);
+      const median = times.length ? (times[Math.floor((times.length - 1) / 2)] + times[Math.floor(times.length / 2)]) / 2 : null;
+      return `<tr>${cells([`${group.studyId} / ${group.protocolVersion} / ${group.fixtureId}`, group.condition, group.taskId, group.taskVersion, group.attempts, group.unrated, group.success, group.partial, group.failure, group.skipped, group.abandoned, group.incomplete, group.assisted, median == null ? 'n/a' : formatDuration(median)])}</tr>`;
+    }).join('')}</tbody></table></div>`
+    : '<p class="note">No named task attempts were recorded. Legacy Task phase time is not a task completion measurement.</p>'}</section>`;
+}
+
+function renderDataQuality(sessions, diagnostics = []) {
+  const issues = [...diagnostics.flatMap((diagnostic) => safeArray(diagnostic.issues).map((issue) => `${diagnostic.source}: ${issue}`)),
+    ...sessions.flatMap((session) => session.issues.map((issue) => `${session.fileName}: ${issue}`))];
+  return `<section class="report-section"><h2>Data Quality</h2><p class="note">${sessions.length} unique sessions. Durations are frozen at each recording snapshot. Phase bars show elapsed time including interruptions. Legacy recordings may lack interruption or actor markers; missing data is not proof that none occurred.</p>
+    ${issues.length ? `<ul>${[...new Set(issues)].map((issue) => `<li>${escapeHtml(issue)}</li>`).join('')}</ul>` : '<p>No validation issues found.</p>'}</section>`;
 }
 
 export function renderPhaseBars(sessions) {
@@ -724,7 +965,7 @@ export function renderAnalysisSections(sessions, options = {}) {
   const sourceText = options.sourceText || 'Loaded study sessions';
 
   if (!sessions.length) {
-    return `
+    return `${renderDataQuality(sessions, options.diagnostics)}
       <section class="report-section">
         <h2>No Study Data Found</h2>
         <p class="note">Start or stop a study session in Spiral, then return here and refresh. You can also import downloaded study-session JSON files.</p>
@@ -740,6 +981,9 @@ export function renderAnalysisSections(sessions, options = {}) {
       </div>
       <div class="generated-at">Generated ${escapeHtml(generatedAt)}</div>
     </section>
+
+    ${renderDataQuality(sessions, options.diagnostics)}
+    ${renderTaskAnalysis(sessions)}
 
     <section class="report-section">
       <h2>Overview</h2>
@@ -1073,7 +1317,7 @@ export function buildReportHtml(sessions, options = {}) {
 </head>
 <body>
   <main class="analysis-page">
-    ${renderAnalysisSections(sessions, { title, generatedAt, sourceText })}
+    ${renderAnalysisSections(sessions, { title, generatedAt, sourceText, diagnostics: options.diagnostics })}
   </main>
   <script>
     (() => {

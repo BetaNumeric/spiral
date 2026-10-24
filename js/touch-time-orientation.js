@@ -399,6 +399,9 @@ Object.assign(SpiralCalendar.prototype, {
 
   cancelTouchJoystick(resetConsumedTouch = false) {
     if (!this.touchState) return;
+    if (this.touchState.joystickActive) this.recordStudyAction?.('joystick_finished', {
+      mode: this.touchState.joystickMode
+    }, { source: 'long_press_joystick', inputMethod: this.touchState.joystickTouchId === 'mouse' ? 'mouse' : 'touch' });
 
     this.resetPendingTouchJoystick();
 
@@ -462,6 +465,9 @@ Object.assign(SpiralCalendar.prototype, {
 
   activatePendingJoystick(pointerId, originX, originY) {
     if (!this.touchState || !this.state.enableLongPressJoystick || this.state.detailViewDay !== null) return;
+    this.recordStudyAction?.('joystick_started', {}, {
+      source: 'long_press_joystick', inputMethod: pointerId === 'mouse' ? 'mouse' : 'touch'
+    });
 
     this.resetPendingTouchJoystick();
     this.touchState.joystickActive = true;
@@ -695,6 +701,7 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   handleTouchStart(e) {
+    this.beginStudyNavigation?.('touch_gesture', 'touch');
     this._canvasPointerType = 'touch';
     if (typeof this.isDetailViewOpeningTransitionActive === 'function' &&
         this.isDetailViewOpeningTransitionActive()) {
@@ -1316,6 +1323,7 @@ Object.assign(SpiralCalendar.prototype, {
   },
 
   handleTouchEnd(e) {
+    if (!e.touches?.length) this.endStudyNavigation?.('touch_gesture', 'touch');
     // If page zoom is active, no canvas gesture to finalize
     if (this.pageZoomActive) return;
 
@@ -1356,7 +1364,7 @@ Object.assign(SpiralCalendar.prototype, {
         Math.hypot(touch.clientX - drag.touchStartX, touch.clientY - drag.touchStartY) < 6 &&
         drag.event.start.getTime() === drag.originalStart.getTime() &&
         drag.event.end.getTime() === drag.originalEnd.getTime();
-      this.finishEventHandleDrag();
+      this.finishEventHandleDrag({ cancelled: e.type === 'touchcancel' });
       if (isTap) {
         // A stationary finger near a handle is still a tap, not a resize.
         this.mouseState.wasDragging = false;

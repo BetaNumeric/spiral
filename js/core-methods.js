@@ -198,7 +198,7 @@ Object.assign(SpiralCalendar.prototype, {
       return searchNear(0, this.state.days - 1);
     },
 
-    openEventAtStart(event) {
+    openEventAtStart(event, study = {}) {
       try {
         const target = this.getEventStartNavigationTarget(event);
         if (!target) return false;
@@ -211,10 +211,12 @@ Object.assign(SpiralCalendar.prototype, {
         if (foundDay !== -1) day = foundDay;
 
         const selection = { day, segment, clockOffsetMs: this.getEventProjection(event).intervals[0].offsetMs };
-        this.openDetailViewForSegment(selection, { preserveDraft: true });
         const allEvents = this.getEventsForClockSegment(selection);
         const eventIndex = allEvents.findIndex(eventInfo => eventInfo.event === event);
-        this.mouseState.selectedEventIndex = eventIndex >= 0 ? eventIndex : 0;
+        this.openDetailViewForSegment(selection, {
+          preserveDraft: true, selectedEventIndex: eventIndex >= 0 ? eventIndex : 0,
+          studySource: study.source || 'event_navigation', inputMethod: study.inputMethod || 'unknown'
+        });
 
         if (this.autoTimeAlignState && this.autoTimeAlignState.enabled) {
           this.stopAutoTimeAlign();

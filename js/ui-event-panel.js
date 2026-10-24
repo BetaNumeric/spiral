@@ -1,7 +1,27 @@
 // Event Panel and Event List UI
 Object.assign(SpiralCalendar.prototype, {
+  recordStudySearchCommit(source = 'event_search') {
+    const query = (this.eventListSearchQuery || '').trim().toLowerCase();
+    if (query === (this._studyLastSearchQuery || '')) return;
+    this._studyLastSearchQuery = query;
+    const matchingEvents = this.events.filter(event =>
+      this.state.visibleCalendars.includes(event.calendar || 'Home') &&
+      [event.title, event.description, event.calendar].some(value => String(value || '').toLowerCase().includes(query)));
+    this.recordStudyAction?.('search_committed', {
+      queryLength: query.length, resultCount: matchingEvents.length, cleared: !query
+    }, { source });
+  },
+
+  recordStudyCalendarFilter(source, actor = 'participant') {
+    this.recordStudyAction?.('calendar_filter_changed', {
+      visibleCalendars: [...this.state.visibleCalendars]
+    }, { source, actor });
+    this.captureStudySettingsChange?.();
+  },
+
   setupEventInputPanel() {
     const self = this;
+    let addPanelInitialValues = null;
     // Elements
     const addEventPanelBtn = document.getElementById('addEventPanelBtn');
     const eventInputPanel = document.getElementById('eventInputPanel');
@@ -306,6 +326,7 @@ Object.assign(SpiralCalendar.prototype, {
         e.stopPropagation();
         searchInput.value = '';
         this.eventListSearchQuery = '';
+        this.recordStudySearchCommit('search_clear');
         // Sync the other search input
         const otherSearchId = isBottomList ? 'eventListSearch' : 'eventListSearchBottom';
         const otherSearchInput = document.getElementById(otherSearchId);
@@ -360,11 +381,14 @@ Object.assign(SpiralCalendar.prototype, {
       });
       
       // First Escape clears a search; another Escape can close the list.
+      searchInput.addEventListener('change', () => this.recordStudySearchCommit());
       searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') this.recordStudySearchCommit('search_submit');
         if (e.key === 'Escape' && searchInput.value) {
           e.preventDefault();
           searchInput.value = '';
           this.eventListSearchQuery = '';
+          this.recordStudySearchCommit('search_escape');
           updateClearButton();
           const otherSearchId = isBottomList ? 'eventListSearch' : 'eventListSearchBottom';
           const otherSearchInput = document.getElementById(otherSearchId);
@@ -457,6 +481,7 @@ Object.assign(SpiralCalendar.prototype, {
                 cb.checked = true;
               }
             }
+            this.recordStudyCalendarFilter('calendar_checkbox');
             this.requestSettingsSave();
             this.drawSpiral();
             renderEventList();
@@ -867,6 +892,7 @@ Object.assign(SpiralCalendar.prototype, {
                 this.state.visibleCalendars = [ev.calendar];
               }
               
+              this.recordStudyCalendarFilter('calendar_long_press');
               this.requestSettingsSave();
               // Rebuild calendar dropdown menu to update checkboxes
               if (typeof this.buildCalendarMenu === 'function') {
@@ -1150,7 +1176,11 @@ Object.assign(SpiralCalendar.prototype, {
         li.onclick = (e) => {
         if (e.target === removeBtn || e.target.closest('button') === removeBtn) return;
           
-          this.openEventAtStart(ev);
+          this.recordStudySearchCommit('search_result');
+          if (this.eventListSearchQuery) this.recordStudyAction?.('search_result_selected', {
+            eventId: ev.persistentUID || null, queryLength: this.eventListSearchQuery.length
+          }, { source: 'event_list', inputMethod: e.detail === 0 ? 'keyboard' : e.pointerType || 'unknown' });
+          this.openEventAtStart(ev, { source: 'event_list', inputMethod: e.detail === 0 ? 'keyboard' : e.pointerType || 'unknown' });
         };
       
       return li;
@@ -2154,6 +2184,7 @@ Object.assign(SpiralCalendar.prototype, {
               cb.checked = true;
             }
           }
+          this.recordStudyCalendarFilter('calendar_checkbox');
           this.requestSettingsSave();
           this.drawSpiral();
           renderEventList();
@@ -2754,6 +2785,7 @@ Object.assign(SpiralCalendar.prototype, {
 
       this.state.visibleCalendars = [...this._previousVisibleCalendars];
       this._previousVisibleCalendars = null;
+      this.recordStudyCalendarFilter('calendar_filter_restored', 'system');
       this.requestSettingsSave();
       if (typeof this.buildCalendarMenu === 'function') {
         this.buildCalendarMenu();
@@ -2763,6 +2795,13 @@ Object.assign(SpiralCalendar.prototype, {
     };
 
     const closeEventPanel = () => {
+      if (eventInputPanel.style.display === 'block' && addPanelInitialValues) {
+        const values = { title: eventTitle.value, description: eventDescription.value,
+          start: eventStart.value, end: eventEnd.value, color: eventColor.value };
+        const changedFields = Object.keys(values).filter(key => values[key] !== addPanelInitialValues[key]);
+        if (changedFields.length) this.recordStudyAction?.('editor_cancelled', { changedFields }, { source: 'add_panel' });
+      }
+      addPanelInitialValues = null;
       settleAddEventColor();
       restorePreviousCalendarVisibility();
       eventInputPanel.style.display = 'none';
@@ -2809,6 +2848,8 @@ Object.assign(SpiralCalendar.prototype, {
       eventDescription.value = '';
       titleCharCount.textContent = '0';
       descCharCount.textContent = '0';
+      addPanelInitialValues = { title: eventTitle.value, description: eventDescription.value,
+        start: eventStart.value, end: eventEnd.value, color: eventColor.value };
     };
 
     const closeSettingsPanel = () => {
@@ -2828,10 +2869,7 @@ Object.assign(SpiralCalendar.prototype, {
       if (!settingsPanel) return;
       restorePreviousCalendarVisibility();
       const eventPanelWasOpen = eventInputPanel.style.display === 'block';
-      eventInputPanel.style.display = 'none';
-      if (eventPanelWasOpen && typeof this.recordStudyPanelClosed === 'function') {
-        this.recordStudyPanelClosed('eventInput');
-      }
+      if (eventPanelWasOpen) closeEventPanel();
       settingsPanel.style.display = 'block';
       if (typeof this.clearTouchTapSequence === 'function') {
         this.clearTouchTapSequence();
@@ -2916,6 +2954,7 @@ Object.assign(SpiralCalendar.prototype, {
         const parsedStartDate = parseDateTimeLocalAsUTC(startDate);
         const parsedEndDate = parseDateTimeLocalAsUTC(endDate);
         if (!Number.isFinite(parsedStartDate.getTime()) || !Number.isFinite(parsedEndDate.getTime())) {
+          this.recordStudyValidationFailure?.('add_panel', new Error('Invalid date range'));
           alert('Choose valid dates with the end after the start.');
           return;
         }
@@ -2944,9 +2983,10 @@ Object.assign(SpiralCalendar.prototype, {
           })
         };
         try { this.initializeEventFromWallTimes(event, { rejectGap: true, startOccurrence: getOccurrence('start'), endOccurrence: getOccurrence('end') }); }
-        catch (error) { alert(error.message); return; }
+        catch (error) { this.recordStudyValidationFailure?.('add_panel', error, event); alert(error.message); return; }
         const added = this.runWithStudyEventSource('add_panel', () => this.addCalendarEvent(event));
         if (!added) return;
+        addPanelInitialValues = null;
         this.drawSpiral();
         // Reset fields
         eventTitle.value = '';
@@ -2962,6 +3002,7 @@ Object.assign(SpiralCalendar.prototype, {
         closeEventPanel();
         renderEventList();
       } else {
+        this.recordStudyValidationFailure?.('add_panel', new Error('Missing start or end date'));
         alert('Please select both start and end dates');
       }
     });
